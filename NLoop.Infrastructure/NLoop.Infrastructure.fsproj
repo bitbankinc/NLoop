@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Dummy.fs" />
+        <Compile Include="Swap\HTLC.fs" />
+        <Compile Include="DTOs\SwapState.fs" />
+        <Compile Include="DTOs\Loop.fs" />
+        <Compile Include="DTOs\LoopInOut.fs" />
+        <Compile Include="DTOs\Client.fs" />
+        <Compile Include="Library.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <PackageReference Include="DotNetLightning" Version="1.1.2-date20201108-0549-git-2f3ada4" />
+    </ItemGroup>
+
+</Project>

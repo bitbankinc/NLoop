@@ -1,0 +1,22 @@
+version: "3"
+
+services:
+  boltz:
+    image: boltz/regtest:3.1.0
+    container_name: boltz
+    restart: unless-stopped
+    build:
+      context: ./Dockerfiles
+      dockerfile: boltz
+    command:
+      - "--configpath=/data/boltz/boltz.conf"
+    expose:
+      - "9000" # grpc API
+    ports:
+      - "9001:9001" # REST API
+    volumes:
+      - "${DATADIR_ROOT}/boltz:/data/boltz"
+      - "${DATADIR_ROOT}/.lnd_bob:/data/lnd"
+    links:
+      - "bitcoind"
+      - "lnd_bob"
