@@ -43,6 +43,8 @@ services:
     entrypoint: [ "./start-lnd.sh" ]
     environment:
       NETWORK: regtest
+      LND_REST_PORT: 32736
+      CHAIN: "bitcoin"
     command:
       - --restlisten=0.0.0.0:32736
       - --rpclisten=0.0.0.0:32777
@@ -78,6 +80,8 @@ services:
     entrypoint: [ "./start-lnd.sh" ]
     environment:
       NETWORK: regtest
+      LND_REST_PORT: 32737
+      CHAIN: "bitcoin"
     command:
       - --restlisten=0.0.0.0:32737
       - --rpclisten=0.0.0.0:32778
