@@ -72,7 +72,11 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
   member this.GetNodes([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
 
-
   member this.GetSwapTransaction(id: string, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, { Id = id }, ct)
+    this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, {| Id = id |}, ct)
 
+  member this.PostSwapStatus(id: string, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<SwapStatusResponse>("swapstatus", HttpMethod.Post, {| Id = id|}, ct)
+
+  member this.CreateSwap(req: CreateSwapRequest, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, req, ct)

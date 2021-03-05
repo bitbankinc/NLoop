@@ -5,6 +5,7 @@ open System.Text.Json.Serialization
 open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Infrastructure
+open NLoop.Infrastructure.DTOs
 
 type GetVersionResponse = {
   Version: string
@@ -43,12 +44,59 @@ and NodeInfo = {
   Uris: PeerConnectionString []
 }
 
-type GetSwapTxRequest = {
-  Id: string
-}
-
 type GetSwapTxResponse = {
   TransactionHex: Transaction
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
+}
+
+
+type SwapStatusType =
+  | Created
+  | InvoiceSet
+  | TxMempool
+  | TxConfirmed
+  | InvoicePayed
+  | InvoiceFailedToPay
+  | TxClaimed
+  | Unknown of string
+
+type TxInfo = {
+  [<JsonConverter(typeof<UInt256JsonConverter>)>]
+  [<JsonPropertyName("id")>]
+  TxId: uint256
+  [<JsonPropertyName("hex")>]
+  Tx: Transaction
+  Eta: int
+}
+type SwapStatusResponse = {
+  [<JsonPropertyName("status")>]
+  _Status: string
+  Transaction: TxInfo option
+  FailureReason: string option
+}
+  with
+  member this.SwapStatus =
+    match this._Status with
+    | "swap.created" -> Created
+    | "invoice.set" -> InvoiceSet
+    | "transaction.mempool" -> TxMempool
+    | "transaction.confirmed" -> TxConfirmed
+    | "invoice.payed" -> InvoicePayed
+    | "invoice.failedToPay" -> InvoiceFailedToPay
+    | "transaction.claimed" -> TxClaimed
+    | x -> Unknown x
+
+type CreateSwapRequest = {
+  Type: SwapType
+  PairId: string
+  OrderSide: OrderType
+  InvoiceAmount: Money
+}
+type CreateReverseSwapRequest = {
+  Type: SwapType
+}
+
+type CreateSwapResponse = {
+  Id: string
 }

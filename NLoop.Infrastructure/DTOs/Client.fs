@@ -1,13 +1,23 @@
 namespace NLoop.Infrastructure.DTOs
 
+open System.Runtime.CompilerServices
+open System.Text.Json.Serialization
 
+
+[<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type SwapType =
-  | LoopIn
-  | LoopOut
+  | Submarine = 0
+  | ReverseSubmarine = 1
 
-  with
-  member this.Name =
-    match this with
-    | LoopOut -> "LOOP_OUT"
-    | LoopIn -> "LOOP_IN"
 
+
+[<JsonConverter(typeof<JsonStringEnumConverter>)>]
+type OrderType =
+  | Buy = 0
+  | Sell = 1
+
+ [<AbstractClass;Sealed;Extension>]
+type Extensions() =
+  [<Extension>]
+  static member  IsLoopIn(this: SwapType) =
+    this = SwapType.ReverseSubmarine
