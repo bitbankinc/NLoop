@@ -1,6 +1,109 @@
 version: "3"
 
 services:
+  bitcoind:
+    restart: unless-stopped
+    build:
+      context: ./Dockerfiles
+      dockerfile: bitcoin
+    image: loopd/bitcoind
+    environment:
+      BITCOIN_NETWORK: regtest
+    user: root:root
+    command:
+      - bitcoind
+      - -datadir=/data
+      - -wallet=cashcow
+      - -regtest
+      - -rpcauth=johndoe:75669617aaedb394397ddc7213bb1ea9$$3a50ee2f4dff3cd49475295124aa3d48a61d6ae3cdcb4d2cf199dac6551217f4
+      - -rpcport=43782
+      - -rpcbind=0.0.0.0:43782
+      - -rpcallowip=0.0.0.0/0
+      - -port=39388
+      - -txindex=1
+      - -zmqpubrawblock=tcp://0.0.0.0:28332
+      - -zmqpubrawtx=tcp://0.0.0.0:28333
+      - -deprecatedrpc=signrawtransaction
+      - -assumevalid=00000000000000000012d0c0982d818aa909d78e54525b10563c698d89997632
+      - -maxmempool=500 # MB
+      - -fallbackfee=0.0001
+    expose:
+      - "43782" # RPC
+      - "39388" # P2P
+      - "28332" # ZMQ
+      - "28333" # ZMQ
+    volumes:
+      - "./data/.bitcoin:/data"
+  lnd_user:
+    restart: unless-stopped
+    image: loopd/lnd
+    build:
+      context: ./Dockerfiles
+      dockerfile: lnd
+    entrypoint: [ "./start-lnd.sh" ]
+    environment:
+      NETWORK: regtest
+    command:
+      - --restlisten=0.0.0.0:32736
+      - --rpclisten=0.0.0.0:32777
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:43782
+      - --bitcoind.rpcuser=johndoe
+      - --bitcoind.rpcpass=unsafepassword
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --trickledelay=1000
+      - --externalip=lnd_user:9735
+      #- --no-macaroons
+      - --datadir=/data
+      - --debuglevel=debug
+      # - --noseedbackup
+      - --tlscertpath=/data/tls.cert
+      - --tlskeypath=/data/tls.key
+      - --tlsextradomain=lnd_user
+    expose:
+      - "9735"
+      - "32736"
+      - "32777"
+    volumes:
+      - "./data/.lnd_user:/data"
+      - "./data/.bitcoin:/deps/.bitcoin"
+  lnd_server:
+    restart: unless-stopped
+    image: loopd/lnd
+    build:
+      context: ./Dockerfiles
+      dockerfile: lnd
+    entrypoint: [ "./start-lnd.sh" ]
+    environment:
+      NETWORK: regtest
+    command:
+      - --restlisten=0.0.0.0:32737
+      - --rpclisten=0.0.0.0:32778
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:43782
+      - --bitcoind.rpcuser=johndoe
+      - --bitcoind.rpcpass=unsafepassword
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --trickledelay=1000
+      - --externalip=lnd_server:9735
+      #- --no-macaroons
+      - --datadir=/data
+      - --debuglevel=debug
+      # - --noseedbackup
+      - --tlscertpath=/data/tls.cert
+      - --tlskeypath=/data/tls.key
+      - --tlsextradomain=lnd_server
+    expose:
+      - "9735"
+      - "32737"
+      - "32778"
+    volumes:
+      - "./data/.lnd_server:/data"
+      - "./data/.bitcoin:/deps/.bitcoin"
   boltz:
     image: boltz/regtest:3.1.0
     container_name: boltz
@@ -15,8 +118,8 @@ services:
     ports:
       - "9001:9001" # REST API
     volumes:
-      - "${DATADIR_ROOT}/boltz:/data/boltz"
-      - "${DATADIR_ROOT}/.lnd_bob:/data/lnd"
+      - "./data/boltz:/data/boltz"
+      - "./data/.lnd_bob:/data/lnd"
     links:
       - "bitcoind"
       - "lnd_bob"

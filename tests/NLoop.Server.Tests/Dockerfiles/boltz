@@ -1,0 +1,36 @@
+FROM node:14.16.0-alpine3.10 as build
+
+LABEL maintainer="Joe Miyamoto <joemphilips@gmail.com>"
+ARG BOLTZ_VERSION=trim-cookie-suffix
+
+# Install dependencies and install/build lnd.
+RUN apk add --no-cache --update alpine-sdk \
+    git \
+	python \
+	g++ \
+    make 
+
+# Copy in the local repository to build from.
+RUN git clone --quiet --depth 1 --single-branch --branch $BOLTZ_VERSION https://github.com/BoltzExchange/boltz-backend /boltz-backend
+
+WORKDIR /boltz-backend
+
+RUN npm install
+
+# For `cross-os` in compile script.
+RUN apk add --no-cache --update alpine-sdk \
+    rsync
+
+RUN npm run compile
+
+RUN pwd && ls .
+
+FROM node:14.16.0-alpine3.10 as final
+
+COPY --from=build /boltz-backend /boltz-backend
+
+RUN mkdir -p /data/boltz /data/lnd
+
+WORKDIR /boltz-backend
+
+ENTRYPOINT ["./bin/boltzd"]

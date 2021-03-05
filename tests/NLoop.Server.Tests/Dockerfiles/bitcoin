@@ -1,0 +1,34 @@
+FROM debian:stretch-slim as build
+
+RUN set -ex \
+	&& apt-get update \
+	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr gosu gpg wget \
+	&& rm -rf /var/lib/apt/lists/*
+
+ENV BITCOIN_VERSION 0.20.1
+ENV BITCOIN_FILE bitcoin-0.20.1-x86_64-linux-gnu.tar.gz
+ENV BITCOIN_URL https://bitcoin.org/bin/bitcoin-core-0.20.1/
+ENV BITCOIN_SHA256 376194f06596ecfa40331167c39bc70c355f960280bd2a645fdbf18f66527397
+ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-0.20.1/SHA256SUMS.asc
+ENV BITCOIN_PGP_KEY 01EA5486DE18A882D4C2684590C8019E36C2E964
+
+# install bitcoin binaries
+RUN set -ex \
+	&& cd /tmp \
+	&& wget -qO "$BITCOIN_FILE" "$BITCOIN_URL$BITCOIN_FILE" \
+	&& echo "$BITCOIN_SHA256 $BITCOIN_FILE" | sha256sum -c - \
+	&& gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys "$BITCOIN_PGP_KEY" \
+	&& wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
+	&& sha256sum --ignore-missing --check bitcoin.asc \
+	&& gpg --verify bitcoin.asc \
+	&& tar -xzvf "$BITCOIN_FILE" -C /usr/local --strip-components=1 --exclude=*-qt \
+	&& rm -rf /tmp/*
+
+# create data directory
+ENV BITCOIN_DATA /data
+RUN mkdir "$BITCOIN_DATA" \
+	&& ln -sfn "$BITCOIN_DATA" /home/bitcoin/.bitcoin \
+VOLUME /data
+
+EXPOSE 8332 8333 18332 18333 18443 18444
+CMD ["bitcoind"]
