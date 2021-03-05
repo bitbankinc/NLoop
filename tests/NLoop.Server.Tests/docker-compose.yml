@@ -119,7 +119,7 @@ services:
       - "9001:9001" # REST API
     volumes:
       - "./data/boltz:/data/boltz"
-      - "./data/.lnd_bob:/data/lnd"
+      - "./data/.lnd_server:/data/lnd"
     links:
       - "bitcoind"
-      - "lnd_bob"
+      - "lnd_server"
