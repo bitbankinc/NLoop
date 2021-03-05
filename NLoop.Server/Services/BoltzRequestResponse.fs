@@ -1,6 +1,10 @@
 namespace NLoop.Server.Services
 
 open System
+open System.Text.Json.Serialization
+open DotNetLightning.Utils
+open NBitcoin
+open NLoop.Infrastructure
 
 type GetVersionResponse = {
   Version: string
@@ -28,4 +32,23 @@ and PairInfo = {
 and AssetFeeInfo = {
   Normal: int64
   Reverse: {| Claim: int64; Lockup: int64 |}
+}
+
+
+type GetNodesResponse = {
+  Nodes: Map<string, NodeInfo>
+}
+and NodeInfo = {
+  NodeKey: PubKey
+  Uris: PeerConnectionString []
+}
+
+type GetSwapTxRequest = {
+  Id: string
+}
+
+type GetSwapTxResponse = {
+  TransactionHex: Transaction
+  [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
+  TimeoutBlockHeight: BlockHeight
 }

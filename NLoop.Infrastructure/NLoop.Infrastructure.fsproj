@@ -6,6 +6,9 @@
 
     <ItemGroup>
         <Compile Include="Dummy.fs" />
+        <Compile Include="Constants.fs" />
+        <Compile Include="Models.fs" />
+        <Compile Include="JsonConverters.fs" />
         <Compile Include="Swap\HTLC.fs" />
         <Compile Include="DTOs\SwapState.fs" />
         <Compile Include="DTOs\Loop.fs" />

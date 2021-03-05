@@ -14,6 +14,7 @@ open FSharp.Control.Tasks
 open Macaroons
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
+open NLoop.Infrastructure
 
 type O = OptionalArgumentAttribute
 type D = DefaultParameterValueAttribute
@@ -23,8 +24,10 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
+    jsonOpts.AddNLoopJsonConverters(network.NetworkType)
     jsonOpts.Converters.Add(JsonFSharpConverter())
     jsonOpts.PropertyNameCaseInsensitive <- true
+
     if (isNull address) then raise <| ArgumentNullException(nameof(address)) else
     if (isNull network) then raise <| ArgumentNullException(nameof(network)) else
     httpClient.BaseAddress <- address
@@ -65,4 +68,11 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
 
   member this.GetPairs([<O;D(null)>] ct: CancellationToken): Task<GetPairsResponse> =
     this.SendCommandAsync<_>("getpairs", HttpMethod.Get, null, ct)
+
+  member this.GetNodes([<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
+
+
+  member this.GetSwapTransaction(id: string, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, { Id = id }, ct)
 
