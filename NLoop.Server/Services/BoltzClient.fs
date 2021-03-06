@@ -15,26 +15,27 @@ open Macaroons
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
 open NLoop.Infrastructure
+open NLoop.Infrastructure.DTOs
 
 type O = OptionalArgumentAttribute
 type D = DefaultParameterValueAttribute
 
-type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certificate2, [<O;D(null)>]macaroon: Macaroon,
+type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certificate2,
                  [<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
     jsonOpts.AddNLoopJsonConverters(network.NetworkType)
     jsonOpts.Converters.Add(JsonFSharpConverter())
-    jsonOpts.PropertyNameCaseInsensitive <- true
+    jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
     if (isNull address) then raise <| ArgumentNullException(nameof(address)) else
     if (isNull network) then raise <| ArgumentNullException(nameof(network)) else
     httpClient.BaseAddress <- address
-  new (host: string, port, network, [<O;D(null)>] cert, [<O;D(null)>] macaroon, [<O;D(null)>] httpClient) =
-    BoltzClient(Uri($"%s{host}:%i{port}"), network, cert, macaroon, httpClient)
-  new (host: string, network, [<O;D(null)>] cert, [<O;D(null)>] macaroon, [<O;D(null)>] httpClient) =
-    BoltzClient(host, 443, network, cert, macaroon, httpClient)
+  new (host: string, port, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
+    BoltzClient(Uri($"%s{host}:%i{port}"), network, cert, httpClient)
+  new (host: string, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
+    BoltzClient(host, 443, network, cert,  httpClient)
   with
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
                                                parameters: obj, ct: CancellationToken) = task {
@@ -66,17 +67,22 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
   member this.GetVersionAsync([<O;D(null)>] ct: CancellationToken): Task<GetVersionResponse> =
     this.SendCommandAsync<_>("version", HttpMethod.Get, null, ct)
 
-  member this.GetPairs([<O;D(null)>] ct: CancellationToken): Task<GetPairsResponse> =
+  member this.GetPairsAsync([<O;D(null)>] ct: CancellationToken): Task<GetPairsResponse> =
     this.SendCommandAsync<_>("getpairs", HttpMethod.Get, null, ct)
 
-  member this.GetNodes([<O;D(null)>] ct: CancellationToken) =
+  member this.GetNodesAsync([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
 
-  member this.GetSwapTransaction(id: string, [<O;D(null)>] ct: CancellationToken) =
+  member this.GetSwapTransactionAsync(id: string, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, {| Id = id |}, ct)
 
-  member this.PostSwapStatus(id: string, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<SwapStatusResponse>("swapstatus", HttpMethod.Post, {| Id = id|}, ct)
+  member this.GetSwapStatusAsync(id: string, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<SwapStatusResponse>("swapstatus", HttpMethod.Post, {| Id = id |}, ct)
 
-  member this.CreateSwap(req: CreateSwapRequest, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, req, ct)
+  member this.CreateSwapAsync(req: CreateSwapRequest, [<O;D(null)>]channel: ChannelOpenRequest, [<O;D(null)>] ct: CancellationToken) =
+    let reqObj = {| req with Type = "submarine" |}
+    let reqObj = if channel |> box |> isNull then reqObj |> box else {| reqObj with Channel = channel |} |> box
+    this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
+
+  member this.CreateReverseSwapAsync(req: CreateReverseSwapRequest, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<CreateReverseSwapResponse>("createswap", HttpMethod.Post, req, ct)

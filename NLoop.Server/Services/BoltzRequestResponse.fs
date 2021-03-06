@@ -2,6 +2,7 @@ namespace NLoop.Server.Services
 
 open System
 open System.Text.Json.Serialization
+open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Infrastructure
@@ -88,15 +89,48 @@ type SwapStatusResponse = {
     | x -> Unknown x
 
 type CreateSwapRequest = {
-  Type: SwapType
-  PairId: string
+  [<JsonConverter(typeof<PairIdJsonConverter>)>]
+  PairId: PairId
   OrderSide: OrderType
-  InvoiceAmount: Money
+  [<JsonConverter(typeof<HexPubKeyJsonConverter>)>]
+  RefundPublicKey: PubKey
+  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
+  Invoice: PaymentRequest
 }
-type CreateReverseSwapRequest = {
-  Type: SwapType
+
+type ChannelOpenRequest = {
+  Private: bool
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  InboundLiquidity: Money
 }
 
 type CreateSwapResponse = {
   Id: string
+  Address: BitcoinAddress
+  ClaimAddress: BitcoinAddress
+  AcceptZeroConf: bool
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  ExpectedAmount: Money
+  [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
+  TimeoutBlockHeight: BlockHeight
+}
+type CreateReverseSwapRequest = {
+  [<JsonConverter(typeof<PairIdJsonConverter>)>]
+  PairId: PairId
+  OrderSide: OrderType
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  InvoiceAmount: Money
+  [<JsonConverter(typeof<UInt256JsonConverter>)>]
+  PreimageHash: uint256
+}
+
+type CreateReverseSwapResponse = {
+  Id: string
+  LockupAddress: BitcoinAddress
+  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
+  Invoice: PaymentRequest
+  [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
+  TimeoutBlockHeight: BlockHeight
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  OnchainAmount: Money
 }

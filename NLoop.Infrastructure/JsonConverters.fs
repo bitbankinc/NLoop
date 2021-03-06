@@ -4,6 +4,7 @@ open System
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Text.Json.Serialization
+open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Infrastructure.DTOs
@@ -61,6 +62,42 @@ type MoneyJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetInt64() |> Money.Satoshis
 
+type PaymentRequestJsonConverter() =
+  inherit JsonConverter<PaymentRequest>()
+  override this.Write(writer, value, _options) =
+    value.ToString() |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    let s = reader.GetString()
+    match PaymentRequest.Parse s with
+    | Ok r -> r
+    | Error e -> raise <| JsonException e
+
+type BitcoinAddressJsonConverter(n: Network) =
+  inherit JsonConverter<BitcoinAddress>()
+  override this.Write(writer, value, _options) =
+    value.ToString() |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> fun s -> BitcoinAddress.Create(s, n)
+
+type PairIdJsonConverter() =
+  inherit JsonConverter<PairId>()
+  override this.Write(writer, value, _options) =
+    let bid, ask = value
+    $"{bid.CryptoCode.ToUpperInvariant()}/{ask.CryptoCode.ToUpperInvariant()}"
+    |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+
+    let v = reader.GetString()
+    let s = v.Split("/")
+    if (s.Length <> 2) then raise <| JsonException() else
+    let fromString s =
+      match s with
+      | "BTC" -> Bitcoin.Instance :> INetworkSet
+      | s -> raise <| JsonException($"Unknown network {s}")
+
+    (fromString s.[0], fromString s.[1])
+
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -69,6 +106,9 @@ type Extensions() =
     this.Converters.Add(BlockHeightJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
+    this.Converters.Add(PaymentRequestJsonConverter())
+    this.Converters.Add(PairIdJsonConverter())
+    this.Converters.Add(BitcoinAddressJsonConverter(Bitcoin.Instance.GetNetwork n))
     this.Converters.Add(HexTxConverter(Bitcoin.Instance.GetNetwork(n)))
     this.Converters.Add(PeerConnectionStringJsonConverter())
 

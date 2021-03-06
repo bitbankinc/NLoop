@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="BTCPayServer.Lightning.All" Version="1.2.7" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Ply" Version="0.3.*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
@@ -15,6 +16,7 @@
   <ItemGroup>
     <Compile Include="Models.fs" />
     <Compile Include="ConfigExtensions.fs" />
+    <Compile Include="BTCPayServerExtensions.fs" />
     <Compile Include="Services\BoltzRequestResponse.fs" />
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="LoopHandlers.fs" />

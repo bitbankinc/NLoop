@@ -9,8 +9,6 @@ type SwapType =
   | Submarine = 0
   | ReverseSubmarine = 1
 
-
-
 [<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type OrderType =
   | Buy = 0

@@ -39,3 +39,5 @@ type PeerConnectionString = {
     match PeerConnectionString.TryParse str with
     | Ok r -> r
     | Error e -> raise <| FormatException($"Invalid connection string ({str}). {e}")
+
+type PairId = (INetworkSet * INetworkSet)
