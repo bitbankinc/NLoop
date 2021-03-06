@@ -100,14 +100,13 @@ type CreateSwapRequest = {
 
 type ChannelOpenRequest = {
   Private: bool
-  [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  InboundLiquidity: Money
+  InboundLiquidity: double
+  Auto: bool
 }
 
 type CreateSwapResponse = {
   Id: string
   Address: BitcoinAddress
-  ClaimAddress: BitcoinAddress
   AcceptZeroConf: bool
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   ExpectedAmount: Money
@@ -118,6 +117,8 @@ type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
   OrderSide: OrderType
+  [<JsonConverter(typeof<HexPubKeyJsonConverter>)>]
+  ClaimPublicKey: PubKey
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   InvoiceAmount: Money
   [<JsonConverter(typeof<UInt256JsonConverter>)>]

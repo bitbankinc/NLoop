@@ -11,8 +11,8 @@ type SwapType =
 
 [<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type OrderType =
-  | Buy = 0
-  | Sell = 1
+  | buy = 0
+  | sell = 1
 
  [<AbstractClass;Sealed;Extension>]
 type Extensions() =

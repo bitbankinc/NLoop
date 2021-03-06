@@ -85,4 +85,5 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
     this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
 
   member this.CreateReverseSwapAsync(req: CreateReverseSwapRequest, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<CreateReverseSwapResponse>("createswap", HttpMethod.Post, req, ct)
+    let reqObj = {| req with Type = "reversesubmarine" |}
+    this.SendCommandAsync<CreateReverseSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
