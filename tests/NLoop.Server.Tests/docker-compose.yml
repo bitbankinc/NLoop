@@ -60,14 +60,16 @@ services:
       #- --no-macaroons
       - --datadir=/data
       - --debuglevel=debug
+      #- --no-rest-tls
       # - --noseedbackup
       - --tlscertpath=/data/tls.cert
       - --tlskeypath=/data/tls.key
       - --tlsextradomain=lnd_user
     expose:
       - "9735"
-      - "32736"
       - "32777"
+    ports:
+      - "32736:32736"
     volumes:
       - "./data/.lnd_user:/data"
       - "./data/.bitcoin:/deps/.bitcoin"
