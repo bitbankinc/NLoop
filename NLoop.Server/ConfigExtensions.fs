@@ -34,16 +34,16 @@ type ConfigExtensions() =
         failwith $"Configuration value does not support type {typeof<'T>.Name}"
 
   [<Extension>]
-  static member GetNetworkType(conf: IConfiguration) =
+  static member GetChainName(conf: IConfiguration) =
     let network = conf.GetOrDefault<string>("network", null)
     if (network |> isNull |> not) then
       let n = Network.GetNetwork(network)
       if (n |> isNull) then
         raise <| ArgumentException($"Unknown Network {network}")
       else
-        n.NetworkType
+        n.ChainName
     else
-      if conf.GetOrDefault("regtest", false) then NetworkType.Regtest else
-      if conf.GetOrDefault("testnet", false) then NetworkType.Testnet else
-      NetworkType.Mainnet
+      if conf.GetOrDefault("regtest", false) then ChainName.Regtest else
+      if conf.GetOrDefault("testnet", false) then ChainName.Testnet else
+      ChainName.Mainnet
 

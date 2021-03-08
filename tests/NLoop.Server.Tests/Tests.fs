@@ -1,8 +1,12 @@
 module Tests
 
+open BTCPayServer.Lightning
+
+open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open Helpers
 open System
+open System.Linq
 open System.Net.Http
 open System.Threading.Tasks
 open BTCPayServer.Lightning
@@ -35,6 +39,7 @@ let ``BoltzClient tests (GetNodes)`` () = task {
     Assert.NotEmpty(p.Nodes)
   }
 
+
 let pairId = (Bitcoin.Instance :> INetworkSet, Bitcoin.Instance :> INetworkSet)
 [<Fact>]
 [<Trait("Docker", "Docker")>]
@@ -63,27 +68,27 @@ let ``BoltzClient tests (CreateSwap)`` () = task {
     Assert.NotNull(resp.Address)
     Assert.NotNull(resp.ExpectedAmount)
     Assert.NotNull(resp.TimeoutBlockHeight)
-    let id = resp.Id
     // ------
 
-    let! statusResp = b.GetSwapStatusAsync(id)
+    let! statusResp = b.GetSwapStatusAsync(resp.Id)
     Assert.Equal(SwapStatusType.InvoiceSet, statusResp.SwapStatus)
+
   }
 
 [<Fact>]
 [<Trait("Docker", "Docker")>]
 let ``BoltzClient tests (CreateReverseSwap)`` () = task {
     let b = getLocalBoltzClient()
-    let lndC = getUserLndClient()
 
     let preImage = RandomUtils.GetBytes(32)
     let preImageHash = preImage |> Hashes.SHA256 |> uint256
     let claimKey = new Key()
+    let invoiceAmount = Money.Satoshis 100000m
     let! resp =
       b.CreateReverseSwapAsync({ CreateReverseSwapRequest.OrderSide = OrderType.buy
                                  PairId = pairId
                                  ClaimPublicKey = claimKey.PubKey
-                                 InvoiceAmount = Money.Satoshis 100000m
+                                 InvoiceAmount = invoiceAmount
                                  PreimageHash = preImageHash })
     Assert.NotNull(resp)
     Assert.NotNull(resp.Invoice)
@@ -93,4 +98,33 @@ let ``BoltzClient tests (CreateReverseSwap)`` () = task {
 
     let! statusResp = b.GetSwapStatusAsync(resp.Id)
     Assert.Equal(SwapStatusType.Created, statusResp.SwapStatus)
+
+    // --- open channel and pay ---
+    let lndC = getUserLndClient()
+    let! nodesInfo = b.GetNodesAsync()
+    let conn = nodesInfo.Nodes.["BTC"].Uris.First(fun uri -> uri.NodeId = nodesInfo.Nodes.["BTC"].NodeKey)
+    let! _ = lndC.ConnectTo(conn.ToNodeInfo())
+    let! fee = b.GetFeeEstimation()
+    let! openChannelResp =
+      let openChannelReq = OpenChannelRequest()
+      openChannelReq.NodeInfo <- conn.ToNodeInfo()
+      openChannelReq.ChannelAmount <- invoiceAmount * 2
+      openChannelReq.FeeRate <- fee.["BTC"] |> decimal |> FeeRate
+      lndC.OpenChannel(openChannelReq)
+
+    let btcClient = getBTCClient()
+    let! _ = btcClient.GenerateAsync(2)
+    let! _ = btcClient.GenerateAsync(2)
+    Assert.Equal(OpenChannelResult.Ok, openChannelResp.Result)
+
+    // let payTask = lndC.Pay(resp.Invoice.ToString())
+
+    // let! payResp = payTask
+    // Assert.Equal(PayResult.Ok,  payResp.Result)
+    // ---
+
+    // let! txResp = b.GetSwapTransactionAsync(resp.Id)
+    // Assert.NotNull(txResp.Transaction)
+    // Assert.NotNull(txResp.TimeoutBlockHeight)
+
   }

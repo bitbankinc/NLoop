@@ -10,6 +10,20 @@ open Microsoft.Extensions.Configuration
 open NBitcoin
 open NLoop.Infrastructure
 
+module private CommandLineValidators =
+  let networkValidator = ValidateSymbol<_>(fun (r: CommandResult) ->
+    let hasNetwork = r.Children.Contains("network")
+    let hasMainnet = r.Children.Contains("mainnet")
+    let hasTestnet = r.Children.Contains("testnet")
+    let hasRegtest = r.Children.Contains("regtest")
+    let mutable count = 0
+    for flag in seq [hasNetwork; hasMainnet; hasTestnet; hasRegtest] do
+      if (flag) then
+        count <- count + 1
+    if (count > 1) then "You cannot specify more than one network" else
+    null
+    )
+
 module NLoopServerCommandLine =
   let getOptions(): Option seq =
     seq [
@@ -48,19 +62,6 @@ module NLoopServerCommandLine =
       o
     ]
 
-  module private Validators =
-    let networkValidator = ValidateSymbol<_>(fun (r: CommandResult) ->
-      let hasNetwork = r.Children.Contains("network")
-      let hasMainnet = r.Children.Contains("mainnet")
-      let hasTestnet = r.Children.Contains("testnet")
-      let hasRegtest = r.Children.Contains("regtest")
-      let mutable count = 0
-      for flag in seq [hasNetwork; hasMainnet; hasTestnet; hasRegtest] do
-        if (flag) then
-          count <- count + 1
-      if (count > 1) then "You cannot specify more than one network" else
-      null
-      )
 
   let getRootCommand() =
     let rc = RootCommand()
@@ -68,8 +69,7 @@ module NLoopServerCommandLine =
     rc.Description <- "Daemon to manage your LN node with submarine swaps"
     for o in getOptions() do
       rc.AddOption(o)
-
-    rc.AddValidator(Validators.networkValidator)
+    rc.AddValidator(CommandLineValidators.networkValidator)
     rc
 
 [<AbstractClass;Sealed;Extension>]

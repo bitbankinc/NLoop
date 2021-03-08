@@ -3,7 +3,6 @@ namespace NLoop.Infrastructure.DTOs
 open DotNetLightning.Utils.Primitives
 open NBitcoin
 
-[<CLIMutable>]
 type LoopInRequest = {
   Amount: Money
   External: bool
@@ -12,21 +11,22 @@ type LoopInRequest = {
   Label: string option
 }
 
-[<CLIMutable>]
 type LoopOutRequest = {
+  /// The
+  Channel: ShortChannelId seq
+  Address: BitcoinAddress option
+  CounterPartyPair: INetworkSet option
   Amount: Money
   External: bool
-  ConfTarget: int
+  ConfTarget: int option
   LastHop: NodeId
   Label: string option
 }
 
-[<CLIMutable>]
 type LoopInResponse = {
   Id: string
 }
 
-[<CLIMutable>]
 type LoopOutResponse = {
   Id: string
 }

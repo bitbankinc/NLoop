@@ -32,6 +32,8 @@ services:
       - "39388" # P2P
       - "28332" # ZMQ
       - "28333" # ZMQ
+    ports:
+      - "43782:43782" # RPC
     volumes:
       - "./data/.bitcoin:/data"
   lnd_user:
@@ -59,7 +61,7 @@ services:
       - --externalip=lnd_user:9735
       #- --no-macaroons
       - --datadir=/data
-      - --debuglevel=debug
+      - --debuglevel=info
       #- --no-rest-tls
       # - --noseedbackup
       - --tlscertpath=/data/tls.cert
@@ -98,7 +100,7 @@ services:
       - --externalip=lnd_server:9735
       #- --no-macaroons
       - --datadir=/data
-      - --debuglevel=debug
+      - --debuglevel=info
       # - --noseedbackup
       - --tlscertpath=/data/tls.cert
       - --tlskeypath=/data/tls.key

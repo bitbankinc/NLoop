@@ -1,5 +1,6 @@
 module Helpers
 
+open System
 open System.Text
 open NBitcoin.DataEncoders
 open System.IO
@@ -7,6 +8,7 @@ open System.Security.Cryptography
 open System.Security.Cryptography.X509Certificates
 open BTCPayServer.Lightning
 open NBitcoin
+open NBitcoin.RPC
 open NLoop.Server.Services
 
 let getLocalBoltzClient() =
@@ -28,3 +30,6 @@ let getUserLndClient() =
   let lndMacaroonPath = Path.Join(dataPath, ".lnd_user", "chain", "bitcoin", "regtest", "admin.macaroon")
   let lndTlsCertThumbPrint = getCertFingerPrintHex(Path.Join(dataPath, ".lnd_user", "tls.cert"))
   factory.Create($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndTlsCertThumbPrint};server=https://localhost:32736")
+
+let getBTCClient() =
+  RPCClient("johndoe:unsafepassword", Uri($"http://localhost:43782"), Network.RegTest)

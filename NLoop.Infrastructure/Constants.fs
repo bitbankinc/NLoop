@@ -19,3 +19,8 @@ module Constants =
   let DefaultHttpsPort = 443
 
   let DefaultHttpsCertFile = Path.Combine(HomePath, ".aspnet", "https", "ssl.cert")
+
+  [<Literal>]
+  let DefaultBoltzServer = "https://boltz.exchange/api"
+  [<Literal>]
+  let DefaultBoltzPort = 443

@@ -44,12 +44,24 @@ and NodeInfo = {
   NodeKey: PubKey
   Uris: PeerConnectionString []
 }
+type GetTxResponse = {
+  [<JsonPropertyName("transactionHex")>]
+  Transaction: Transaction
+}
 
 type GetSwapTxResponse = {
-  TransactionHex: Transaction
+  [<JsonPropertyName("transactionHex")>]
+  Transaction: Transaction
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
+
+  [<JsonPropertyName("timeoutEta")>]
+  [<JsonConverter(typeof<UnixTimeJsonConverter>)>]
+  _TimeoutEta: uint option
 }
+  with
+  member this.TimeoutEta =
+    this._TimeoutEta |> Option.map NBitcoin.Utils.UnixTimeToDateTime
 
 
 type SwapStatusType =
@@ -134,4 +146,16 @@ type CreateReverseSwapResponse = {
   TimeoutBlockHeight: BlockHeight
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   OnchainAmount: Money
+}
+
+type GetSwapRatesResponse = {
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  InvoiceAmount: Money
+}
+
+type SetInvoiceResponse = {
+  AcceptZeroConf: bool
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  ExpectedAmount: Money
+  Bip21: string
 }

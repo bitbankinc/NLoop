@@ -20,7 +20,7 @@ open NLoop.Infrastructure.DTOs
 open NLoop.Server.LoopHandlers
 
 open FSharp.Control.Tasks.NonAffine
-open Newtonsoft.Json
+open NLoop.Server.Services
 
 module App =
   let noCookie =
@@ -33,11 +33,11 @@ module App =
 
   let webApp =
       choose [
-          subRoute "/v1"
-            (choose [
+          subRoutef "/v1/%s" (fun cryptoCode ->
+            choose [
               POST >=>
-                route "/loop/out" >=> mustHaveCookies >=> bindJson<LoopOutRequest> handleLoopOut
-                route "/loop/in" >=> mustHaveCookies >=> bindJson<LoopInRequest> handleLoopIn
+                route "/loop/out" >=> mustHaveCookies >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
+                route "/loop/in" >=> mustHaveCookies >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
           ])
           setStatusCode 404 >=> text "Not Found" ]
 
@@ -66,21 +66,36 @@ module App =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
       (match env.IsDevelopment() with
       | true  ->
-          app.UseDeveloperExceptionPage()
+          app
+            .UseDeveloperExceptionPage()
       | false ->
-          app .UseGiraffeErrorHandler(errorHandler)
-              .UseHttpsRedirection())
+          app
+            .UseGiraffeErrorHandler(errorHandler)
+            .UseHttpsRedirection())
           .UseCors(configureCors)
           .UseGiraffe(webApp)
 
   let configureServices (conf: IConfiguration) (services : IServiceCollection) =
-      let n = conf.GetNetworkType()
+      let n = conf.GetChainName()
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters(n)
       jsonOptions.Converters.Add(JsonFSharpConverter())
       services.AddSingleton(jsonOptions) |> ignore
+
+      services.AddNLoopServices(conf) |> ignore
+
       services.AddCors()    |> ignore
       services.AddGiraffe() |> ignore
+
+type Startup(conf: IConfiguration) =
+  member this.Configure(appBuilder) =
+    App.configureApp(appBuilder)
+
+  member this.ConfigureServices(services) =
+    App.configureServices conf services
+
+module Main =
+  open App
 
   let configureLogging (builder : ILoggingBuilder) =
       builder.AddConsole()
@@ -96,15 +111,6 @@ module App =
     builder.AddCommandLine(args=args) |> ignore
     ()
 
-type Startup(conf: IConfiguration) =
-  member this.Configure =
-    App.configureApp
-
-  member this.ConfigureServices(services) =
-    App.configureServices conf services
-
-module Main =
-  open App
   [<EntryPoint>]
   let main args =
       Host.CreateDefaultBuilder(args)
@@ -112,7 +118,6 @@ module Main =
           .ConfigureWebHostDefaults(
               fun webHostBuilder ->
                   webHostBuilder
-                      .Configure(Action<IApplicationBuilder> configureApp)
                       .UseStartup<Startup>()
                       .ConfigureLogging(configureLogging)
                       |> ignore)

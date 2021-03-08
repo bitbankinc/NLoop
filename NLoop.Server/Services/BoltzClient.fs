@@ -10,6 +10,8 @@ open System.Text.Json
 open System.Text.Json.Serialization
 open System.Threading.Tasks
 open System.Threading
+open DotNetLightning.Payment
+open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open Macaroons
 open NBitcoin
@@ -20,12 +22,12 @@ open NLoop.Infrastructure.DTOs
 type O = OptionalArgumentAttribute
 type D = DefaultParameterValueAttribute
 
-type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certificate2,
+type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certificate2,
                  [<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
-    jsonOpts.AddNLoopJsonConverters(network.NetworkType)
+    jsonOpts.AddNLoopJsonConverters(network)
     jsonOpts.Converters.Add(JsonFSharpConverter())
     jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
@@ -58,6 +60,7 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
       raise <| HttpRequestException(errMsg)
 
     let! content = resp.Content.ReadAsStringAsync(ct)
+    printfn $"response was {content}"
     if (String.IsNullOrEmpty(content)) then
       return Unchecked.defaultof<'TResp>
     else
@@ -73,6 +76,12 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
   member this.GetNodesAsync([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
 
+  member this.GetFeeEstimation([<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<Map<string, int64>>("getfeeestimation", HttpMethod.Get, null, ct)
+
+  member this.GetTransactionAsync(currency: INetworkSet, txId: uint256, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetTxResponse>("gettransaction", HttpMethod.Post, {| transactionId = txId; Currency = currency.CryptoCode.ToUpperInvariant() |}, ct)
+
   member this.GetSwapTransactionAsync(id: string, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, {| Id = id |}, ct)
 
@@ -87,3 +96,9 @@ type BoltzClient(address: Uri, network: Network, [<O;D(null)>]cert: X509Certific
   member this.CreateReverseSwapAsync(req: CreateReverseSwapRequest, [<O;D(null)>] ct: CancellationToken) =
     let reqObj = {| req with Type = "reversesubmarine" |}
     this.SendCommandAsync<CreateReverseSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
+
+  member this.GetSwapRatesAsync(swapId: string, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetSwapRatesResponse>("swaprates", HttpMethod.Post, {| Id = swapId |}, ct)
+
+  member this.SetInvoiceAsync(swapId: string, invoice: PaymentRequest, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<SetInvoiceResponse option>("setinvoice", HttpMethod.Post, {| Id = swapId; Invoice = invoice.ToString() |}, ct)
