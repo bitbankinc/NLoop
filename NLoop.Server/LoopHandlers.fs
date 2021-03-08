@@ -9,7 +9,6 @@ module LoopHandlers =
     open Microsoft.AspNetCore.Http
     open FSharp.Control.Tasks
     open Giraffe
-    open NLoop.Server.Models
 
     let handleLoopOut (cryptoCode: string) (req: LoopOutRequest) =
         fun (next : HttpFunc) (ctx : HttpContext) ->

@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="Models.fs" />
+    <Compile Include="Constants.fs" />
     <Compile Include="ConfigExtensions.fs" />
     <Compile Include="BTCPayServerExtensions.fs" />
     <Compile Include="Services\BoltzRequestResponse.fs" />

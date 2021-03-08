@@ -32,14 +32,20 @@ module App =
   let mustHaveCookies = requiresAuthentication noCookie
 
   let webApp =
-      choose [
-          subRoutef "/v1/%s" (fun cryptoCode ->
-            choose [
-              POST >=>
-                route "/loop/out" >=> mustHaveCookies >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
-                route "/loop/in" >=> mustHaveCookies >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
-          ])
-          setStatusCode 404 >=> text "Not Found" ]
+    choose [
+      subRoutef "/v1/%s" (fun cryptoCode ->
+        choose [
+          POST >=>
+            route "/loop/out" >=> mustHaveCookies >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
+            route "/loop/in" >=> mustHaveCookies >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
+      ])
+      subRoute "/v1" (choose [
+        GET >=>
+          route "/info" >=> text Constants.AssemblyVersion
+          route "/version" >=> text Constants.AssemblyVersion
+        ])
+      setStatusCode 404 >=> text "Not Found"
+    ]
 
   // ---------------------------------
   // Error handler

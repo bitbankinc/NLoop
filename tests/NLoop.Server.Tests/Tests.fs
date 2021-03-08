@@ -1,4 +1,4 @@
-module Tests
+module BoltzTests
 
 open BTCPayServer.Lightning
 
@@ -20,21 +20,21 @@ open FSharp.Control.Tasks
 
 [<Fact>]
 let ``BoltzClient tests (GetVersion)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet.ChainName)
     let! v = b.GetVersionAsync()
     Assert.NotNull(v.Version)
   }
 
 [<Fact>]
 let ``BoltzClient tests (GetPairs)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet.ChainName)
     let! p = b.GetPairsAsync()
     Assert.NotEmpty(p.Pairs)
   }
 
 [<Fact>]
 let ``BoltzClient tests (GetNodes)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet.ChainName)
     let! p = b.GetNodesAsync()
     Assert.NotEmpty(p.Nodes)
   }

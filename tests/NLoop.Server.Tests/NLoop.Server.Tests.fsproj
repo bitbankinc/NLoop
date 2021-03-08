@@ -10,12 +10,14 @@
   <ItemGroup>
     <Compile Include="Helpers.fs" />
     <Compile Include="Tests.fs" />
+    <Compile Include="ServerAPITest.fs" />
     <Compile Include="Program.fs" />
     <Content Include="README.md" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
+    <PackageReference Include="Microsoft.AspnetCore.TestHost" Version="5.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.7.1" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
@@ -30,6 +32,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="appsettings.test.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

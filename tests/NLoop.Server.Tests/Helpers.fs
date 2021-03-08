@@ -12,7 +12,7 @@ open NBitcoin.RPC
 open NLoop.Server.Services
 
 let getLocalBoltzClient() =
-  let b = BoltzClient("http://localhost", 9001, Network.RegTest)
+  let b = BoltzClient("http://localhost", 9001, Network.RegTest.ChainName)
   b
 
 let private GetCertFingerPrint(filePath: string) =
