@@ -31,7 +31,7 @@ module NLoopServerCommandLine =
       let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default: mainnet)")
       o.Argument <-
         let a = Argument<string>()
-        a.Arity <- ArgumentArity.ZeroOrOne
+        a.Arity <- ArgumentArity.ExactlyOne
         a.FromAmong(networkNames)
       o
 
@@ -42,24 +42,36 @@ module NLoopServerCommandLine =
       let o = Option<DirectoryInfo>([|"--datadir"; "-d"|], "Directory to store data")
       o.Argument <-
         let a = Argument<DirectoryInfo>()
-        a.Arity <- ArgumentArity.ZeroOrOne
+        a.Arity <- ArgumentArity.ExactlyOne
+        a.SetDefaultValue(Constants.DefaultDataDirectoryPath)
         a
       o
       Option<bool>("--nohttps", "Do not use https")
       let o = Option<int>("--https.port", "Port for listening HTTPs request")
       o.Argument <-
         let a = Argument<int>()
-        a.Arity <- ArgumentArity.ZeroOrOne
+        a.Arity <- ArgumentArity.OneOrMore
         a.SetDefaultValue(Constants.DefaultHttpsPort)
         a
       o
-      let o = Option<string>("--https.cert", "Path to the https certification file")
+      let o = Option<FileInfo>("--https.cert", "Path to the https certification file")
       o.Argument <-
-        let a = Argument<string>()
-        a.Arity <- ArgumentArity.ZeroOrOne
+        let a = Argument<FileInfo>()
+        a.Arity <- ArgumentArity.ExactlyOne
         a.SetDefaultValue(Constants.DefaultHttpsCertFile)
         a
       o
+
+      let o = Option<FileInfo>("--rpc.cookiefile", "RPC authentication method 1: The RPC Cookiefile (default: using cookie auth from default network folder)")
+      o.Argument <-
+        let a = Argument<FileInfo>()
+        a.Arity <- ArgumentArity.ExactlyOne
+        a.SetDefaultValue(Constants.DefaultCookieFile)
+        a
+      o
+
+      Option<bool>("--noauth", "Disable cookie authentication")
+
     ]
 
 

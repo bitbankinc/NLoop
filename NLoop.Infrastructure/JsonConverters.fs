@@ -105,6 +105,12 @@ type PairIdJsonConverter() =
 
     (fromString s.[0], fromString s.[1])
 
+type ScriptJsonConverter() =
+  inherit JsonConverter<Script>()
+  override this.Write(writer, value, _options) =
+    value.ToHex() |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> Script.FromHex
 
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =

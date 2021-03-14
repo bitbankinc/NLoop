@@ -14,11 +14,14 @@ module Constants =
   [<Literal>]
   let HomeDirectoryName = ".nloop"
   let HomeDirectoryPath = Path.Join(HomePath, HomeDirectoryName)
+  let DefaultDataDirectoryPath = Path.Join(HomeDirectoryPath, "data")
 
   [<Literal>]
   let DefaultHttpsPort = 443
 
   let DefaultHttpsCertFile = Path.Combine(HomePath, ".aspnet", "https", "ssl.cert")
+
+  let DefaultCookieFile = Path.Combine(DefaultDataDirectoryPath, "cookie")
 
   [<Literal>]
   let DefaultBoltzServer = "https://boltz.exchange/api"

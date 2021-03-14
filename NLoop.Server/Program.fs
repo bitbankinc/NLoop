@@ -7,6 +7,7 @@ open System
 open System.IO
 open System.Text.Json
 open System.Text.Json.Serialization
+open FSharp.Control.Tasks.NonAffine
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
@@ -14,35 +15,37 @@ open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.AspNetCore.Authentication.Cookies
+open Microsoft.AspNetCore.Authentication.Certificate
 open Giraffe
+
 open NLoop.Infrastructure
 open NLoop.Infrastructure.DTOs
 open NLoop.Server.LoopHandlers
-
-open FSharp.Control.Tasks.NonAffine
 open NLoop.Server.Services
+
 
 module App =
   let noCookie =
     RequestErrors.UNAUTHORIZED
       "Basic"
       "Access to the protected API"
-      "You must authenticate with cookie"
+      "You must authenticate with cookie or certificate"
 
-  let mustHaveCookies = requiresAuthentication noCookie
+  let mustAuthenticate = requiresAuthentication noCookie
 
   let webApp =
     choose [
       subRoutef "/v1/%s" (fun cryptoCode ->
         choose [
           POST >=>
-            route "/loop/out" >=> mustHaveCookies >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
-            route "/loop/in" >=> mustHaveCookies >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
+            route "/loop/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
+            route "/loop/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
       ])
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> text Constants.AssemblyVersion
-          route "/version" >=> text Constants.AssemblyVersion
+          route "/info" >=> json Constants.AssemblyVersion
+          route "/version" >=> json Constants.AssemblyVersion
         ])
       setStatusCode 404 >=> text "Not Found"
     ]
@@ -79,6 +82,7 @@ module App =
             .UseGiraffeErrorHandler(errorHandler)
             .UseHttpsRedirection())
           .UseCors(configureCors)
+          .UseAuthentication()
           .UseGiraffe(webApp)
 
   let configureServices (conf: IConfiguration) (services : IServiceCollection) =
@@ -91,7 +95,16 @@ module App =
       services.AddNLoopServices(conf) |> ignore
 
       services.AddCors()    |> ignore
+
+      services
+        .AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+        .AddCertificate(fun o -> o.AllowedCertificateTypes <- CertificateTypes.SelfSigned)
+        .AddCertificateCache()
+        .AddCookie(fun _o -> ())
+        |> ignore
+
       services.AddGiraffe() |> ignore
+
 
 type Startup(conf: IConfiguration) =
   member this.Configure(appBuilder) =
@@ -125,6 +138,9 @@ module Main =
               fun webHostBuilder ->
                   webHostBuilder
                       .UseStartup<Startup>()
+                      // .ConfigureKestrel(fun o ->
+                        //o.ConfigureHttpsDefaults(fun o -> o.ClientCertificateMode <- ClientCertificateMode.RequireCertificate)
+                      //)
                       .ConfigureLogging(configureLogging)
                       |> ignore)
           .Build()

@@ -31,6 +31,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
   </ItemGroup>
 

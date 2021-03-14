@@ -7,6 +7,7 @@ open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Infrastructure
 open NLoop.Infrastructure.DTOs
+open NLoop.Infrastructure.Swap
 
 type GetVersionResponse = {
   Version: string
@@ -146,7 +147,25 @@ type CreateReverseSwapResponse = {
   TimeoutBlockHeight: BlockHeight
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   OnchainAmount: Money
+  [<JsonConverter(typeof<ScriptJsonConverter>)>]
+  RedeemScript: Script
 }
+  with
+  member this.Validate(preimageHash: uint256, offChainAmountWePay: Money, maxSwapServiceFee: Money) =
+    let actualSpk = this.LockupAddress.ScriptPubKey
+    let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
+    if (actualSpk <> expectedSpk) then
+      Error ($"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match")
+    else if this.Invoice.PaymentHash <> PaymentHash(preimageHash) then
+      Error ("Payment Hash in invoice does not match preimage hash we specified in request")
+    else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
+      Error ($"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay}).")
+    else
+    let swapServiceFee =
+      offChainAmountWePay - this.OnchainAmount
+    if maxSwapServiceFee < swapServiceFee then
+      Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+    else (this.RedeemScript |> Scripts.validateScript)
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

@@ -5,7 +5,7 @@ open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NBitcoin.Crypto
 
-module private Helpers =
+module Scripts =
   let reverseSwapScriptV1(preimageHash: PaymentHash) (claimPubKey: PubKey) (refundPubKey: PubKey) (timeout: BlockHeight) =
     let l = List<Op>()
     l.Add(Op.op_Implicit (OpcodeType.OP_SIZE))
@@ -42,9 +42,17 @@ module private Helpers =
     l.Add(Op.op_Implicit (OpcodeType.OP_CHECKSIG))
     Script(l)
 
+  let isSwapScriptV1 (sc: Script) =
+    failwith ""
+
+  let validateScript (script: Script) =
+    for op in script.ToOps() do
+      Error ("")
+    Ok ()
+
 type HTLCScript =
   | V1
-  | UnknownVersion
+  | Unknown of Script
   with
   member this.GetSuccessWitness =
     failwith "TODO"

@@ -17,9 +17,9 @@ open Macaroons
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
 open NLoop.Infrastructure
+open NLoop.Infrastructure.Utils
 open NLoop.Infrastructure.DTOs
 
-type O = OptionalArgumentAttribute
 type D = DefaultParameterValueAttribute
 
 type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certificate2,
@@ -60,7 +60,6 @@ type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certif
       raise <| HttpRequestException(errMsg)
 
     let! content = resp.Content.ReadAsStringAsync(ct)
-    printfn $"response was {content}"
     if (String.IsNullOrEmpty(content)) then
       return Unchecked.defaultof<'TResp>
     else
