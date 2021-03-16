@@ -1,0 +1,49 @@
+openapi: '3.0.2'
+info:
+  title: NLoop Server OpenAPI definition
+  version: '1.0'
+  description: >
+    Lightning Channel Manager. It will maintain the channel balance by performing
+    submarine swap against Boltz server.
+  contact:
+    email: joemphilips@gmail.com
+    name: Joe Miyamoto
+    url: https://twitter.com/joemphilips
+servers:
+  - url: https://api.server.test/v1
+paths:
+  /v1/version:
+    get:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+  /v1/loop/out:
+    post:
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ''
+
+components:
+  securitySchemes:
+    Cookie:
+  schemas:
+    LoopOutResponse:
+      type: object
+      properties:
+        swap_conf_target:
+          type: integer
+          format: int32
+          description: >
+            The number of blocks from the on-chain HTLC's confirmation
+            height that it should be swept within.
+        max_miner_fee:
+          type: integer
+          format: int32
