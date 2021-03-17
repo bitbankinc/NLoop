@@ -14,6 +14,8 @@ servers:
 paths:
   /v1/version:
     get:
+      tags: 
+        - general
       responses:
         '200':
           description: OK
@@ -21,24 +23,99 @@ paths:
             application/json:
               schema:
                 type: string
-  /v1/loop/out:
+  /v1/{cryptoCode}/loop/out:
     post:
+      tags: 
+        - swap
+      parameters:
+        - $ref: '#/components/parameters/cryptoCode'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoopOutRequest'
+      security:
+        - Cookie: []
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: ''
+                $ref: '#/components/schemas/LoopOutResponse'
+  /v1/{cryptoCode}/loop/in:
+    post:
+      tags:
+        - swap
+      parameters:
+        - $ref:  "#/components/parameters/cryptoCode"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref:  "#/components/schemas/LoopInRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoopInResponse'
 
 components:
   securitySchemes:
     Cookie:
+      type: apiKey
+      name: Cookie
+      in: cookie
+  parameters:
+    cryptoCode:
+      name: cryptoCode
+      in: path
+      description: Symbol name for the currency.
+      required: true
+      schema:
+        enum:
+          - btc
+          - ltc
   schemas:
-    LoopOutResponse:
+    # ----- Primitive objects
+    PubKey:
+      description: Bitcoin public key in 33 bytes length
+      type: string
+      format: binary
+      maxLength: 33
+      minLength: 33
+      example:
+        03afbba930dc74d6412b71c31f72bfb8d4615121174dd4290cbbf83960961ba9ab
+    BitcoinAddressNonMalleable:
+      description: On chain address
+      example:
+      oneOf:
+        - $ref: '#/components/schemas/P2SH'
+        - $ref: '#/components/schemas/P2WPKH'
+        - $ref: '#/components/schemas/P2WSH'
+    P2PKH:
+      pattern: ^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$
+      example:
+        1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+    P2SH:
+      pattern: ^[3][a-km-zA-HJ-NP-Z1-9]{25,34}$
+      example:
+        3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy
+    P2WPKH:
+      pattern: ^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25}$
+      example: bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c
+    P2WSH:
+      pattern: ^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$
+      example: bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5
+
+    # ----- 
+    # ----- requests
+    LoopOutRequest:
       type: object
       properties:
-        swap_conf_target:
+        sweep_conf_target:
           type: integer
           format: int32
           description: >
@@ -46,4 +123,57 @@ components:
             height that it should be swept within.
         max_miner_fee:
           type: integer
-          format: int32
+          format: int64
+          nullable: true
+        max_swap_fee:
+          type: integer
+          format: int64
+        dest:
+          $ref: $'#/components/schemas/PubKey'
+        amount:
+          type: integer
+          format: int64
+      required:
+        - dest
+        - amount
+    LoopInRequest:
+      type: object
+      properties:
+        max_miner_fee:
+          type: integer
+          format: int64
+          nullable: true
+        max_swap_fee:
+          type: integer
+          format: int64
+        amount:
+          type: integer
+          format: int64
+        channel_id:
+          type: integer
+          format: uint64
+      required:
+        - amount
+        - channel_id
+
+    # ----- 
+
+    # ----- responses
+    LoopOutResponse:
+      type: object
+      properties:
+        id:
+          description: >
+            Swap identifier to track status.
+        htlc_target:
+          $ref:  "#/components/schemas/BitcoinAddressNonMalleable"
+    LoopInResponse:
+      type: object
+      properties:
+        id:
+          description: >
+            Swap identifier to track status.
+        htlc_address:
+          description: >
+            The address of the on-chain HTLC
+          $ref:  "#/components/schemas/BitcoinAddressNonMalleable"
