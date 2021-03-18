@@ -1,7 +1,7 @@
 module ServerAPITest
 
 open System.IO
-open System.Net
+open System.Linq
 open System.Net.Http
 open System.Text
 open System.Text.Json
@@ -53,19 +53,15 @@ let ``ServerTest(getversion)`` () = task {
 
   let cli = NLoopClient(testClientConf, null, httpClient)
   let! v = cli.GetVersionAsync()
-  ()
+  Assert.NotEmpty(v)
+  Assert.Equal(v.Split(".").Length, 4)
 }
 
 [<Fact>]
 let ``ServerTest(createreverseswap)`` () = task {
   use server = new TestServer(getTestHost())
-  use client = server.CreateClient()
-  let! resp =
-    let req = new HttpRequestMessage(HttpMethod.Post, "/v1/loop/out")
-    req.Content <-
-      let content = JsonSerializer.Serialize({||})
-      new StringContent(content, Encoding.UTF8, "application/json")
-    req
-    |> client.SendAsync
-  return ()
+  use httpClient = server.CreateClient()
+  let cli = NLoopClient(testClientConf, null, httpClient)
+  let! resp = cli.LoopOutAsync()
+  Assert.NotNull(resp)
 }

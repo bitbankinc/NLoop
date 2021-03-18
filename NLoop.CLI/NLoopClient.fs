@@ -74,4 +74,4 @@ type NLoopClient(conf: NLoopClientConfig,[<O;DefaultParameterValue(null)>]cert: 
     this.SendCommandAsync<string>("/v1/version", HttpMethod.Get, null, ct) |> Async.StartAsTask
 
   member this.LoopOutAsync() =
-    failwith ""
+    this.SendCommandAsync()
