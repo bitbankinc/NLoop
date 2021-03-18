@@ -23,6 +23,7 @@ paths:
             application/json:
               schema:
                 type: string
+
   /v1/{cryptoCode}/loop/out:
     post:
       tags: 
@@ -129,7 +130,7 @@ components:
           type: integer
           format: int64
         dest:
-          $ref: $'#/components/schemas/PubKey'
+          $ref: '#/components/schemas/PubKey'
         amount:
           type: integer
           format: int64
