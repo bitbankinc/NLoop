@@ -14,7 +14,7 @@ servers:
 paths:
   /v1/version:
     get:
-      tags: 
+      tags:
         - general
       responses:
         '200':
@@ -26,7 +26,7 @@ paths:
 
   /v1/{cryptoCode}/loop/out:
     post:
-      tags: 
+      tags:
         - swap
       parameters:
         - $ref: '#/components/parameters/cryptoCode'
@@ -111,7 +111,7 @@ components:
       pattern: ^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$
       example: bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5
 
-    # ----- 
+    # -----
     # ----- requests
     LoopOutRequest:
       type: object
@@ -157,7 +157,7 @@ components:
         - amount
         - channel_id
 
-    # ----- 
+    # -----
 
     # ----- responses
     LoopOutResponse:
