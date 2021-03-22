@@ -15,8 +15,20 @@
     <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
   </ItemGroup>
   
-  <Target Name="GenerateApiClientSourceCode" BeforeTargets="CoreCompile;PrepareResource">
-    <Exec Command="$(NSwagExe_Net50)" run nswag.json></Exec>
+  <Target Name="GenerateNSwagClient">
+    <PropertyGroup>
+      <InputOpenApi>swagger.json</InputOpenApi>
+      <ClientName>NLoop</ClientName>
+      <GeneratedSwaggerClientFile Condition="'$(GeneratedSwaggerClientFile)' ==''">$(IntermediateOutputPath)$(MSBuildProjectName).$(ClientName)Client.cs</GeneratedSwaggerClientFile>
+    </PropertyGroup>
+    <Exec Command="dotnet nswag run nswag.json /variables:InputSwagger=$(InputSwagger),ClientName=$(ClientName),ClientNamespace=$(RootNamespace),GeneratedSwaggerClientFile=$(GeneratedSwaggerClientFile)" />
+  </Target>
+
+  <Target Name="IncludeNSwagClient" BeforeTargets="CoreCompile" DependsOnTargets="GenerateNSwagClient">
+    <ItemGroup Condition="Exists('$(GeneratedSwaggerClientFile)')">
+      <Compile Include="$(GeneratedSwaggerClientFile)" />
+      <FileWrites Include="$(GeneratedSwaggerClientFile)" />
+    </ItemGroup>
   </Target>
 
 </Project>

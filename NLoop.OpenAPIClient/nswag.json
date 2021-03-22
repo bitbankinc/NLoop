@@ -1,13 +1,6 @@
 {
   "runtime": "Net50",
   "defaultVariables": null,
-  "documentGenerator": {
-    "fromDocument": {
-      "url": "./openapi.yml",
-      "output": "openapi.json",
-      "newLineBehavior": "Auto"
-    }
-  },
   "codeGenerators": {
     "openApiToCSharpClient": {
       "clientBaseClass": null,
@@ -93,6 +86,13 @@
       "serviceHost": null,
       "serviceSchemes": null,
       "output": null,
+      "newLineBehavior": "Auto"
+    }
+  },
+  "documentGenerator": {
+    "fromDocument": {
+      "url": "../openapi.yml",
+      "output": "openapi.json",
       "newLineBehavior": "Auto"
     }
   }
