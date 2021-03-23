@@ -36,9 +36,4 @@
     <ProjectReference Include="..\NLoop.Infrastructure\NLoop.Infrastructure.fsproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="FSharp.SystemTextJson, Version=0.16.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\.nuget\packages\fsharp.systemtextjson\0.16.6\lib\netstandard2.0\FSharp.SystemTextJson.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 </Project>

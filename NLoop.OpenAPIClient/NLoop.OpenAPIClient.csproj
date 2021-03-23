@@ -17,11 +17,11 @@
   
   <Target Name="GenerateNSwagClient">
     <PropertyGroup>
-      <InputOpenApi>swagger.json</InputOpenApi>
-      <ClientName>NLoop</ClientName>
+      <InputOpenApi>openapi.json</InputOpenApi>
+      <ClientName>NLoopOpenApiClient</ClientName>
       <GeneratedSwaggerClientFile Condition="'$(GeneratedSwaggerClientFile)' ==''">$(IntermediateOutputPath)$(MSBuildProjectName).$(ClientName)Client.cs</GeneratedSwaggerClientFile>
     </PropertyGroup>
-    <Exec Command="dotnet nswag run nswag.json /variables:InputSwagger=$(InputSwagger),ClientName=$(ClientName),ClientNamespace=$(RootNamespace),GeneratedSwaggerClientFile=$(GeneratedSwaggerClientFile)" />
+    <Exec Command="dotnet nswag run nswag.json /variables:InputOpenApi=$(InputOpenApi),ClientName=$(ClientName),ClientNamespace=$(RootNamespace),GeneratedSwaggerClientFile=$(GeneratedSwaggerClientFile)" />
   </Target>
 
   <Target Name="IncludeNSwagClient" BeforeTargets="CoreCompile" DependsOnTargets="GenerateNSwagClient">

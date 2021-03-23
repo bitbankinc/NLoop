@@ -1,5 +1,6 @@
 namespace NLoop.Infrastructure.DTOs
 
+open System.Text.Json.Serialization
 open DotNetLightning.Utils.Primitives
 open NBitcoin
 
@@ -12,8 +13,8 @@ type LoopInRequest = {
 }
 
 type LoopOutRequest = {
-  /// The
-  Channel: ShortChannelId seq
+  [<JsonPropertyName "channel_id">]
+  Channel: ShortChannelId
   Address: BitcoinAddress option
   CounterPartyPair: INetworkSet option
   Amount: Money
@@ -24,9 +25,13 @@ type LoopOutRequest = {
 }
 
 type LoopInResponse = {
+  [<JsonPropertyName "id">]
   Id: string
 }
 
 type LoopOutResponse = {
+  [<JsonPropertyName "id">]
   Id: string
+  [<JsonPropertyName "htlc_target">]
+  HtlcTarget: BitcoinAddress
 }

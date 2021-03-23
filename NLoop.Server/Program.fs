@@ -89,9 +89,7 @@ module App =
       let n = conf.GetChainName()
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters(n)
-      jsonOptions.Converters.Add(JsonFSharpConverter())
       services.AddSingleton(jsonOptions) |> ignore
-
       services.AddNLoopServices(conf) |> ignore
 
       services.AddCors()    |> ignore

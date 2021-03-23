@@ -7,7 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Sample.fs" />
+    <Compile Include="Generators.fs" />
+    <Compile Include="OpenApiCompatibilityTests.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
 
@@ -17,10 +18,11 @@
     <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
     <PackageReference Include="YoloDev.Expecto.TestSdk" Version="0.*" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.*" />
-    <PackageReference Update="FSharp.Core" Version="4.*" />
+    <PackageReference Update="FSharp.Core" Version="5.*" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
+    <ProjectReference Include="..\..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
   </ItemGroup>
 </Project>

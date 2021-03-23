@@ -54,6 +54,7 @@ module LoopHandlers =
         | Ok () ->
           let response = {
             LoopOutResponse.Id = outResponse.Id
+            HtlcTarget = outResponse.LockupAddress :?> BitcoinWitScriptAddress
           }
           return! json response next ctx
       }

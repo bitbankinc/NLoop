@@ -28,7 +28,6 @@ type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certif
   let jsonOpts = JsonSerializerOptions()
   do
     jsonOpts.AddNLoopJsonConverters(network)
-    jsonOpts.Converters.Add(JsonFSharpConverter())
     jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
     if (isNull address) then raise <| ArgumentNullException(nameof(address)) else

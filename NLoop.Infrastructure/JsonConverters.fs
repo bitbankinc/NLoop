@@ -112,6 +112,13 @@ type ScriptJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> Script.FromHex
 
+type ShortChannelIdJsonConverter() =
+  inherit JsonConverter<ShortChannelId>()
+  override this.Write(writer, value, _options) =
+    value.AsString |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> ShortChannelId.ParseUnsafe
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -125,4 +132,5 @@ type Extensions() =
     this.Converters.Add(BitcoinAddressJsonConverter(Bitcoin.Instance.GetNetwork chainName))
     this.Converters.Add(HexTxConverter(Bitcoin.Instance.GetNetwork chainName))
     this.Converters.Add(PeerConnectionStringJsonConverter())
-
+    this.Converters.Add(ShortChannelIdJsonConverter())
+    this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))
