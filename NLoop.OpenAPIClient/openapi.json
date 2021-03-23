@@ -170,7 +170,7 @@
             "type": "integer",
             "format": "int64"
           },
-          "dest": {
+          "address": {
             "$ref": "#/components/schemas/PubKey"
           },
           "amount": {

@@ -405,10 +405,9 @@ namespace NLoopClient
         [System.Text.Json.Serialization.JsonPropertyName("max_swap_fee")]
         public long Max_swap_fee { get; set; }
     
-        [System.Text.Json.Serialization.JsonPropertyName("dest")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonPropertyName("address")]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
-        public byte[] Dest { get; set; }
+        public byte[] Address { get; set; }
     
         [System.Text.Json.Serialization.JsonPropertyName("amount")]
         public long Amount { get; set; }
