@@ -14,13 +14,15 @@ type LoopInRequest = {
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]
-  Channel: ShortChannelId
-  Address: BitcoinAddress option
+  ChannelId: ShortChannelId option
+  [<JsonPropertyName "address">]
+  Address: BitcoinAddress
+  [<JsonPropertyName "counter_party_pair">]
   CounterPartyPair: INetworkSet option
   Amount: Money
-  External: bool
+  /// Confirmation target before we make an offer. zero-conf by default.
+  [<JsonPropertyName "conf_target">]
   ConfTarget: int option
-  LastHop: NodeId
   Label: string option
 }
 

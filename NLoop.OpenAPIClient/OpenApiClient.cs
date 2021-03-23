@@ -388,29 +388,47 @@ namespace NLoopClient
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class BitcoinAddressNonMalleable 
+    {
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
-        /// <summary>The number of blocks from the on-chain HTLC's confirmation height that it should be swept within.
-        /// </summary>
-        [System.Text.Json.Serialization.JsonPropertyName("sweep_conf_target")]
-        public int Sweep_conf_target { get; set; }
-    
+        /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("channel_id")]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
-        [System.Text.Json.Serialization.JsonPropertyName("max_miner_fee")]
-        public long? Max_miner_fee { get; set; }
-    
-        [System.Text.Json.Serialization.JsonPropertyName("max_swap_fee")]
-        public long Max_swap_fee { get; set; }
+        /// <summary>&lt; counterparty's cryptoCode to swap against.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("counter_party_pair")]
+        public object Counter_party_pair { get; set; }
     
         [System.Text.Json.Serialization.JsonPropertyName("address")]
-        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
-        public byte[] Address { get; set; }
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string Address { get; set; }
     
+        /// <summary>&lt; amount in satoshi.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("amount")]
         public long Amount { get; set; }
+    
+        /// <summary>&lt; The number of confirmation before we make an off-chain offer.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("conf_target")]
+        public int? Conf_target { get; set; } = 0;
+    
+        /// <summary>&lt; Additional label for this request.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("label")]
+        public string Label { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     

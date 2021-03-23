@@ -94,6 +94,11 @@ components:
       pattern: ^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$
       example:
         1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2
+    BitcoinAddressNonMalleable:
+      oneOf:
+        - $ref: '#/components/schemas/P2SH'
+        - $ref: '#/components/schemas/P2WSH'
+        - $ref: '#/components/schemas/P2WPKH'
     P2SH:
       type: string
       pattern: ^[3][a-km-zA-HJ-NP-Z1-9]{25,34}$
@@ -102,11 +107,13 @@ components:
     P2WPKH:
       type: string
       pattern: ^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25}$
-      example: bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c
+      example:
+        bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c
     P2WSH:
       type: string
       pattern: ^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$
-      example: bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5
+      example:
+        bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5
     ShortChannelId:
       type: string
       pattern: (\d{3})x(\d{3})x(\d{2})
@@ -118,28 +125,39 @@ components:
     LoopOutRequest:
       type: object
       properties:
-        sweep_conf_target:
-          type: integer
-          format: int32
-          description: >
-            The number of blocks from the on-chain HTLC's confirmation
-            height that it should be swept within.
         channel_id:
           $ref: '#/components/schemas/ShortChannelId'
-        max_miner_fee:
-          type: integer
-          format: int64
+          description: <
+            ShortChannelId for the one you want to get inbound liquidity.
+            default is the one it has least.
           nullable: true
-        max_swap_fee:
-          type: integer
-          format: int64
+        counter_party_pair:
+          description: <
+            counterparty's cryptoCode to swap against.
+          default:
+            The same cryptocurrency with the one you pay.
+          nullable: true
         address:
-          $ref: '#/components/schemas/PubKey'
+          $ref: '#/components/schemas/BitcoinAddressNonMalleable'
         amount:
           type: integer
           format: int64
+          description: <
+            amount in satoshi.
+        conf_target:
+          type: integer
+          description: <
+            The number of confirmation before we make an off-chain offer.
+          default:
+            0
+          nullable: true
+        label:
+          type: string
+          description: <
+            Additional label for this request.
+          nullable: true
       required:
-        - dest
+        - address
         - amount
     LoopInRequest:
       type: object

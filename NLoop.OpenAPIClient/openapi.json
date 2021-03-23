@@ -125,6 +125,19 @@
         "pattern": "^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$",
         "example": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
       },
+      "BitcoinAddressNonMalleable": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/P2SH"
+          },
+          {
+            "$ref": "#/components/schemas/P2WSH"
+          },
+          {
+            "$ref": "#/components/schemas/P2WPKH"
+          }
+        ]
+      },
       "P2SH": {
         "type": "string",
         "pattern": "^[3][a-km-zA-HJ-NP-Z1-9]{25,34}$",
@@ -149,33 +162,38 @@
       "LoopOutRequest": {
         "type": "object",
         "required": [
-          "dest",
+          "address",
           "amount"
         ],
         "properties": {
-          "sweep_conf_target": {
-            "type": "integer",
-            "description": "The number of blocks from the on-chain HTLC's confirmation height that it should be swept within.\n",
-            "format": "int32"
-          },
           "channel_id": {
+            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
-          "max_miner_fee": {
-            "type": "integer",
-            "format": "int64",
+          "counter_party_pair": {
+            "description": "< counterparty's cryptoCode to swap against.",
+            "default": "The same cryptocurrency with the one you pay.",
             "nullable": true
           },
-          "max_swap_fee": {
-            "type": "integer",
-            "format": "int64"
-          },
           "address": {
-            "$ref": "#/components/schemas/PubKey"
+            "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
           },
           "amount": {
             "type": "integer",
+            "description": "< amount in satoshi.",
             "format": "int64"
+          },
+          "conf_target": {
+            "type": "integer",
+            "description": "< The number of confirmation before we make an off-chain offer.",
+            "default": "0",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "< Additional label for this request.",
+            "nullable": true
           }
         }
       },

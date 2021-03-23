@@ -119,6 +119,14 @@ type ShortChannelIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> ShortChannelId.ParseUnsafe
 
+type NetworkSetJsonConverter() =
+  inherit JsonConverter<INetworkSet>()
+  override this.Write(writer, value, _options) =
+    value.CryptoCode |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString().GetNetworkFromCryptoCode()
+    |> function Ok r -> r | Error e -> raise <| JsonException()
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -133,4 +141,5 @@ type Extensions() =
     this.Converters.Add(HexTxConverter(Bitcoin.Instance.GetNetwork chainName))
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
+    this.Converters.Add(NetworkSetJsonConverter())
     this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))
