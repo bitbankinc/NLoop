@@ -415,7 +415,6 @@ namespace NLoopClient
         public object Counter_party_pair { get; set; }
     
         [System.Text.Json.Serialization.JsonPropertyName("address")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
         public string Address { get; set; }
     
         /// <summary>&lt; amount in satoshi.</summary>
@@ -445,17 +444,18 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopInRequest 
     {
-        [System.Text.Json.Serialization.JsonPropertyName("max_miner_fee")]
-        public long? Max_miner_fee { get; set; }
-    
-        [System.Text.Json.Serialization.JsonPropertyName("max_swap_fee")]
-        public long Max_swap_fee { get; set; }
-    
+        /// <summary>&lt; amount in satoshi.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("amount")]
         public long Amount { get; set; }
     
+        /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("channel_id")]
-        public int Channel_id { get; set; }
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
+        public string Channel_id { get; set; }
+    
+        /// <summary>&lt; Additional label for this request.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("label")]
+        public string Label { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -477,9 +477,13 @@ namespace NLoopClient
         [System.Text.Json.Serialization.JsonPropertyName("id")]
         public object Id { get; set; }
     
-        [System.Text.Json.Serialization.JsonPropertyName("htlc_target")]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$")]
-        public string Htlc_target { get; set; }
+        /// <summary>&lt; An address to which counterparty has paid. Must be the same with the one in the request unless null.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("address")]
+        public string Address { get; set; }
+    
+        /// <summary>&lt; An txid by which they have paid to us. It is populated only when its 0-conf.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("claim_tx_id")]
+        public object Claim_tx_id { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -503,9 +507,9 @@ namespace NLoopClient
     
         /// <summary>The address of the on-chain HTLC
         /// </summary>
-        [System.Text.Json.Serialization.JsonPropertyName("htlc_address")]
+        [System.Text.Json.Serialization.JsonPropertyName("address")]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$")]
-        public string Htlc_address { get; set; }
+        public string Address { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     

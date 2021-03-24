@@ -52,11 +52,17 @@ module LoopHandlers =
           ctx.SetStatusCode StatusCodes.Status400BadRequest
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-          let response = {
-            LoopOutResponse.Id = outResponse.Id
-            HtlcTarget = outResponse.LockupAddress :?> BitcoinWitScriptAddress
-          }
-          return! json response next ctx
+          match req.ConfTarget with
+          | None
+          | Some(0) ->
+            let response = {
+              LoopOutResponse.Id = outResponse.Id
+              Address = outResponse.LockupAddress
+              ClaimTxId = None
+            }
+            return! json response next ctx
+          | Some x ->
+            return failwith "TODO"
       }
 
   let handleLoopIn (cryptoCode: string) (loopIn: LoopInRequest) =
@@ -64,6 +70,7 @@ module LoopHandlers =
       task {
         let response = {
           LoopInResponse.Id = (ShortGuid.fromGuid(Guid()))
+          Address = failwith "TODO"
         }
         return! json response next ctx
       }

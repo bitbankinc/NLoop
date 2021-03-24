@@ -128,9 +128,6 @@
       "BitcoinAddressNonMalleable": {
         "oneOf": [
           {
-            "$ref": "#/components/schemas/P2SH"
-          },
-          {
             "$ref": "#/components/schemas/P2WSH"
           },
           {
@@ -162,7 +159,6 @@
       "LoopOutRequest": {
         "type": "object",
         "required": [
-          "address",
           "amount"
         ],
         "properties": {
@@ -177,6 +173,7 @@
             "nullable": true
           },
           "address": {
+            "nullable": true,
             "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
           },
           "amount": {
@@ -200,26 +197,23 @@
       "LoopInRequest": {
         "type": "object",
         "required": [
-          "amount",
-          "channel_id"
+          "amount"
         ],
         "properties": {
-          "max_miner_fee": {
-            "type": "integer",
-            "format": "int64",
-            "nullable": true
-          },
-          "max_swap_fee": {
-            "type": "integer",
-            "format": "int64"
-          },
           "amount": {
             "type": "integer",
+            "description": "< amount in satoshi.",
             "format": "int64"
           },
           "channel_id": {
-            "type": "integer",
-            "format": "uint64"
+            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "nullable": true,
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "label": {
+            "type": "string",
+            "description": "< Additional label for this request.",
+            "nullable": true
           }
         }
       },
@@ -229,8 +223,13 @@
           "id": {
             "description": "Swap identifier to track status.\n"
           },
-          "htlc_target": {
-            "$ref": "#/components/schemas/P2WSH"
+          "address": {
+            "description": "< An address to which counterparty has paid. Must be the same with the one in the request unless null.",
+            "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
+          },
+          "claim_tx_id": {
+            "description": "< An txid by which they have paid to us. It is populated only when its 0-conf.",
+            "nullable": true
           }
         }
       },
@@ -240,7 +239,7 @@
           "id": {
             "description": "Swap identifier to track status.\n"
           },
-          "htlc_address": {
+          "address": {
             "description": "The address of the on-chain HTLC\n",
             "$ref": "#/components/schemas/P2WSH"
           }

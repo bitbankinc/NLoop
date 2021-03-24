@@ -55,7 +55,6 @@ module private Helpers =
     pubKeyGen |> Gen.map(NodeId)
 
 
-
 type PrimitiveGenerator =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
     bitcoinWitScriptAddressGen |> Arb.fromGen
@@ -85,3 +84,6 @@ type PrimitiveGenerator =
 
   static member MoneyGen() : Arbitrary<Money> =
     Arb.generate<int64> |> Gen.map(Money.Satoshis) |> Arb.fromGen
+
+  static member UInt256Gen() : Arbitrary<uint256> =
+    uint256Gen |> Arb.fromGen

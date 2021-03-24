@@ -16,7 +16,7 @@ let propConfig = {
     maxTest = 100
 }
 
-let inline checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
+let checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
   let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
   let json =
     opts.AddNLoopJsonConverters(Network.RegTest.ChainName)
@@ -27,9 +27,15 @@ let inline checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
 [<Tests>]
 let tests =
   testList "Compatibility (Server defined <----> NSwag generated)" [
+    testPropertyWithConfig propConfig "LoopOutRequest" <| fun (serverDto: LoopOutRequest) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.LoopOutRequest, LoopOutRequest>
+
     testPropertyWithConfig propConfig "LoopOutResponse" <| fun (serverDto: LoopOutResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LoopOutResponse, LoopOutResponse>
 
-    testPropertyWithConfig propConfig "LoopOutRequest" <| fun (serverDto: LoopOutRequest) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LoopOutRequest, LoopOutRequest>
+    testPropertyWithConfig propConfig "LoopInRequest" <| fun (serverDto: LoopInRequest) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.LoopInRequest, LoopInRequest>
+
+    testPropertyWithConfig propConfig "LoopInResponse" <| fun (serverDto: LoopInResponse) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.LoopInResponse, LoopInResponse>
   ]
