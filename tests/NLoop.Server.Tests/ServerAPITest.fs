@@ -1,24 +1,17 @@
 module ServerAPITest
 
+open System
 open System.IO
-open System.Linq
 open System.Net.Http
-open System.Text
-open System.Text.Json
-open Microsoft.AspNetCore.Builder
+
 open Microsoft.AspNetCore.TestHost
 open Microsoft.AspNetCore.Hosting
-open NBitcoin
-open NLoop.CLI
-open NLoop.Server
-open NLoop.Server.Services
 open Microsoft.Extensions.Configuration
-open Microsoft.Extensions.DependencyInjection
 open Xunit
 open FSharp.Control.Tasks
 
-open NLoop.Infrastructure.DTOs
-open System
+open NLoop.CLI
+open NLoop.Server
 
 let getTestHost() =
   WebHostBuilder()
@@ -55,13 +48,4 @@ let ``ServerTest(getversion)`` () = task {
   let! v = cli.GetVersionAsync()
   Assert.NotEmpty(v)
   Assert.Equal(v.Split(".").Length, 4)
-}
-
-[<Fact>]
-let ``ServerTest(createreverseswap)`` () = task {
-  use server = new TestServer(getTestHost())
-  use httpClient = server.CreateClient()
-  let cli = NLoopClient(testClientConf, null, httpClient)
-  let! resp = cli.LoopOutAsync()
-  Assert.NotNull(resp)
 }

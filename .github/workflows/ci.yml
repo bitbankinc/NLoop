@@ -1,0 +1,32 @@
+name: build and test
+on: [pull_request]
+
+jobs:
+  build:
+    name: "Build and Test on os: ${{ matrix.os }}. dotnet SDK version: ${{ matrix.dotnet }}"
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+        dotnet: ['5.0']
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Setup ${{ matrix.dotnet }} .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+
+      - name: Build with dotnet
+        run: |
+          dotnet build --configuration Debug NLoop.Server
+
+      - name: Run property test in ${{ matrix.os }}
+        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=30000
+
+      - name: Run server tests in ${{ matrix.os }}
+        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=30000
+

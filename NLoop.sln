@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-#
+# 
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Infrastructure", "NLoop.Infrastructure\NLoop.Infrastructure.fsproj", "{88200C3C-5279-4E68-9C0C-9870340511D4}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.CLI", "NLoop.CLI\NLoop.CLI.fsproj", "{DF2599E7-E9DE-473E-84CA-4C4E29116C72}"
@@ -16,6 +16,10 @@ EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Server.PropertyTests", "tests\NLoop.Server.PropertyTests\NLoop.Server.PropertyTests.fsproj", "{D55A2743-D7AC-4052-A3B7-06AF223D8796}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenAPIClientGenerator", "OpenAPIClientGenerator\OpenAPIClientGenerator.csproj", "{7870A2C5-F520-4A48-8A13-1739E5E40C50}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "DockerComposeFixture", "DockerComposeFixture", "{795EDA68-C3FE-4B86-87ED-3FDD8A5ED28E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DockerComposeFixture", "tests\DockerComposeFixture\DockerComposeFixture\DockerComposeFixture.csproj", "{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,9 +55,15 @@ Global
 		{7870A2C5-F520-4A48-8A13-1739E5E40C50}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7870A2C5-F520-4A48-8A13-1739E5E40C50}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7870A2C5-F520-4A48-8A13-1739E5E40C50}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{345E44E3-D14F-4741-BB17-8BADD58BC303} = {4CF4C444-22AD-4BBD-A6F1-38051BC11435}
 		{D55A2743-D7AC-4052-A3B7-06AF223D8796} = {4CF4C444-22AD-4BBD-A6F1-38051BC11435}
+		{795EDA68-C3FE-4B86-87ED-3FDD8A5ED28E} = {4CF4C444-22AD-4BBD-A6F1-38051BC11435}
+		{F23BF593-DDFA-4AF8-9307-4E3AE45D58BE} = {795EDA68-C3FE-4B86-87ED-3FDD8A5ED28E}
 	EndGlobalSection
 EndGlobal
