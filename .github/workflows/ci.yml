@@ -36,11 +36,11 @@ jobs:
           dotnet build --configuration Debug NLoop.Server
 
       - name: Run property test in ${{ matrix.os }}
-        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=30000
+        run: dotnet run --project tests/NLoop.Server.PropertyTests
 
       - name: Prepare docker images for integration tests.
         run: cd tests/NLoop.Server.Tests && source env.sh && docker-compose build
 
       - name: Run integration tests in ${{ matrix.os }}
-        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=30000
+        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
 
