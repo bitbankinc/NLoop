@@ -25,9 +25,11 @@ jobs:
         with:
           dotnet-version: ${{ matrix.dotnet }}
 
-      - name: dotnet restore #(tool restore is for generating client with nswag
-        run: |
-          dotnet restore && dotnet tool restore
+      - name: dotnet restore 
+        run: dotnet restore
+
+      - name: dotnet tool restore
+        run: dotnet tool restore
 
       - name: Build with dotnet
         run: |
