@@ -69,11 +69,8 @@ module NLoopServerCommandLine =
         a.SetDefaultValue(Constants.DefaultCookieFile)
         a
       o
-
       Option<bool>("--noauth", "Disable cookie authentication")
-
     ]
-
 
   let getRootCommand() =
     let rc = RootCommand()

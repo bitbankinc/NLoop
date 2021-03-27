@@ -63,6 +63,7 @@ module DockerFixtureExtensions =
         ).GetAwaiter().GetResult()
 
       let bitcoinClient = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{ports.[0]}"), Network.RegTest)
+      let litecoinClient = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{ports.[1]}"), Network.RegTest)
       let userLnd =
         let lndMacaroonPath = Path.Join(dataPath, "lnd_user", "chain", "bitcoin", "regtest", "admin.macaroon")
         let lndCertThumbprint = getCertFingerPrintHex(Path.Join(dataPath, "lnd_user", "tls.cert"))
@@ -73,6 +74,6 @@ module DockerFixtureExtensions =
         LightningClientFactory.CreateClient($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{ports.[3]}", Network.RegTest) :?> LndClient
       let serverBoltz = BoltzClient(Uri($"http://localhost:{ports.[4]}"), Network.RegTest.ChainName)
       { Clients.Bitcoin = bitcoinClient
-        Litecoin = bitcoinClient
+        Litecoin = litecoinClient
         User = {| Lnd = userLnd |}
         Server = {| Lnd = serverLnd; Boltz = serverBoltz |} }

@@ -72,8 +72,14 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
 
       let! statusResp = b.GetSwapStatusAsync(resp.Id)
       Assert.Equal(SwapStatusType.InvoiceSet, statusResp.SwapStatus)
-
     }
+
+  [<Fact>]
+  [<Trait("Docker", "Docker")>]
+  member this.``BoltzClientIsWorkingAgainstLitecoinD``() = task {
+    let! a = cli.Litecoin.GetBlockchainInfoAsync()
+    ()
+  }
 
   (*
   [<Fact>]
