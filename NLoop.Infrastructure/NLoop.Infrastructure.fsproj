@@ -19,11 +19,7 @@
     <ItemGroup>
       <PackageReference Include="BTCPayServer.Lightning.Common" Version="1.2.2" />
       <PackageReference Include="DotNetLightning" Version="1.1.2-date20210306-1457-git-651b4c5" />
+      <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
       <PackageReference Include="NBitcoin.Altcoins" Version="2.0.28" />
-    </ItemGroup>
-    <ItemGroup>
-      <Reference Include="FSharp.SystemTextJson, Version=0.16.0.0, Culture=neutral, PublicKeyToken=null">
-        <HintPath>..\..\..\..\..\.nuget\packages\fsharp.systemtextjson\0.16.6\lib\netstandard2.0\FSharp.SystemTextJson.dll</HintPath>
-      </Reference>
     </ItemGroup>
 </Project>
