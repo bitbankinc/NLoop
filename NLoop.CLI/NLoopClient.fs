@@ -64,7 +64,6 @@ type NLoopClient(conf: NLoopClientConfig,[<O;DefaultParameterValue(null)>]cert: 
       let! errMsg = resp.Content.ReadAsStringAsync(ct) |> Async.AwaitTask
       raise <| HttpRequestException(errMsg)
     let! content = resp.Content.ReadAsStringAsync(ct) |> Async.AwaitTask
-    printfn $"content is {content}"
     if (String.IsNullOrEmpty(content)) then
       return Unchecked.defaultof<'TResp>
     else

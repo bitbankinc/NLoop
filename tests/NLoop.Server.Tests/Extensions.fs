@@ -58,7 +58,7 @@ module DockerFixtureExtensions =
         opts.StartupTimeoutSecs <- 200
         opts.CustomUpTest <- fun o ->
           o.Any(fun x -> x.Contains "API server listening on:") // boltz
-          && o.Any(fun x -> x.Contains "BTCN: Server listening on") // lnd
+          && o.Count(fun x -> x.Contains "BTCN: Server listening on") = 2 // lnd
         opts
         ).GetAwaiter().GetResult()
 
