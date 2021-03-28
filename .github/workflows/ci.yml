@@ -53,5 +53,6 @@ jobs:
           docker push nloop/boltz:latest
 
       - name: Run integration tests in ${{ matrix.os }}
-        run: dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
-
+        run: sudo dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
+        # We need sudo since lnd creates admin.macaroon with permission `-rw-------` and the owner will be root
+        # in case of docker in CI.

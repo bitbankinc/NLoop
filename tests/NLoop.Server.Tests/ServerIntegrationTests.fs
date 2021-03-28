@@ -8,6 +8,7 @@ open System.Net.Http
 open System.Reflection
 open System.Threading.Tasks
 open BTCPayServer.Lightning
+open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Crypto
@@ -17,7 +18,7 @@ open NLoop.Server.Services
 open NLoop.Server
 open NLoop.Server.Tests.Extensions
 open Xunit
-open FSharp.Control.Tasks
+open FSharp.Control.Tasks.Affine
 
 open Xunit.Abstractions
 open DockerComposeFixture
@@ -48,13 +49,20 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
       let! e = Assert.ThrowsAsync<HttpRequestException>(Func<Task>(fun () -> b.GetSwapTransactionAsync("Foo") :> Task))
       Assert.Contains("could not find swap with id", e.Message)
 
-      let lndC = cli.User.Lnd :> ILightningClient
+      let! _a = cli.Litecoin.GetBlockchainInfoAsync() // just to check litecoin is working
 
+      // check lnd is working
+      let! r = cli.User.Lnd.SwaggerClient.GetInfoAsync()
+      Assert.NotNull(r.Block_hash)
+      Assert.NotNull(r.Block_height)
+      let lndC = cli.User.Lnd :> ILightningClient
+      let! listChannelResult = lndC.ListChannels()
+      Assert.Empty(listChannelResult)
       // --- create swap ---
       let refundKey = new Key()
       let invoiceAmt = 100000m
       let! invoice =
-        lndC.CreateInvoice(amount=(LNMoney.Satoshis invoiceAmt).ToLightMoney(), description="test", expiry=TimeSpan.FromMinutes(5.))
+            lndC.CreateInvoice(amount=(LNMoney.Satoshis invoiceAmt).ToLightMoney(), description="test", expiry=TimeSpan.FromMinutes(5.))
       let! resp =
         let channelOpenReq =  { ChannelOpenRequest.Private = true
                                 InboundLiquidity = 50.
@@ -63,7 +71,6 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
                             Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
-
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
       Assert.NotNull(resp.ExpectedAmount)
@@ -73,13 +80,6 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
       let! statusResp = b.GetSwapStatusAsync(resp.Id)
       Assert.Equal(SwapStatusType.InvoiceSet, statusResp.SwapStatus)
     }
-
-  [<Fact>]
-  [<Trait("Docker", "Docker")>]
-  member this.``BoltzClientIsWorkingAgainstLitecoinD``() = task {
-    let! a = cli.Litecoin.GetBlockchainInfoAsync()
-    ()
-  }
 
   (*
   [<Fact>]
