@@ -6,7 +6,9 @@ services:
     build:
       context: ./Dockerfiles
       dockerfile: bitcoin
-    image: loopd/bitcoind
+      cache_from:
+        - nloop/bitcoind:latest
+    image: nloop/bitcoind
     environment:
       BITCOIN_NETWORK: regtest
       BITCOIN_RPC_AUTH: johndoe:75669617aaedb394397ddc7213bb1ea9$$3a50ee2f4dff3cd49475295124aa3d48a61d6ae3cdcb4d2cf199dac6551217f4
@@ -42,7 +44,9 @@ services:
     build:
       context: ./Dockerfiles
       dockerfile: litecoin
-    image: loopd/litecoind
+      cache_from:
+        - nloop/litecoind:latest
+    image: nloop/litecoind
     environment:
       LITECOIN_NETWORK: regtest
       LITECOIN_RPC_AUTH: johndoe:75669617aaedb394397ddc7213bb1ea9$$3a50ee2f4dff3cd49475295124aa3d48a61d6ae3cdcb4d2cf199dac6551217f4
@@ -72,10 +76,12 @@ services:
       - "${DATA_PATH:?no_data_path}/litecoin:/data"
   lnd_user:
     restart: unless-stopped
-    image: loopd/lnd
+    image: nloop/lnd
     build:
       context: ./Dockerfiles
       dockerfile: lnd
+      cache_from:
+        - nloop/lnd:latest
     entrypoint: [ "./start-lnd.sh" ]
     environment:
       NETWORK: regtest
@@ -115,10 +121,12 @@ services:
       - "${DATA_PATH}/bitcoin:/deps/.bitcoin"
   lnd_server:
     restart: unless-stopped
-    image: loopd/lnd
+    image: nloop/lnd
     build:
       context: ./Dockerfiles
       dockerfile: lnd
+      cache_from:
+        - nloop/lnd:latest
     entrypoint: [ "./start-lnd.sh" ]
     environment:
       NETWORK: regtest
@@ -153,12 +161,14 @@ services:
       - "${DATA_PATH}/lnd_server:/data"
       - "${DATA_PATH}/bitcoin:/deps/.bitcoin"
   boltz:
-    image: boltz/regtest:3.1.0
+    image: nloop/boltz
     container_name: boltz
     restart: unless-stopped
     build:
       context: ./Dockerfiles
       dockerfile: boltz
+      cache_from:
+        - nloop/boltz:latest
     command:
       - "--configpath=/data/boltz/boltz.conf"
     expose:
