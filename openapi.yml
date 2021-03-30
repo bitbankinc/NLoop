@@ -24,6 +24,18 @@ paths:
               schema:
                 type: string
 
+  /v1/info:
+    get:
+      tags:
+        - general
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetInfoResponse'
+
   /v1/{cryptoCode}/loop/out:
     post:
       tags:
@@ -77,8 +89,8 @@ components:
       required: true
       schema:
         enum:
-          - btc
-          - ltc
+          - BTC
+          - LTC
   schemas:
     # ----- Primitive objects
     PubKey:
@@ -183,6 +195,31 @@ components:
     # -----
 
     # ----- responses
+    GetInfoResponse:
+      type: object
+      properties:
+        version:
+          type: string
+        supported_coins:
+          type: object
+          properties:
+            on_chain:
+              type: array
+              items:
+                type: string
+                enum:
+                  - LTC
+                  - BTC
+            off_chain:
+              type: array
+              items:
+                type: string
+                enum:
+                  - LTC
+                  - BTC
+      required:
+        - version
+        - supported_coins
     LoopOutResponse:
       type: object
       properties:

@@ -11,9 +11,10 @@
         <Compile Include="NLoopServerConfig.fs" />
         <Compile Include="Models.fs" />
         <Compile Include="Swap\HTLC.fs" />
-        <Compile Include="DTOs\Client.fs" />
-        <Compile Include="DTOs\LoopInOut.fs" />
         <Compile Include="JsonConverters.fs" />
+        <Compile Include="DTOs\Client.fs" />
+        <Compile Include="DTOs\Common.fs" />
+        <Compile Include="DTOs\LoopInOut.fs" />
     </ItemGroup>
 
     <ItemGroup>

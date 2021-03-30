@@ -54,6 +54,11 @@ module private Helpers =
   let nodeIdGen =
     pubKeyGen |> Gen.map(NodeId)
 
+  let networkSetGen =
+    Gen.oneof [
+          Gen.constant Bitcoin.Instance |> Gen.map(unbox)
+          Gen.constant Litecoin.Instance |> Gen.map(unbox)
+        ]
 
 type PrimitiveGenerator =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
@@ -66,10 +71,11 @@ type PrimitiveGenerator =
     nodeIdGen |> Arb.fromGen
 
   static member NetworkSetGen() : Arbitrary<INetworkSet> =
-    Gen.oneof [
-      Gen.constant Bitcoin.Instance |> Gen.map(unbox)
-      Gen.constant Litecoin.Instance |> Gen.map(unbox)
-    ] |> Arb.fromGen
+     networkSetGen |> Arb.fromGen
+
+  static member NetworkSetSeqGen() : Arbitrary<INetworkSet seq> =
+    networkSetGen |> Gen.listOf |> Gen.map(List.toSeq) |> Arb.fromGen
+
   static member BitcoinAddressGen() : Arbitrary<BitcoinAddress> =
     Gen.oneof [
       bitcoinWitScriptAddressGen |> Gen.map(unbox)

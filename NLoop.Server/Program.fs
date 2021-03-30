@@ -1,29 +1,24 @@
 namespace NLoop.Server
 
-open System.CommandLine
-open System.CommandLine.Invocation
-open System.CommandLine.Parsing
 open System
 open System.IO
 open System.Text.Json
-open System.Text.Json.Serialization
-open FSharp.Control.Tasks.NonAffine
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.Configuration
-open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Authentication.Certificate
 open Giraffe
 
+open Microsoft.IO
 open NLoop.Infrastructure
 open NLoop.Infrastructure.DTOs
 open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
 
+open Microsoft.Extensions.Hosting
 
 module App =
   let noCookie =
@@ -44,7 +39,7 @@ module App =
       ])
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> json Constants.AssemblyVersion
+          route "/info" >=> handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
         ])
       setStatusCode 404 >=> text "Not Found"
@@ -77,6 +72,7 @@ module App =
       | true  ->
           app
             .UseDeveloperExceptionPage()
+            .UseMiddleware<RequestResponseLoggingMiddleware>()
       | false ->
           app
             .UseGiraffeErrorHandler(errorHandler)
@@ -85,12 +81,23 @@ module App =
           .UseAuthentication()
           .UseGiraffe(webApp)
 
-  let configureServices (conf: IConfiguration) (services : IServiceCollection) =
+  let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
       let n = conf.GetChainName()
+
+      // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters(n)
-      services.AddSingleton(jsonOptions) |> ignore
+      services
+        .AddSingleton(jsonOptions)
+        .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
+
       services.AddNLoopServices(conf) |> ignore
+
+      if (env.IsDevelopment()) then
+        services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
+        services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
+      else
+        ()
 
       services.AddCors()    |> ignore
 
@@ -104,19 +111,25 @@ module App =
       services.AddGiraffe() |> ignore
 
 
-type Startup(conf: IConfiguration) =
+type Startup(conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices conf services
+    App.configureServices conf env services
 
 module Main =
-  open App
 
   let configureLogging (builder : ILoggingBuilder) =
-      builder.AddConsole()
-             .AddDebug() |> ignore
+      builder
+        .AddConsole()
+        .AddDebug()
+#if DEBUG
+        .SetMinimumLevel(LogLevel.Debug)
+#else
+        .SetMinimumLevel(LogLevel.Information)
+#endif
+        |> ignore
 
   let configureConfig args (builder: IConfigurationBuilder) =
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore

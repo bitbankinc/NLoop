@@ -36,6 +36,26 @@
         }
       }
     },
+    "/v1/info": {
+      "get": {
+        "tags": [
+          "general"
+        ],
+        "operationId": "info",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/{cryptoCode}/loop/out": {
       "post": {
         "tags": [
@@ -217,6 +237,43 @@
           }
         }
       },
+      "GetInfoResponse": {
+        "type": "object",
+        "required": [
+          "version",
+          "supported_coins"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "supported_coins": {
+            "type": "object",
+            "properties": {
+              "on_chain": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "LTC",
+                    "BTC"
+                  ]
+                }
+              },
+              "off_chain": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "LTC",
+                    "BTC"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "LoopOutResponse": {
         "type": "object",
         "properties": {
@@ -254,8 +311,8 @@
         "description": "Symbol name for the currency.",
         "schema": {
           "enum": [
-            "btc",
-            "ltc"
+            "BTC",
+            "LTC"
           ]
         }
       }

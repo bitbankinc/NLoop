@@ -10,9 +10,11 @@
     <PackageReference Include="BTCPayServer.Lightning.All" Version="1.2.7" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="2.0.0" />
     <PackageReference Include="Ply" Version="0.3.*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
     <PackageReference Include="DBTrie" Version="1.0.38" />
+    <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +25,7 @@
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\Repository.fs" />
+    <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
     <Compile Include="LoopHandlers.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="Program.fs" />
@@ -34,6 +37,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NLoop.Infrastructure\NLoop.Infrastructure.fsproj" />
+    <ProjectReference Include="..\CSharpHelpers\CSharpHelpers.csproj" />
   </ItemGroup>
 
 </Project>

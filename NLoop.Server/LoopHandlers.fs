@@ -1,8 +1,10 @@
 namespace NLoop.Server
 
 open System
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.Altcoins
 open NBitcoin.Crypto
 open NLoop.Infrastructure
 open NLoop.Infrastructure.DTOs
@@ -70,7 +72,20 @@ module LoopHandlers =
       task {
         let response = {
           LoopInResponse.Id = (ShortGuid.fromGuid(Guid()))
-          Address = failwith "TODO"
+          Address = BitcoinAddress.Create("bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c", Network.RegTest)
         }
         return! json response next ctx
+      }
+
+  let handleGetInfo =
+    fun (next: HttpFunc) (ctx: HttpContext) ->
+      task {
+        let _logger = ctx.GetLogger("handleGetInfo")
+        let response = {
+          GetInfoResponse.Version = Constants.AssemblyVersion
+          SupportedCoins = { OnChain = [Bitcoin.Instance; Litecoin.Instance]
+                             OffChain = [Bitcoin.Instance] }
+        }
+        let! r = json response next ctx
+        return r
       }

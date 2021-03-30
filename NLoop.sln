@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# 
+#
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Infrastructure", "NLoop.Infrastructure\NLoop.Infrastructure.fsproj", "{88200C3C-5279-4E68-9C0C-9870340511D4}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.CLI", "NLoop.CLI\NLoop.CLI.fsproj", "{DF2599E7-E9DE-473E-84CA-4C4E29116C72}"
