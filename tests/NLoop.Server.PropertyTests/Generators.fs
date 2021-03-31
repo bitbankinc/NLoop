@@ -4,6 +4,7 @@ open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
+open NLoop.Infrastructure.DTOs
 
 
 [<AutoOpen>]
@@ -51,6 +52,11 @@ module private Helpers =
       return pk.WitHash.GetAddress(n) :?> BitcoinWitPubKeyAddress
     }
 
+  let bitcoinAddressGen =
+    Gen.oneof [
+      bitcoinWitScriptAddressGen |> Gen.map(unbox)
+      bitcoinWitPubKeyAddressGen |> Gen.map(unbox)
+    ]
   let nodeIdGen =
     pubKeyGen |> Gen.map(NodeId)
 
@@ -77,11 +83,7 @@ type PrimitiveGenerator =
     networkSetGen |> Gen.listOf |> Gen.map(List.toSeq) |> Arb.fromGen
 
   static member BitcoinAddressGen() : Arbitrary<BitcoinAddress> =
-    Gen.oneof [
-      bitcoinWitScriptAddressGen |> Gen.map(unbox)
-      bitcoinWitPubKeyAddressGen |> Gen.map(unbox)
-    ]
-    |> Arb.fromGen
+     bitcoinAddressGen |> Arb.fromGen
 
   static member ShortChannelIdGen() : Arbitrary<ShortChannelId> =
     shortChannelIdGen |> Arb.fromGen
@@ -93,3 +95,37 @@ type PrimitiveGenerator =
 
   static member UInt256Gen() : Arbitrary<uint256> =
     uint256Gen |> Arb.fromGen
+
+type ResponseGenerator =
+  static member LoopOut() :Arbitrary<LoopOutResponse> =
+    gen {
+      let! id = Arb.generate<NonNull<string>>
+      let! addr = bitcoinAddressGen
+      let! txid = uint256Gen |> Gen.optionOf
+      return {
+        LoopOutResponse.Id = id.Get
+        Address = addr
+        ClaimTxId = txid }
+    }
+    |> Arb.fromGen
+
+  static member LoopIn(): Arbitrary<LoopInResponse> =
+    gen {
+      let! id = Arb.generate<NonNull<string>>
+      let! addr = bitcoinAddressGen
+      return {
+        LoopInResponse.Id = id.Get
+        Address = addr }
+    }
+    |> Arb.fromGen
+
+  static member GetInfo(): Arbitrary<GetInfoResponse> =
+    gen {
+      let! v = Arb.generate<NonNull<string>>
+      let! onChain = networkSetGen |> Gen.arrayOf
+      let! offChain = networkSetGen |> Gen.arrayOf
+      return {
+        GetInfoResponse.Version = v.Get
+        SupportedCoins = { SupportedCoins.OffChain = offChain; OnChain = onChain } }
+    }
+    |> Arb.fromGen

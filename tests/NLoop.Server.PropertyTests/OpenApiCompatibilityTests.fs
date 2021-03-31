@@ -14,7 +14,7 @@ open NLoop.Infrastructure
 
 let propConfig = {
   FsCheckConfig.defaultConfig with
-    arbitrary = [ typeof<PrimitiveGenerator> ]
+    arbitrary = [ typeof<PrimitiveGenerator>; typeof<ResponseGenerator> ]
     maxTest = 100
 }
 

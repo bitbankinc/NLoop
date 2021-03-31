@@ -7,6 +7,7 @@ open System.Net.Http
 open Microsoft.AspNetCore.TestHost
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.Configuration
+open NLoopClient
 open Xunit
 open FSharp.Control.Tasks
 
@@ -27,12 +28,6 @@ let getTestHost() =
     )
     .UseTestServer()
 
-let testClientConf = {
-  NLoopClientConfig.Uri = Uri("http://localhost")
-  AllowInsecure = true
-  CertificateThumbPrint = None
-}
-
 [<Fact>]
 let ``ServerTest(getversion)`` () = task {
   use server = new TestServer(getTestHost())
@@ -44,8 +39,9 @@ let ``ServerTest(getversion)`` () = task {
   let! str = resp.Content.ReadAsStringAsync()
   Assert.Equal(4, str.Split(".").Length)
 
-  let cli = NLoopClient(testClientConf, null, httpClient)
-  let! v = cli.GetVersionAsync()
+  let cli = NLoopClient(httpClient)
+  cli.BaseUrl <- "http://localhost"
+  let! v = cli.VersionAsync()
   Assert.NotEmpty(v)
   Assert.Equal(v.Split(".").Length, 4)
 }

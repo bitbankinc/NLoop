@@ -3,6 +3,7 @@ namespace NLoop.Server
 open System
 open System.IO
 open System.Text.Json
+open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
@@ -102,7 +103,7 @@ module App =
       services.AddCors()    |> ignore
 
       services
-        .AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+        .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
         .AddCertificate(fun o -> o.AllowedCertificateTypes <- CertificateTypes.SelfSigned)
         .AddCertificateCache()
         .AddCookie(fun _o -> ())
