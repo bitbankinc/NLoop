@@ -5,9 +5,9 @@ open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
-open NLoop.Infrastructure
-open NLoop.Infrastructure.DTOs
-open NLoop.Infrastructure.Swap
+open NLoop.Server
+open NLoop.Server.DTOs
+open NLoop.Server.Swap
 
 type GetVersionResponse = {
   Version: string

@@ -16,9 +16,9 @@ open FSharp.Control.Tasks
 open Macaroons
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
-open NLoop.Infrastructure
-open NLoop.Infrastructure.Utils
-open NLoop.Infrastructure.DTOs
+open NLoop.Server
+open NLoop.Server.Utils
+open NLoop.Server.DTOs
 
 type D = DefaultParameterValueAttribute
 

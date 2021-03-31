@@ -5,12 +5,12 @@ module OpenApiCompatibilityTests
 open System.Collections.Generic
 open System.Text.Json.Serialization
 open NBitcoin
-open NLoop.Infrastructure.DTOs
+open NLoop.Server.DTOs
 open Generators
 open Newtonsoft.Json
 open System.Text.Json
 open Expecto
-open NLoop.Infrastructure
+open NLoop.Server
 
 let propConfig = {
   FsCheckConfig.defaultConfig with

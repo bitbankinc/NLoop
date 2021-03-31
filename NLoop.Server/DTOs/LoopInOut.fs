@@ -1,4 +1,4 @@
-namespace NLoop.Infrastructure.DTOs
+namespace NLoop.Server.DTOs
 
 open System.Text.Json.Serialization
 open DotNetLightning.Utils

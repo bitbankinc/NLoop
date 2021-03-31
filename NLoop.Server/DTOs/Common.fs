@@ -1,8 +1,8 @@
-namespace NLoop.Infrastructure.DTOs
+namespace NLoop.Server.DTOs
 
 open System.Text.Json.Serialization
 open NBitcoin
-open NLoop.Infrastructure
+open NLoop.Server
 
 type GetInfoResponse = {
   [<JsonPropertyName "version">]

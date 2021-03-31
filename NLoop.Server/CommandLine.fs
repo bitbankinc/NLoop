@@ -8,7 +8,7 @@ open System.CommandLine
 open System.CommandLine.Parsing
 open Microsoft.Extensions.Configuration
 open NBitcoin
-open NLoop.Infrastructure
+open NLoop.Server
 
 module NLoopServerCommandLine =
   module Validators =

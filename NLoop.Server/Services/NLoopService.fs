@@ -4,7 +4,7 @@ open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 
-open NLoop.Infrastructure
+open NLoop.Server
 open NLoop.Server
 
 [<AbstractClass;Sealed;Extension>]

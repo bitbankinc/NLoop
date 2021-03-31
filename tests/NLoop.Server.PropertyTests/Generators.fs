@@ -4,7 +4,7 @@ open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
-open NLoop.Infrastructure.DTOs
+open NLoop.Server.DTOs
 
 
 [<AutoOpen>]

@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open Microsoft.Extensions.DependencyInjection
 open NBitcoin
 open NLoop.CLI.SubCommands
-open NLoop.Infrastructure.DTOs
+open NLoop.Server.DTOs
 open NLoop.Server.Services
 open NLoopClient
 open FSharp.Control.Tasks.Affine

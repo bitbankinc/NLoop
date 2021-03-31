@@ -12,8 +12,8 @@ open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Crypto
-open NLoop.Infrastructure.DTOs
-open NLoop.Infrastructure
+open NLoop.Server.DTOs
+open NLoop.Server
 open NLoop.Server.Services
 open NLoop.Server
 open NLoop.Server.Tests.Extensions

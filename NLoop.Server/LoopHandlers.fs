@@ -6,8 +6,8 @@ open Microsoft.Extensions.Options
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.Crypto
-open NLoop.Infrastructure
-open NLoop.Infrastructure.DTOs
+open NLoop.Server
+open NLoop.Server.DTOs
 open NLoop.Server.Services
 module private HandlerHelpers =
   open Giraffe

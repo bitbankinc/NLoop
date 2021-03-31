@@ -14,8 +14,8 @@ open Microsoft.AspNetCore.Authentication.Certificate
 open Giraffe
 
 open Microsoft.IO
-open NLoop.Infrastructure
-open NLoop.Infrastructure.DTOs
+open NLoop.Server
+open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
 

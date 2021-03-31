@@ -21,7 +21,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\NLoop.Infrastructure\NLoop.Infrastructure.fsproj" />
       <ProjectReference Include="..\NLoop.Server\NLoop.Server.fsproj" />
       <ProjectReference Include="..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
     </ItemGroup>

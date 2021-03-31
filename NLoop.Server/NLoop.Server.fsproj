@@ -5,8 +5,13 @@
     <AssemblyName>NLoop.Server.App</AssemblyName>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
   </PropertyGroup>
+    <ItemGroup>
+    </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
+    <PackageReference Include="NBitcoin.Altcoins" Version="2.0.28" />
+    <PackageReference Include="DotNetLightning" Version="1.1.2-date20210306-1457-git-651b4c5" />
     <PackageReference Include="BTCPayServer.Lightning.All" Version="1.2.7" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
@@ -19,6 +24,15 @@
 
   <ItemGroup>
     <Compile Include="Constants.fs" />
+    <Compile Include="Utils.fs" />
+    <Compile Include="NBitcoinExtensions.fs" />
+    <Compile Include="NLoopServerConfig.fs" />
+    <Compile Include="Models.fs" />
+    <Compile Include="Swap\HTLC.fs" />
+    <Compile Include="JsonConverters.fs" />
+    <Compile Include="DTOs\Client.fs" />
+    <Compile Include="DTOs\Common.fs" />
+    <Compile Include="DTOs\LoopInOut.fs" />
     <Compile Include="ConfigExtensions.fs" />
     <Compile Include="BTCPayServerExtensions.fs" />
     <Compile Include="Services\BoltzRequestResponse.fs" />
@@ -33,11 +47,6 @@
 
   <ItemGroup>
     <None Include="web.config" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\NLoop.Infrastructure\NLoop.Infrastructure.fsproj" />
-    <ProjectReference Include="..\CSharpHelpers\CSharpHelpers.csproj" />
   </ItemGroup>
 
 </Project>

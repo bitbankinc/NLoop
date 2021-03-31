@@ -1,4 +1,4 @@
-﻿namespace NLoop.Infrastructure
+﻿namespace NLoop.Server
 
 open System
 open System.IO
@@ -11,7 +11,7 @@ open FSharp.Control.Tasks
 open DBTrie
 open NBitcoin
 open NBitcoin.Crypto
-open NLoop.Infrastructure.Utils
+open NLoop.Server.Utils
 
 type RepositorySerializer() =
   do ()

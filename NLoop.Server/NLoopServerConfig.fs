@@ -1,4 +1,4 @@
-namespace NLoop.Infrastructure
+namespace NLoop.Server
 
 open NBitcoin
 
