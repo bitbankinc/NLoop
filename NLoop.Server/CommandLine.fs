@@ -66,7 +66,6 @@ module NLoopServerCommandLine =
         let o = Option<string>("--rpchost", (fun () -> "localhost"), "host which server listens for rpc call")
         o.Argument <-
           let a = Argument<string>()
-          a.Name <- "rpchost"
           a.SetDefaultValue "localhost"
           a
         o

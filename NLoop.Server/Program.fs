@@ -1,12 +1,18 @@
 namespace NLoop.Server
 
 open System
+open System.CommandLine
+open System.CommandLine.Builder
+open System.CommandLine.Invocation
+open System.CommandLine.Hosting
+open System.CommandLine.Parsing
 open System.IO
 open System.Text.Json
 open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Server.Kestrel.Core
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
@@ -20,6 +26,8 @@ open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
 
 open Microsoft.Extensions.Hosting
+
+open FSharp.Control.Tasks.Affine
 
 module App =
   let noCookie =
@@ -119,7 +127,12 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
   member this.ConfigureServices(services) =
     App.configureServices conf env services
 
+
 module Main =
+  type KestrelServerOptions with
+    member this.ConfigureEndpoint(conf: IConfiguration, subsectionKey: string, defaultPort: int, defaultBind: string) =
+      let subSection = conf.GetSection(subsectionKey)
+      failwith ""
 
   let configureLogging (builder : ILoggingBuilder) =
       builder
@@ -132,29 +145,56 @@ module Main =
 #endif
         |> ignore
 
-  let configureConfig args (builder: IConfigurationBuilder) =
+  let configureConfig (builder: IConfigurationBuilder) =
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
     Directory.CreateDirectory(Constants.HomeDirectoryPath) |> ignore
     let iniFile = Path.Join(Constants.HomeDirectoryPath, "nloop.conf")
     if (iniFile |> File.Exists) then
       builder.AddIniFile(iniFile) |> ignore
     builder.AddEnvironmentVariables(prefix="NLOOP_") |> ignore
-    builder.AddCommandLine(args=args) |> ignore
     ()
+
+  let configureHostBuilder (hostBuilder: IHostBuilder) =
+    hostBuilder.ConfigureAppConfiguration(configureConfig)
+      .ConfigureWebHostDefaults(
+        fun webHostBuilder ->
+          webHostBuilder
+            .UseStartup<Startup>()
+            .UseKestrel(fun opts ->
+              let config = opts.ApplicationServices.GetRequiredService<IConfiguration>()
+              let noHttps = config.GetValue<bool>("nohttps", Constants.DefaultNoHttps)
+              if (noHttps) then
+                // opts.ConfigureEndpoint(config, "http", Constants.DefaultRPCPort, Constants.DefaultRPCHost)
+                let port = config.GetValue("rpcport", Constants.DefaultRPCPort)
+                let b = config.GetValue("rpchost", Constants.DefaultRPCHost)
+                if (b |> isNull |> not) then
+                  ()
+                else
+                  ()
+              else
+                let httpsCert = config.GetValue<string>("https.cert", Constants.DefaultHttpsCertFile)
+                let certPass = config.GetValue<string>("https.certpass", String.Empty)
+                opts.ConfigureEndpoint(config, "https", Constants.DefaultHttpsPort, Constants.DefaultHttpsHost)
+                ()
+              ())
+            .ConfigureLogging(configureLogging)
+            |> ignore
+      )
 
   [<EntryPoint>]
   let main args =
-      Host.CreateDefaultBuilder(args)
-          .ConfigureAppConfiguration(configureConfig args)
-          .ConfigureWebHostDefaults(
-              fun webHostBuilder ->
-                  webHostBuilder
-                      .UseStartup<Startup>()
-                      // .ConfigureKestrel(fun o ->
-                        //o.ConfigureHttpsDefaults(fun o -> o.ClientCertificateMode <- ClientCertificateMode.RequireCertificate)
-                      //)
-                      .ConfigureLogging(configureLogging)
-                      |> ignore)
-          .Build()
-          .Run()
-      0
+    let rc = NLoopServerCommandLine.getRootCommand()
+    rc.Handler <-
+      CommandHandler.Create<IHost>(fun (host: IHost) -> task {
+        do! host.RunAsync()
+        return 0
+      })
+    CommandLineBuilder(rc)
+      .UseHost(fun (hostBuilder: IHostBuilder) ->
+        let ctx = hostBuilder.Properties.[typeof<InvocationContext>] :?> InvocationContext
+        configureHostBuilder hostBuilder |> ignore
+        ()
+       )
+      .UseDefaults()
+      .Build()
+      .Invoke(args)

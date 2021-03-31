@@ -12,6 +12,7 @@ open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open NLoop.CLI.SubCommands
+open NLoop.Server
 open NLoopClient
 open System.CommandLine.Hosting
 
@@ -24,9 +25,10 @@ let main argv =
     CommandLineBuilder(rc)
       .UseDefaults()
       .UseHost(fun (hostBuilder:IHostBuilder) ->
+          let ctx = hostBuilder.Properties.[typeof<InvocationContext>] :?> InvocationContext
           hostBuilder
-            .ConfigureHostConfiguration(fun config ->
-              NLoop.Server.Main.configureConfig argv config
+            .ConfigureHostConfiguration(fun configBuilder ->
+              Main.configureConfig configBuilder
             )
             .ConfigureServices(fun h ->
               h.AddHttpClient<NLoopClient>() |> ignore

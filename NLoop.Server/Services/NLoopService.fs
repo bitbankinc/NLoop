@@ -1,11 +1,9 @@
 namespace NLoop.Server.Services
 
+open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
-
-open NLoop.Server
-open NLoop.Server
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =

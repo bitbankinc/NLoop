@@ -33,8 +33,8 @@
     <Compile Include="DTOs\Client.fs" />
     <Compile Include="DTOs\Common.fs" />
     <Compile Include="DTOs\LoopInOut.fs" />
-    <Compile Include="ConfigExtensions.fs" />
     <Compile Include="BTCPayServerExtensions.fs" />
+    <Compile Include="ConfigExtensions.fs" />
     <Compile Include="Services\BoltzRequestResponse.fs" />
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\NLoopService.fs" />
