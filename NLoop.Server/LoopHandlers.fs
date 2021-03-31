@@ -11,7 +11,6 @@ open NLoop.Server.DTOs
 open NLoop.Server.Services
 module private HandlerHelpers =
   open Giraffe
-  open FSharp.Control.Tasks
   open System.Threading.Tasks
   let earlyReturn : HttpFunc = Some >> Task.FromResult
 
@@ -48,7 +47,7 @@ module LoopHandlers =
               PreimageHash = preimageHash |> uint256 }
           boltzCli.CreateReverseSwapAsync(req)
 
-        let conf = ctx.GetService<IOptions<NLoopServerConfig>>()
+        let conf = ctx.GetService<IOptions<NLoopOptions>>()
         match outResponse.Validate(uint256 preimageHash, req.Amount, conf.Value.MaxAcceptableSwapFee) with
         | Error e ->
           ctx.SetStatusCode StatusCodes.Status400BadRequest
@@ -80,6 +79,7 @@ module LoopHandlers =
   let handleGetInfo =
     fun (next: HttpFunc) (ctx: HttpContext) ->
       task {
+        printfn $"opts: {ctx.GetService<IOptions<NLoopOptions>>().Value.RPCHost}"
         let _logger = ctx.GetLogger("handleGetInfo")
         let response = {
           GetInfoResponse.Version = Constants.AssemblyVersion

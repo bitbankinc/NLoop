@@ -16,9 +16,8 @@ module GetInfo =
   let handle (host: IHost)  =
     task {
       let cli = host.Services.GetRequiredService<NLoopClient>()
-      let conf = host.Services.GetRequiredService<IConfiguration>()
-      let pr = host.Services.GetRequiredService<InvocationContext>().ParseResult
-      cli.Configure(conf, pr)
+      let opts = host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoop.Server.NLoopOptions>>()
+      cli.Configure(opts.Value)
       let! resp = cli.InfoAsync()
       printfn $"{resp.ToJson()}"
     }

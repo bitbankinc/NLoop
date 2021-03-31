@@ -25,7 +25,7 @@ module private DBKeys =
   [<Literal>]
   let HashToPreimage = "hp"
 
-type Repository(conf: IOptions<NLoopServerConfig>) =
+type Repository(conf: IOptions<NLoopOptions>) =
   let dbPath = conf.Value.DBPath
   let openEngine() = task {
     return! DBTrieEngine.OpenFromFolder(dbPath)

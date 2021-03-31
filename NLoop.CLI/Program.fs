@@ -19,18 +19,18 @@ open System.CommandLine.Hosting
 [<EntryPoint>]
 let main argv =
     let rc = NLoop.CLI.NLoopCLICommandLine.getRootCommand
-    rc.Handler <- CommandHandler.Create<IHost>((fun (host: IHost) ->
-      ())
-    )
     CommandLineBuilder(rc)
       .UseDefaults()
       .UseHost(fun (hostBuilder:IHostBuilder) ->
-          let ctx = hostBuilder.Properties.[typeof<InvocationContext>] :?> InvocationContext
           hostBuilder
             .ConfigureHostConfiguration(fun configBuilder ->
               Main.configureConfig configBuilder
             )
             .ConfigureServices(fun h ->
+              h.AddOptions<NLoopOptions>().Configure<IConfiguration>(fun opts config ->
+                config.Bind(opts)
+                ()).BindCommandLine()
+              |> ignore
               h.AddHttpClient<NLoopClient>() |> ignore
             )
             |> ignore

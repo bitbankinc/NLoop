@@ -20,6 +20,7 @@ module Constants =
   let DefaultNoHttps = false
   [<Literal>]
   let DefaultHttpsPort = 443
+
   [<Literal>]
   let DefaultHttpsHost = "localhost"
 

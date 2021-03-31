@@ -26,7 +26,7 @@
     <Compile Include="Constants.fs" />
     <Compile Include="Utils.fs" />
     <Compile Include="NBitcoinExtensions.fs" />
-    <Compile Include="NLoopServerConfig.fs" />
+    <Compile Include="NLoopOptions.fs" />
     <Compile Include="Models.fs" />
     <Compile Include="Swap\HTLC.fs" />
     <Compile Include="JsonConverters.fs" />

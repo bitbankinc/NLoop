@@ -3,6 +3,7 @@ namespace NLoop.CLI
 open System.CommandLine.Parsing
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
+open NLoop.Server
 open NLoopClient
 
 
@@ -10,8 +11,6 @@ open NLoopClient
 type Extensions() =
 
   [<Extension>]
-  static member Configure(this: NLoopClient, conf: IConfiguration, pr: ParseResult) =
-    let rpcHost = conf.GetValue("rpchost", pr.ValueForOption<string>("--rpchost"))
-    let rpcPort = conf.GetValue("rpcpost", pr.ValueForOption<int>("--rpcport"))
-    let protocol = if pr.ValueForOption<bool>("--nohttps") then "http" else "https"
-    this.BaseUrl <- $"{protocol}://{rpcHost}:{rpcPort}"
+  static member Configure(this: NLoopClient, opts: NLoopOptions) =
+    let protocol = if opts.NoHttps then "http" else "http"
+    this.BaseUrl <- $"{protocol}://{opts.RPCHost}:{opts.RPCPort}"
