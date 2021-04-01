@@ -9,6 +9,7 @@ open System.CommandLine.Hosting
 open System.CommandLine.Parsing
 open System.IO
 open System.Net
+open System.Security.Cryptography.X509Certificates
 open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
@@ -88,8 +89,7 @@ module App =
             .UseMiddleware<RequestResponseLoggingMiddleware>()
       | false ->
           app
-            .UseGiraffeErrorHandler(errorHandler)
-            .UseHttpsRedirection())
+            .UseGiraffeErrorHandler(errorHandler))
           .UseCors(configureCors)
           .UseAuthentication()
           .UseGiraffe(webApp)
@@ -169,12 +169,31 @@ module Main =
         fun webHostBuilder ->
           webHostBuilder
             .UseStartup<Startup>()
-            .UseKestrel(fun opts ->
-              let config = opts.ApplicationServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoopOptions>>().Value
-              for p in config.RPCAllowIP do
-                printfn $"{p}"
+            .UseUrls()
+            .UseKestrel(fun kestrelOpts ->
+              let opts = kestrelOpts.ApplicationServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoopOptions>>().Value
+              let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
 
-              ()
+              let ipAddresses = ResizeArray<_>()
+              match opts.RPCHost |> IPAddress.TryParse with
+              | true, ip ->
+                ipAddresses.Add(ip)
+              | false, _ when opts.RPCHost = Constants.DefaultRPCHost ->
+                ipAddresses.Add(IPAddress.IPv6Loopback)
+                ipAddresses.Add(IPAddress.Loopback)
+              | _ ->
+                ipAddresses.Add(IPAddress.IPv6Any)
+
+              if (opts.NoHttps) then
+                for ip in ipAddresses do
+                  logger.LogInformation($"Binding to http://{ip}")
+                  kestrelOpts.Listen(ip, port = opts.RPCPort, configure=fun (s: ListenOptions) -> s.UseConnectionLogging() |> ignore)
+              else
+                for ip in ipAddresses do
+                  logger.LogInformation($"Binding to https://{ip}")
+                  let cert = new X509Certificate2(opts.HttpsCert, opts.HttpsCertPass)
+                  kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
+                    s.UseConnectionLogging().UseHttps(cert) |> ignore))
               )
             .ConfigureLogging(configureLogging)
             |> ignore
@@ -183,8 +202,8 @@ module Main =
   /// Mostly the same with `UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
   /// We need this because we want to bind the CLI options into <see cref="NLoop.Server.NLoopOptions"/> with
-  /// `BindCommandLine`
-  let useWebHostMiddleWare = InvocationMiddleware(fun ctx next -> unitTask {
+  /// `BindCommandLine`, which requires `BindingContext` injected in a DI container.
+  let useWebHostMiddleware = InvocationMiddleware(fun ctx next -> unitTask {
     let hostBuilder = HostBuilder()
     hostBuilder.Properties.[typeof<InvocationContext>] <- ctx
 
@@ -204,7 +223,7 @@ module Main =
     use host = hostBuilder.Build();
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
     do! next.Invoke(ctx)
-    do! host.RunAsync(CancellationToken.None);
+    do! host.RunAsync();
   })
 
   [<EntryPoint>]
@@ -212,6 +231,6 @@ module Main =
     let rc = NLoopServerCommandLine.getRootCommand()
     CommandLineBuilder(rc)
       .UseDefaults()
-      .UseMiddleware(useWebHostMiddleWare)
+      .UseMiddleware(useWebHostMiddleware)
       .Build()
       .Invoke(args)

@@ -31,7 +31,7 @@ module Constants =
   [<Literal>]
   let DefaultRPCHost = "localhost"
   [<Literal>]
-  let DefaultRPCPort = "localhost"
+  let DefaultRPCPort = 5000
 
   let DefaultRPCAllowIp = [|"localhost"|]
 

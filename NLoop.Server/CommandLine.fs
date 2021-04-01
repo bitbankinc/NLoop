@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.CommandLine
 open System.IO
+open System.Net
 open System.Runtime.CompilerServices
 open System.CommandLine
 open System.CommandLine.Parsing
@@ -14,7 +15,8 @@ open NLoop.Server
 module NLoopServerCommandLine =
   module Validators =
     let getValidators =
-      seq []
+      seq [
+      ]
 
   let rpcOptions =
     seq [
@@ -34,6 +36,12 @@ module NLoopServerCommandLine =
         let o = Option<FileInfo>($"--{nameof(NLoopOptions.Instance.HttpsCert).ToLowerInvariant()}", "Path to the https certification file")
         o.Argument <-
           let a = Argument<FileInfo>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+        let o = Option<string>($"--{nameof(NLoopOptions.Instance.HttpsCertPass).ToLowerInvariant()}", "Password to encrypt https cert file.")
+        o.Argument <-
+          let a = Argument<string>()
           a.Arity <- ArgumentArity.ExactlyOne
           a
         o
