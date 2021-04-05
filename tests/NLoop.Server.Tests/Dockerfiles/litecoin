@@ -1,0 +1,38 @@
+FROM debian:stretch-slim as build
+
+RUN set -ex \
+	&& apt-get update \
+	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr gosu gpg wget \
+	&& rm -rf /var/lib/apt/lists/*
+
+ENV LITECOIN_VERSION 0.18.1
+ENV LITECOIN_FILE litecoin-0.18.1-x86_64-linux-gnu.tar.gz
+ENV LITECOIN_URL https://download.litecoin.org/litecoin-0.18.1/linux/
+ENV LITECOIN_SHA256 ca50936299e2c5a66b954c266dcaaeef9e91b2f5307069b9894048acf3eb5751
+
+ENV LITECOIN_ASC_URL https://download.litecoin.org/litecoin-0.18.1/linux/litecoin-0.18.1-x86_64-linux-gnu.tar.gz.asc
+ENV LITECOIN_PGP_KEY FE3348877809386C
+# 01EA5486DE18A882D4C2684590C8019E36C2E964
+
+# install litecoin binaries
+RUN set -ex \
+	&& cd /tmp \
+	&& wget -qO "$LITECOIN_FILE" "$LITECOIN_URL$LITECOIN_FILE" \
+	&& echo "$LITECOIN_SHA256 $LITECOIN_FILE" | sha256sum -c - \
+	&& gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys "$LITECOIN_PGP_KEY" \
+	&& wget -qO litecoin.asc "$LITECOIN_ASC_URL" \
+	# && sha256sum --ignore-missing --check litecoin.asc \
+	&& gpg --verify litecoin.asc "$LITECOIN_FILE" \
+	&& tar -xzvf "$LITECOIN_FILE" -C /usr/local --strip-components=1 --exclude=*-qt \
+	&& rm -rf /tmp/*
+
+# create data directory
+ENV LITECOIN_DATA /data
+RUN mkdir "$LITECOIN_DATA" \
+	&& ln -sfn "$LITECOIN_DATA" /home/litecoin/.litecoin \
+VOLUME /data
+
+EXPOSE 8332 8333 18332 18333 18443 18444
+
+COPY "./start-litecoind.sh" .
+RUN chmod +x start-litecoind.sh

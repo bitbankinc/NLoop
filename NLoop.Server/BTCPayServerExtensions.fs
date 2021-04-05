@@ -6,7 +6,7 @@ open BTCPayServer.Lightning
 open BTCPayServer.Lightning
 open DotNetLightning.Payment
 open DotNetLightning.Utils
-open NLoop.Infrastructure
+open NLoop.Server
 open ResultUtils
 
 /// Layer for interoperation of BTCPayServer.Lightning and Our libraries.

@@ -1,11 +1,11 @@
 namespace NLoop.Server.Services
 
+open System.CommandLine.Hosting
+open System.Threading.Channels
+open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
-
-open NLoop.Infrastructure
-open NLoop.Server
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
@@ -14,5 +14,12 @@ type NLoopExtensions() =
       let n = conf.GetChainName()
       let addr = conf.GetOrDefault("boltz-url", Constants.DefaultBoltzServer)
       let port = conf.GetOrDefault("boltz-port", Constants.DefaultBoltzPort)
-      let boltzClient = BoltzClient(addr, port, n)
-      this.AddSingleton(boltzClient)
+      this
+        .AddOptions<NLoopOptions>()
+        .Configure<IConfiguration>(fun opts config -> config.Bind(opts))
+        .BindCommandLine()
+        |> ignore
+      this
+        .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
+        .AddSingleton<RepositoryProvider>()
+        .AddSingleton(Channel.CreateBounded<SwapEvent>(500))

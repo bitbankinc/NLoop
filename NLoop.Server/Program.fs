@@ -1,29 +1,35 @@
 namespace NLoop.Server
 
-open System.CommandLine
-open System.CommandLine.Invocation
-open System.CommandLine.Parsing
 open System
+open System.CommandLine.Builder
+open System.CommandLine.Invocation
+open System.CommandLine.Hosting
+open System.CommandLine.Parsing
 open System.IO
+open System.Net
+open System.Security.Cryptography.X509Certificates
 open System.Text.Json
-open System.Text.Json.Serialization
-open FSharp.Control.Tasks.NonAffine
+open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.Server.Kestrel.Core
 open Microsoft.Extensions.Configuration
-open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Authentication.Certificate
 open Giraffe
 
-open NLoop.Infrastructure
-open NLoop.Infrastructure.DTOs
+open Microsoft.Extensions.Options
+open Microsoft.IO
+open NLoop.Server
+open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
 
+open Microsoft.Extensions.Hosting
+
+open FSharp.Control.Tasks.Affine
 
 module App =
   let noCookie =
@@ -39,12 +45,14 @@ module App =
       subRoutef "/v1/%s" (fun cryptoCode ->
         choose [
           POST >=>
-            route "/loop/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
-            route "/loop/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
+            route "/loop/out" >=> mustAuthenticate >=>
+              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut cryptoCode)
+            route "/loop/in" >=> mustAuthenticate >=>
+              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn cryptoCode)
       ])
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> json Constants.AssemblyVersion
+          route "/info" >=> handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
         ])
       setStatusCode 404 >=> text "Not Found"
@@ -62,42 +70,50 @@ module App =
   // Config and Main
   // ---------------------------------
 
-  let configureCors (builder : CorsPolicyBuilder) =
+  let configureCors (opts: NLoopOptions) (builder : CorsPolicyBuilder) =
       builder
-          .WithOrigins(
-              "http://localhost:5000",
-              "https://localhost:5001")
+          .WithOrigins(opts.RPCCors)
          .AllowAnyMethod()
          .AllowAnyHeader()
          |> ignore
 
   let configureApp (app : IApplicationBuilder) =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
+      let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
       (match env.IsDevelopment() with
       | true  ->
           app
             .UseDeveloperExceptionPage()
+            .UseMiddleware<RequestResponseLoggingMiddleware>()
       | false ->
           app
-            .UseGiraffeErrorHandler(errorHandler)
-            .UseHttpsRedirection())
-          .UseCors(configureCors)
+            .UseGiraffeErrorHandler(errorHandler))
+          .UseCors(configureCors opts)
           .UseAuthentication()
           .UseGiraffe(webApp)
 
-  let configureServices (conf: IConfiguration) (services : IServiceCollection) =
+  let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
       let n = conf.GetChainName()
+
+      // json settings
       let jsonOptions = JsonSerializerOptions()
-      jsonOptions.AddNLoopJsonConverters(n)
-      jsonOptions.Converters.Add(JsonFSharpConverter())
-      services.AddSingleton(jsonOptions) |> ignore
+      jsonOptions.AddNLoopJsonConverters()
+      services
+        .AddSingleton(jsonOptions)
+        .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
       services.AddNLoopServices(conf) |> ignore
+
+      if (env.IsDevelopment()) then
+        services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
+        services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
+      else
+        ()
 
       services.AddCors()    |> ignore
 
       services
-        .AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+        .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
         .AddCertificate(fun o -> o.AllowedCertificateTypes <- CertificateTypes.SelfSigned)
         .AddCertificateCache()
         .AddCookie(fun _o -> ())
@@ -106,43 +122,104 @@ module App =
       services.AddGiraffe() |> ignore
 
 
-type Startup(conf: IConfiguration) =
+type Startup(conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices conf services
+    App.configureServices conf env services
+
 
 module Main =
-  open App
 
   let configureLogging (builder : ILoggingBuilder) =
-      builder.AddConsole()
-             .AddDebug() |> ignore
+      builder
+        .AddConsole()
+        .AddDebug()
+#if DEBUG
+        .SetMinimumLevel(LogLevel.Debug)
+#else
+        .SetMinimumLevel(LogLevel.Information)
+#endif
+        |> ignore
 
-  let configureConfig args (builder: IConfigurationBuilder) =
+  let configureConfig (builder: IConfigurationBuilder) =
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
     Directory.CreateDirectory(Constants.HomeDirectoryPath) |> ignore
     let iniFile = Path.Join(Constants.HomeDirectoryPath, "nloop.conf")
     if (iniFile |> File.Exists) then
       builder.AddIniFile(iniFile) |> ignore
     builder.AddEnvironmentVariables(prefix="NLOOP_") |> ignore
-    builder.AddCommandLine(args=args) |> ignore
     ()
+
+  let configureHostBuilder (hostBuilder: IHostBuilder) =
+    hostBuilder.ConfigureAppConfiguration(configureConfig)
+      .ConfigureWebHostDefaults(
+        fun webHostBuilder ->
+          webHostBuilder
+            .UseStartup<Startup>()
+            .UseUrls()
+            .UseKestrel(fun kestrelOpts ->
+              let opts = kestrelOpts.ApplicationServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoopOptions>>().Value
+              let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
+
+              let ipAddresses = ResizeArray<_>()
+              match opts.RPCHost |> IPAddress.TryParse with
+              | true, ip ->
+                ipAddresses.Add(ip)
+              | false, _ when opts.RPCHost = Constants.DefaultRPCHost ->
+                ipAddresses.Add(IPAddress.IPv6Loopback)
+                ipAddresses.Add(IPAddress.Loopback)
+              | _ ->
+                ipAddresses.Add(IPAddress.IPv6Any)
+
+              if (opts.NoHttps) then
+                for ip in ipAddresses do
+                  logger.LogInformation($"Binding to http://{ip}")
+                  kestrelOpts.Listen(ip, port = opts.RPCPort, configure=fun (s: ListenOptions) -> s.UseConnectionLogging() |> ignore)
+              else
+                for ip in ipAddresses do
+                  logger.LogInformation($"Binding to https://{ip}")
+                  let cert = new X509Certificate2(opts.HttpsCert, opts.HttpsCertPass)
+                  kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
+                    s.UseConnectionLogging().UseHttps(cert) |> ignore))
+              )
+            .ConfigureLogging(configureLogging)
+            |> ignore
+      )
+
+  /// Mostly the same with `UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
+  /// thus it never finishes.
+  /// We need this because we want to bind the CLI options into <see cref="NLoop.Server.NLoopOptions"/> with
+  /// `BindCommandLine`, which requires `BindingContext` injected in a DI container.
+  let useWebHostMiddleware = InvocationMiddleware(fun ctx next -> unitTask {
+    let hostBuilder = HostBuilder()
+    hostBuilder.Properties.[typeof<InvocationContext>] <- ctx
+
+    hostBuilder.ConfigureServices(fun (services: IServiceCollection) ->
+      services
+        .AddSingleton(ctx)
+        .AddSingleton(ctx.BindingContext)
+        .AddSingleton(ctx.Console)
+        .AddTransient<_>(fun _ -> ctx.InvocationResult)
+        .AddTransient<_>(fun _ -> ctx.ParseResult)
+      |> ignore
+    )
+      .UseInvocationLifetime(ctx)
+      |> ignore
+    configureHostBuilder hostBuilder |> ignore
+
+    use host = hostBuilder.Build();
+    ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
+    do! next.Invoke(ctx)
+    do! host.RunAsync();
+  })
 
   [<EntryPoint>]
   let main args =
-      Host.CreateDefaultBuilder(args)
-          .ConfigureAppConfiguration(configureConfig args)
-          .ConfigureWebHostDefaults(
-              fun webHostBuilder ->
-                  webHostBuilder
-                      .UseStartup<Startup>()
-                      // .ConfigureKestrel(fun o ->
-                        //o.ConfigureHttpsDefaults(fun o -> o.ClientCertificateMode <- ClientCertificateMode.RequireCertificate)
-                      //)
-                      .ConfigureLogging(configureLogging)
-                      |> ignore)
-          .Build()
-          .Run()
-      0
+    let rc = NLoopServerCommandLine.getRootCommand()
+    CommandLineBuilder(rc)
+      .UseDefaults()
+      .UseMiddleware(useWebHostMiddleware)
+      .Build()
+      .Invoke(args)

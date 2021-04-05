@@ -2,30 +2,90 @@ namespace NLoop.Server
 
 open System
 open System.Collections.Generic
+open System.CommandLine
 open System.IO
+open System.Net
 open System.Runtime.CompilerServices
 open System.CommandLine
 open System.CommandLine.Parsing
 open Microsoft.Extensions.Configuration
 open NBitcoin
-open NLoop.Infrastructure
-
-module private CommandLineValidators =
-  let networkValidator = ValidateSymbol<_>(fun (r: CommandResult) ->
-    let hasNetwork = r.Children.Contains("network")
-    let hasMainnet = r.Children.Contains("mainnet")
-    let hasTestnet = r.Children.Contains("testnet")
-    let hasRegtest = r.Children.Contains("regtest")
-    let mutable count = 0
-    for flag in seq [hasNetwork; hasMainnet; hasTestnet; hasRegtest] do
-      if (flag) then
-        count <- count + 1
-    if (count > 1) then "You cannot specify more than one network" else
-    null
-    )
+open NLoop.Server
 
 module NLoopServerCommandLine =
-  let getOptions(): Option seq =
+  module Validators =
+    let getValidators =
+      seq [
+        let cryptoCodeValidator = ValidateSymbol(fun (r: CommandResult) ->
+          let onChainArgName = nameof(NLoopOptions.Instance.OnChainCrypto)
+          let onChain = r.GetArgumentValueOrDefault<SupportedCryptoCode[]>($"--{onChainArgName}")
+          let offChainArgName = nameof(NLoopOptions.Instance.OffChainCrypto)
+          let offChain = r.GetArgumentValueOrDefault<SupportedCryptoCode[]>($"--{offChainArgName}")
+          if (offChain |> Seq.exists(fun off -> onChain |> Seq.contains(off) |> not)) then
+            $"{offChainArgName} ({offChain}) should not contains entry which does not exist in {onChainArgName} ({onChain}) "
+          else
+            null
+        )
+        // TODO: validate
+        //cryptoCodeValidator
+        ()
+      ]
+
+  let rpcOptions =
+    seq [
+      let httpsOptions = seq [
+        let o = Option<bool>($"--{nameof(NLoopOptions.Instance.NoHttps).ToLowerInvariant()}", "Do not use https")
+        o.Argument <-
+          let a = Argument<bool>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o :> Option
+        let o = Option<int>($"--{nameof(NLoopOptions.Instance.HttpsPort).ToLowerInvariant()}", "Port for listening HTTPs request")
+        o.Argument <-
+          let a = Argument<int>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+        let o = Option<FileInfo>($"--{nameof(NLoopOptions.Instance.HttpsCert).ToLowerInvariant()}", "Path to the https certification file")
+        o.Argument <-
+          let a = Argument<FileInfo>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+        let o = Option<string>($"--{nameof(NLoopOptions.Instance.HttpsCertPass).ToLowerInvariant()}", "Password to encrypt https cert file.")
+        o.Argument <-
+          let a = Argument<string>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+      ]
+      yield! httpsOptions
+
+      let httpRpcOptions = seq [
+        let o = Option<FileInfo>($"--{nameof(NLoopOptions.Instance.RPCCookieFile).ToLowerInvariant()}", "RPC authentication method 1: The RPC Cookiefile")
+        o.Argument <-
+          let a = Argument<FileInfo>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o :> Option
+        let o = Option<string>($"--{nameof(NLoopOptions.Instance.RPCHost).ToLowerInvariant()}", "host which server listens for rpc call")
+        o.Argument <-
+          let a = Argument<string>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+        let o = Option<int>($"--{nameof(NLoopOptions.Instance.RPCPort).ToLowerInvariant()}", "port which server listens for rpc call")
+        o.Argument <-
+          let a = Argument<int>()
+          a.Arity <- ArgumentArity.ExactlyOne
+          a
+        o
+      ]
+      yield! httpRpcOptions
+
+      Option<bool>("--noauth", "Disable cookie authentication")
+    ]
+  let optionsForBothCliAndServer =
     seq [
       let networkNames = Network.GetNetworks() |> Seq.map(fun n -> n.Name) |> Array.ofSeq
       let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default: mainnet)")
@@ -33,47 +93,64 @@ module NLoopServerCommandLine =
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ExactlyOne
         a.FromAmong(networkNames)
-      o
-
-      Option<bool>([|"--mainnet"|], "Use mainnet")
-      Option<bool>([|"--testnet"|], "Use testnet")
-      Option<bool>([|"--regtest"|], "Use testnet")
-
-      let o = Option<DirectoryInfo>([|"--datadir"; "-d"|], "Directory to store data")
+      o :> Option
+      let o = Option<DirectoryInfo>([|$"--{nameof(NLoopOptions.Instance.DataDir).ToLowerInvariant()}"; "-d"|], "Directory to store data")
       o.Argument <-
         let a = Argument<DirectoryInfo>()
         a.Arity <- ArgumentArity.ExactlyOne
         a.SetDefaultValue(Constants.DefaultDataDirectoryPath)
         a
       o
-      Option<bool>("--nohttps", "Do not use https")
-      let o = Option<int>("--https.port", "Port for listening HTTPs request")
-      o.Argument <-
-        let a = Argument<int>()
-        a.Arity <- ArgumentArity.OneOrMore
-        a.SetDefaultValue(Constants.DefaultHttpsPort)
-        a
-      o
-      let o = Option<FileInfo>("--https.cert", "Path to the https certification file")
-      o.Argument <-
-        let a = Argument<FileInfo>()
-        a.Arity <- ArgumentArity.ExactlyOne
-        a.SetDefaultValue(Constants.DefaultHttpsCertFile)
-        a
-      o
 
-      let o = Option<FileInfo>("--rpc.cookiefile", "RPC authentication method 1: The RPC Cookiefile (default: using cookie auth from default network folder)")
-      o.Argument <-
-        let a = Argument<FileInfo>()
-        a.Arity <- ArgumentArity.ExactlyOne
-        a.SetDefaultValue(Constants.DefaultCookieFile)
-        a
-      o
-
-      Option<bool>("--noauth", "Disable cookie authentication")
-
+      yield! rpcOptions
     ]
 
+  let getOptions(): Option seq =
+    seq [
+      yield! optionsForBothCliAndServer
+      let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCCors).ToLowerInvariant()}",
+                               $"Access-Control-Allow-Origin for the rpc (default: %A{NLoopOptions.Instance.RPCCors})")
+      o.Argument <-
+        let a = Argument<string[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+
+      let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCAllowIP).ToLowerInvariant()}", "rpc allow ip")
+      o.Argument <-
+        let a = Argument<string[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+
+      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MaxAcceptableSwapFee).ToLowerInvariant()}")
+      o.Argument <-
+        let a = Argument<int64>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
+      o.Argument <-
+        let a = Argument<bool>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OnChainCrypto).ToLowerInvariant()}",
+                                            $"the cryptocode we want to support for on-chain swap (default: %A{NLoopOptions.Instance.OnChainCrypto})")
+      o.Argument <-
+        let a = Argument<SupportedCryptoCode[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+      let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OffChainCrypto).ToLowerInvariant()}",
+                                            $"the cryptocode we want to support for off-chain swap (default: %A{NLoopOptions.Instance.OffChainCrypto})")
+      o.Argument <-
+        let a = Argument<SupportedCryptoCode[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+    ]
 
   let getRootCommand() =
     let rc = RootCommand()
@@ -81,20 +158,7 @@ module NLoopServerCommandLine =
     rc.Description <- "Daemon to manage your LN node with submarine swaps"
     for o in getOptions() do
       rc.AddOption(o)
-    rc.AddValidator(CommandLineValidators.networkValidator)
+    for v in Validators.getValidators do
+      rc.AddValidator(v)
     rc
 
-[<AbstractClass;Sealed;Extension>]
-type CommandLineExtensions() =
-  [<Extension>]
-  static member AddCommandLineOptions(conf: IConfigurationBuilder, commandLine: ParseResult) =
-    if commandLine |> isNull then raise <| ArgumentNullException(nameof(commandLine)) else
-
-    let d = Dictionary<string, string>()
-    for op in NLoopServerCommandLine.getOptions() do
-      if (op.Name = "nloop" || op.Name = "help") then () else
-      let s = op.Name.Replace(".", ":").Replace("_", "")
-      let v = commandLine.CommandResult.GetArgumentValueOrDefault(op.Name)
-      if (v |> isNull |> not) then
-        d.Add(s, v.ToString())
-    conf.AddInMemoryCollection(d)

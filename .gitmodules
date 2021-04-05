@@ -1,0 +1,3 @@
+[submodule "tests/DockerComposeFixture"]
+	path = tests/DockerComposeFixture
+	url = https://github.com/joemphilips/DockerComposeFixture

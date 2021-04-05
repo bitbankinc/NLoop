@@ -5,24 +5,47 @@
     <AssemblyName>NLoop.Server.App</AssemblyName>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
   </PropertyGroup>
+    <ItemGroup>
+    </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.0.3" />
+    <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
+    <PackageReference Include="NBitcoin.Altcoins" Version="2.0.28" />
+    <PackageReference Include="DotNetLightning" Version="1.1.2-date20210306-1457-git-651b4c5" />
     <PackageReference Include="BTCPayServer.Lightning.All" Version="1.2.7" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
+    <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="2.0.0" />
     <PackageReference Include="Ply" Version="0.3.*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
     <PackageReference Include="DBTrie" Version="1.0.38" />
+    <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Include="Constants.fs" />
-    <Compile Include="ConfigExtensions.fs" />
+    <Compile Include="Utils.fs" />
+    <Compile Include="NBitcoinExtensions.fs" />
+    <Compile Include="ValueObjects.fs" />
+    <Compile Include="NLoopOptions.fs" />
+    <Compile Include="Swap\HTLC.fs" />
+    <Compile Include="Swap\Transactions.fs" />
+    <Compile Include="JsonConverters.fs" />
+    <Compile Include="RPCDTOs\Client.fs" />
+    <Compile Include="RPCDTOs\Common.fs" />
+    <Compile Include="RPCDTOs\LoopInOut.fs" />
     <Compile Include="BTCPayServerExtensions.fs" />
-    <Compile Include="Services\BoltzRequestResponse.fs" />
+    <Compile Include="ConfigExtensions.fs" />
+    <Compile Include="BoltzRequestResponse.fs" />
+    <Compile Include="DatabaseDTOs.fs" />
     <Compile Include="Services\BoltzClient.fs" />
-    <Compile Include="Services\NLoopService.fs" />
+    <Compile Include="Services\FeeEstimator.fs" />
     <Compile Include="Services\Repository.fs" />
+    <Compile Include="Services\SwapEventListener.fs" />
+    <Compile Include="Services\NLoopService.fs" />
+    <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
+    <Compile Include="GiraffeExtensions.fs" />
     <Compile Include="LoopHandlers.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="Program.fs" />
@@ -32,13 +55,4 @@
     <None Include="web.config" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\NLoop.Infrastructure\NLoop.Infrastructure.fsproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="FSharp.SystemTextJson, Version=0.16.0.0, Culture=neutral, PublicKeyToken=null">
-      <HintPath>..\..\..\..\..\.nuget\packages\fsharp.systemtextjson\0.16.6\lib\netstandard2.0\FSharp.SystemTextJson.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 </Project>

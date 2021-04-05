@@ -9,7 +9,9 @@
 
   <ItemGroup>
     <Compile Include="Helpers.fs" />
-    <Compile Include="Tests.fs" />
+    <Compile Include="Extensions.fs" />
+    <Compile Include="UnitTests.fs" />
+    <Compile Include="ServerIntegrationTests.fs" />
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="Program.fs" />
     <Content Include="README.md" />
@@ -33,11 +35,18 @@
   <ItemGroup>
     <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
+    <ProjectReference Include="..\DockerComposeFixture\DockerComposeFixture\DockerComposeFixture.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="appsettings.test.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="data/boltz/boltz.conf">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="data/boltz/bitcoind.cookie">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 

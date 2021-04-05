@@ -1,0 +1,328 @@
+{
+  "openapi": "3.0.2",
+  "info": {
+    "title": "NLoop Server OpenAPI definition",
+    "description": "Lightning Channel Manager. It will maintain the channel balance by performing submarine swap against Boltz server.\n",
+    "contact": {
+      "name": "Joe Miyamoto",
+      "url": "https://twitter.com/joemphilips",
+      "email": "joemphilips@gmail.com"
+    },
+    "version": "1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.server.test/v1"
+    }
+  ],
+  "paths": {
+    "/v1/version": {
+      "get": {
+        "tags": [
+          "general"
+        ],
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/info": {
+      "get": {
+        "tags": [
+          "general"
+        ],
+        "operationId": "info",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetInfoResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/{cryptoCode}/loop/out": {
+      "post": {
+        "tags": [
+          "swap"
+        ],
+        "operationId": "out",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/cryptoCode/schema"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoopOutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopOutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "Cookie": []
+          }
+        ]
+      }
+    },
+    "/v1/{cryptoCode}/loop/in": {
+      "post": {
+        "tags": [
+          "swap"
+        ],
+        "operationId": "in",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/cryptoCode/schema"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoopInRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopInResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PubKey": {
+        "type": "string",
+        "description": "Bitcoin public key in 33 bytes length",
+        "format": "binary",
+        "maxLength": 33,
+        "minLength": 33,
+        "example": "03afbba930dc74d6412b71c31f72bfb8d4615121174dd4290cbbf83960961ba9ab"
+      },
+      "P2PKH": {
+        "type": "string",
+        "pattern": "^[1][a-km-zA-HJ-NP-Z1-9]{25,34}$",
+        "example": "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2"
+      },
+      "BitcoinAddressNonMalleable": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/P2WSH"
+          },
+          {
+            "$ref": "#/components/schemas/P2WPKH"
+          }
+        ]
+      },
+      "P2SH": {
+        "type": "string",
+        "pattern": "^[3][a-km-zA-HJ-NP-Z1-9]{25,34}$",
+        "example": "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"
+      },
+      "P2WPKH": {
+        "type": "string",
+        "pattern": "^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25}$",
+        "example": "bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c"
+      },
+      "P2WSH": {
+        "type": "string",
+        "pattern": "^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$",
+        "example": "bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5"
+      },
+      "ShortChannelId": {
+        "type": "string",
+        "description": "See bolt 07",
+        "pattern": "(\\d{3})x(\\d{3})x(\\d{2})",
+        "example": "140x10x1"
+      },
+      "LoopOutRequest": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "channel_id": {
+            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "nullable": true,
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "counter_party_pair": {
+            "description": "< counterparty's cryptoCode to swap against.",
+            "default": "The same cryptocurrency with the one you pay.",
+            "nullable": true
+          },
+          "address": {
+            "nullable": true,
+            "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
+          },
+          "amount": {
+            "type": "integer",
+            "description": "< amount in satoshi.",
+            "format": "int64"
+          },
+          "conf_target": {
+            "type": "integer",
+            "description": "< The number of confirmation before we make an off-chain offer.",
+            "default": "0",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "description": "< Additional label for this request.",
+            "nullable": true
+          }
+        }
+      },
+      "LoopInRequest": {
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "description": "< amount in satoshi.",
+            "format": "int64"
+          },
+          "channel_id": {
+            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "nullable": true,
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "label": {
+            "type": "string",
+            "description": "< Additional label for this request.",
+            "nullable": true
+          }
+        }
+      },
+      "GetInfoResponse": {
+        "type": "object",
+        "required": [
+          "version",
+          "supported_coins"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "supported_coins": {
+            "type": "object",
+            "properties": {
+              "on_chain": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "LTC",
+                    "BTC"
+                  ]
+                }
+              },
+              "off_chain": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "LTC",
+                    "BTC"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "LoopOutResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Swap identifier to track status.\n"
+          },
+          "address": {
+            "description": "< An address to which counterparty has paid. Must be the same with the one in the request unless null.",
+            "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
+          },
+          "claim_tx_id": {
+            "description": "< An txid by which they have paid to us. It is populated only when its 0-conf.",
+            "nullable": true
+          }
+        }
+      },
+      "LoopInResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Swap identifier to track status.\n"
+          },
+          "address": {
+            "description": "The address of the on-chain HTLC\n",
+            "$ref": "#/components/schemas/P2WSH"
+          }
+        }
+      }
+    },
+    "parameters": {
+      "cryptoCode": {
+        "name": "cryptoCode",
+        "in": "path",
+        "required": true,
+        "description": "Symbol name for the currency.",
+        "schema": {
+          "enum": [
+            "BTC",
+            "LTC"
+          ]
+        }
+      }
+    },
+    "securitySchemes": {
+      "Cookie": {
+        "type": "apiKey",
+        "name": "Cookie",
+        "in": "cookie"
+      }
+    }
+  }
+}

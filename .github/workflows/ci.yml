@@ -1,0 +1,58 @@
+name: build and test
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
+  DOCKER_BUILDKIT: 1
+jobs:
+  build:
+    name: "Build and Test on os: ${{ matrix.os }}. dotnet SDK version: ${{ matrix.dotnet }}"
+    timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+        dotnet: ['5.0.x']
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Setup ${{ matrix.dotnet }} .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: ${{ matrix.dotnet }}
+
+      - name: dotnet restore 
+        run: dotnet restore
+
+      - name: dotnet tool restore
+        run: dotnet tool restore
+
+      - name: Build with dotnet
+        run: |
+          dotnet build --configuration Debug NLoop.Server
+
+      - name: Run property test in ${{ matrix.os }}
+        run: dotnet run --project tests/NLoop.Server.PropertyTests
+
+      - name: Log in to docker hub (For docker image caching)
+        run: echo ${{ secrets.REGISTRY_PASS }} | docker login -u ${{ secrets.REGISTRY_USER }} --password-stdin
+
+      - name: Prepare docker images for integration tests.
+        run: cd tests/NLoop.Server.Tests && source env.sh && docker-compose build --build-arg BUILDKIT_INLINE_CACHE=1
+
+      - name: Push docker images.
+        run: |
+          docker push nloop/bitcoind:latest
+          docker push nloop/litecoind:latest
+          docker push nloop/lnd:latest
+          docker push nloop/boltz:latest
+
+      - name: Run integration tests in ${{ matrix.os }}
+        run: sudo dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
+        # We need sudo since lnd creates admin.macaroon with permission `-rw-------` and the owner will be root
+        # in case of docker in CI.

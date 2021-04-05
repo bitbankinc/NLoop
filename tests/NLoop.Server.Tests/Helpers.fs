@@ -1,6 +1,8 @@
 module Helpers
 
 open System
+open System.Net
+open System.Net.Sockets
 open System.Text
 open NBitcoin.DataEncoders
 open System.IO
@@ -10,9 +12,10 @@ open BTCPayServer.Lightning
 open NBitcoin
 open NBitcoin.RPC
 open NLoop.Server.Services
+open Org.BouncyCastle.Utilities.Net
 
 let getLocalBoltzClient() =
-  let b = BoltzClient("http://localhost", 9001, Network.RegTest.ChainName)
+  let b = BoltzClient("http://localhost", 9001, Network.RegTest)
   b
 
 let private GetCertFingerPrint(filePath: string) =
@@ -21,15 +24,30 @@ let private GetCertFingerPrint(filePath: string) =
   hashAlg.ComputeHash(cert.RawData)
 
 let hex = HexEncoder()
-let private getCertFingerPrintHex (filePath: string) =
+let getCertFingerPrintHex (filePath: string) =
   GetCertFingerPrint filePath |> hex.EncodeData
-let factory = LightningClientFactory(Network.RegTest)
+let private checkConnection(port) =
+  let l = TcpListener(IPAddress.Loopback, port)
+  try
+    l.Start()
+    l.Stop()
+    Ok()
+  with
+  | :? SocketException -> Error("")
 
-let getUserLndClient() =
-  let dataPath = Path.GetFullPath(Path.Join(Directory.GetCurrentDirectory(), "..", "..", "..", "data"))
-  let lndMacaroonPath = Path.Join(dataPath, ".lnd_user", "chain", "bitcoin", "regtest", "admin.macaroon")
-  let lndTlsCertThumbPrint = getCertFingerPrintHex(Path.Join(dataPath, ".lnd_user", "tls.cert"))
-  factory.Create($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndTlsCertThumbPrint};server=https://localhost:32736")
+let findEmptyPortUInt(ports: uint []) =
+  let mutable i = 0
+  while i < ports.Length do
+    let mutable port = RandomUtils.GetUInt32() % 4000u
+    port <- port + 10000u
+    if (ports |> Seq.exists((=)port)) then () else
+    match checkConnection((int)port) with
+    | Ok _ ->
+      ports.[i] <- port
+      i <- i + 1
+    | _ -> ()
+  ports
 
-let getBTCClient() =
-  RPCClient("johndoe:unsafepassword", Uri($"http://localhost:43782"), Network.RegTest)
+let findEmptyPort(ports: int[]) =
+  findEmptyPortUInt(ports |> Array.map(uint))
+

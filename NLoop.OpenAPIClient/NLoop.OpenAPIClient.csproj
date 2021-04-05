@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <DebugType>embedded</DebugType>
+    <EmbedAllSources>true</EmbedAllSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <PackageReference Include="NSwag.MSBuild" Version="13.7.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.ComponentModel.Annotations" Version="5.0.0" />
+  </ItemGroup>
+  
+  <Target Name="GenerateNSwagClient">
+    <PropertyGroup>
+      <InputOpenApi>openapi.json</InputOpenApi>
+      <ClientName>NLoopOpenApiClient</ClientName>
+      <GeneratedSwaggerClientFile Condition="'$(GeneratedSwaggerClientFile)' ==''">$(IntermediateOutputPath)$(MSBuildProjectName).$(ClientName)Client.cs</GeneratedSwaggerClientFile>
+    </PropertyGroup>
+    <Exec Command="dotnet nswag run nswag.json /variables:InputOpenApi=$(InputOpenApi),ClientName=$(ClientName),ClientNamespace=$(RootNamespace),GeneratedSwaggerClientFile=$(GeneratedSwaggerClientFile)" />
+  </Target>
+
+  <Target Name="IncludeNSwagClient" BeforeTargets="CoreCompile" DependsOnTargets="GenerateNSwagClient">
+    <ItemGroup Condition="Exists('$(GeneratedSwaggerClientFile)')">
+      <Compile Include="$(GeneratedSwaggerClientFile)" />
+      <FileWrites Include="$(GeneratedSwaggerClientFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

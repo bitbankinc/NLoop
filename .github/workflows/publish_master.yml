@@ -1,0 +1,60 @@
+name: publish(master)
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+on:
+  push:
+    branches:
+      - master
+      - 'nightly*' # to workaround regular publishing process
+
+jobs:
+  pack_and_push:
+    name: "publish "
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, windows-latest, macos-latest]
+        dotnet: ['3.1.200']
+        include:
+          - os: ubuntu-18.04
+            RID: linux
+          - os: windows-latest
+            RID: win
+          - os: macos-latest
+            RID: osx
+      fail-fast: true
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Setup 3.1.200 .NET Core
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: 3.1.200
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('rust-lightning/Cargo.lock') }}
+      - name: Cache cargo index
+        uses: actions/cache@v1
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('rust-lightning/Cargo.lock') }}
+      - name: Cache cargo build
+        uses: actions/cache@v1
+        with:
+          path: rust-lightning/target
+          key: ${{ matrix.os }}-cargo-build-target-${{ hashFiles('rust-lightning/Cargo.lock') }}-${{ hashFiles('rust-lightning/**/src/**') }}
+
+
+      - name: pack and push to nuget
+        run: |
+          bash -c "dotnet pack -p:Configuration=Release src/NRustLightning --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}"
+          bash -c "dotnet nuget push ./src/NRustLightning/bin/Release/NRustLightning.*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json"

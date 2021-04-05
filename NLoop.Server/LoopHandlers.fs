@@ -1,15 +1,16 @@
 namespace NLoop.Server
 
 open System
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.Altcoins
 open NBitcoin.Crypto
-open NLoop.Infrastructure
-open NLoop.Infrastructure.DTOs
+open NLoop.Server
+open NLoop.Server.DTOs
 open NLoop.Server.Services
 module private HandlerHelpers =
   open Giraffe
-  open FSharp.Control.Tasks
   open System.Threading.Tasks
   let earlyReturn : HttpFunc = Some >> Task.FromResult
 
@@ -27,12 +28,14 @@ module LoopHandlers =
           ctx.SetStatusCode 400
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok ourNetwork ->
-
-        let repo = ctx.GetService<Repository>()
-        let claimKey = new Key()
-        do! repo.SetPrivateKey(claimKey)
-        let preimage = RandomUtils.GetBytes(32)
-        do! repo.SetPreimage(preimage)
+        let repo = SupportedCryptoCode.TryParse cryptoCode |> Option.map(ctx.GetService<RepositoryProvider>().GetRepository)
+        match repo with
+        | None ->
+          ctx.SetStatusCode(StatusCodes.Status400BadRequest)
+          return! ctx.WriteJsonAsync({|error = $"cryptocode {cryptoCode} not supported" |})
+        | Some repo ->
+        use! claimKey = repo.NewPrivateKey()
+        let! preimage = repo.NewPreimage()
         let preimageHash = preimage |> Hashes.SHA256
 
         let! outResponse =
@@ -46,16 +49,23 @@ module LoopHandlers =
               PreimageHash = preimageHash |> uint256 }
           boltzCli.CreateReverseSwapAsync(req)
 
-        let conf = ctx.GetService<IOptions<NLoopServerConfig>>()
+        let conf = ctx.GetService<IOptions<NLoopOptions>>()
         match outResponse.Validate(uint256 preimageHash, req.Amount, conf.Value.MaxAcceptableSwapFee) with
         | Error e ->
           ctx.SetStatusCode StatusCodes.Status400BadRequest
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-          let response = {
-            LoopOutResponse.Id = outResponse.Id
-          }
-          return! json response next ctx
+          match req.ConfTarget with
+          | None
+          | Some(0) ->
+            let response = {
+              LoopOutResponse.Id = outResponse.Id
+              Address = outResponse.LockupAddress
+              ClaimTxId = None
+            }
+            return! json response next ctx
+          | Some x ->
+            return failwith "TODO"
       }
 
   let handleLoopIn (cryptoCode: string) (loopIn: LoopInRequest) =
@@ -63,6 +73,21 @@ module LoopHandlers =
       task {
         let response = {
           LoopInResponse.Id = (ShortGuid.fromGuid(Guid()))
+          Address = BitcoinAddress.Create("bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c", Network.RegTest)
         }
         return! json response next ctx
+      }
+
+  let handleGetInfo =
+    fun (next: HttpFunc) (ctx: HttpContext) ->
+      task {
+        printfn $"opts: {ctx.GetService<IOptions<NLoopOptions>>().Value.RPCHost}"
+        let _logger = ctx.GetLogger("handleGetInfo")
+        let response = {
+          GetInfoResponse.Version = Constants.AssemblyVersion
+          SupportedCoins = { OnChain = [Bitcoin.Instance; Litecoin.Instance]
+                             OffChain = [Bitcoin.Instance] }
+        }
+        let! r = json response next ctx
+        return r
       }

@@ -1,14 +1,11 @@
 namespace NLoop.Server
 
+open System.Runtime.CompilerServices
 open System
-open System.Collections.Generic
-open System.CommandLine.Parsing
 open System.Globalization
 open System.Linq
-open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open NBitcoin
-
 
 [<AbstractClass;Sealed;Extension>]
 type ConfigExtensions() =
@@ -46,4 +43,5 @@ type ConfigExtensions() =
       if conf.GetOrDefault("regtest", false) then ChainName.Regtest else
       if conf.GetOrDefault("testnet", false) then ChainName.Testnet else
       ChainName.Mainnet
+
 
