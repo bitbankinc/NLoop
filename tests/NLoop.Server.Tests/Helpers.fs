@@ -15,7 +15,7 @@ open NLoop.Server.Services
 open Org.BouncyCastle.Utilities.Net
 
 let getLocalBoltzClient() =
-  let b = BoltzClient("http://localhost", 9001, Network.RegTest.ChainName)
+  let b = BoltzClient("http://localhost", 9001, Network.RegTest)
   b
 
 let private GetCertFingerPrint(filePath: string) =

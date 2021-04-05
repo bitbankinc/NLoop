@@ -2,6 +2,9 @@ module ServerAPITest
 
 open System
 open System.Collections.Concurrent
+open System.CommandLine.Binding
+open System.CommandLine.Builder
+open System.CommandLine.Parsing
 open System.IO
 open System.Net.Http
 
@@ -18,6 +21,7 @@ open FSharp.Control.Tasks
 open NLoop.CLI
 open NLoop.Server
 
+(*
 let getTestRepository() =
   let keyDict = ConcurrentDictionary<_,_>()
   let preimageDict = ConcurrentDictionary<_,_>()
@@ -39,8 +43,15 @@ let getTestRepository() =
         | false, _ -> Error("key not found")
         |> Task.FromResult
   }
+*)
 
 let getTestHost() =
+  let rc = NLoopServerCommandLine.getRootCommand()
+  let p =
+    CommandLineBuilder(rc)
+      .UseMiddleware(Main.useWebHostMiddleware)
+      .Build()
+  let parseResult = p.Parse("") // dummy to inject BindingContext so that NLoop can run `BindCommandLine` without throwing an exception
   WebHostBuilder()
     .UseContentRoot(Directory.GetCurrentDirectory())
     .ConfigureAppConfiguration(fun configBuilder ->
@@ -49,8 +60,9 @@ let getTestHost() =
     .UseStartup<Startup>()
     .ConfigureLogging(Main.configureLogging)
     .ConfigureTestServices(fun (services: IServiceCollection) ->
-      services.AddSingleton<IRepository>(getTestRepository()) |> ignore
-      ()
+      services
+        .AddSingleton<BindingContext>(BindingContext(parseResult))
+        |> ignore
     )
     .UseTestServer()
 

@@ -72,7 +72,7 @@ module DockerFixtureExtensions =
         let lndMacaroonPath = Path.Join(dataPath, "lnd_server", "chain", "bitcoin", "regtest", "admin.macaroon")
         let lndCertThumbprint = getCertFingerPrintHex(Path.Join(dataPath, "lnd_server", "tls.cert"))
         LightningClientFactory.CreateClient($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{ports.[3]}", Network.RegTest) :?> LndClient
-      let serverBoltz = BoltzClient(Uri($"http://localhost:{ports.[4]}"), Network.RegTest.ChainName)
+      let serverBoltz = BoltzClient(Uri($"http://localhost:{ports.[4]}"), Network.RegTest)
       { Clients.Bitcoin = bitcoinClient
         Litecoin = litecoinClient
         User = {| Lnd = userLnd |}

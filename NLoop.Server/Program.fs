@@ -103,11 +103,6 @@ module App =
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
       services.AddNLoopServices(conf) |> ignore
-      services
-        .AddOptions<NLoopOptions>()
-        .Configure<IConfiguration>(fun opts config -> config.Bind(opts))
-        .BindCommandLine()
-        |> ignore
 
       if (env.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
