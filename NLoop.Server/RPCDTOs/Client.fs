@@ -6,8 +6,8 @@ open System.Text.Json.Serialization
 
 [<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type SwapType =
-  | Submarine = 0
-  | ReverseSubmarine = 1
+  | Submarine = 0uy
+  | ReverseSubmarine = 1uy
 
 [<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type OrderType =

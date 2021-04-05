@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="Generators.fs" />
     <Compile Include="OpenApiCompatibilityTests.fs" />
+    <Compile Include="SerializeRoundtrip.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
 

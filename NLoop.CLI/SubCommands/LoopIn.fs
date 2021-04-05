@@ -19,7 +19,7 @@ module LoopIn =
       let conf = host.Services.GetRequiredService<IConfiguration>()
       let cryptoCode = conf.GetValue<CryptoCode>("cryptocode")
       let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
-      let opts = host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoop.Server.NLoopOptions>>()
+      let opts = host.Services.GetRequiredService<IOptions<NLoop.Server.NLoopOptions>>()
       cli.Configure(opts.Value)
       return! cli.InAsync(cryptoCode, req)
     }

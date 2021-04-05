@@ -1,4 +1,4 @@
-namespace NLoop.Server.Services
+namespace NLoop.Server
 
 open System
 open System.Text.Json.Serialization
@@ -66,14 +66,14 @@ type GetSwapTxResponse = {
 
 
 type SwapStatusType =
-  | Created
-  | InvoiceSet
-  | TxMempool
-  | TxConfirmed
-  | InvoicePayed
-  | InvoiceFailedToPay
-  | TxClaimed
-  | Unknown of string
+  | Created = 0uy
+  | InvoiceSet = 1uy
+  | TxMempool = 2uy
+  | TxConfirmed = 3uy
+  | InvoicePayed = 4uy
+  | InvoiceFailedToPay = 5uy
+  | TxClaimed = 6uy
+  | Unknown = 7uy
 
 type TxInfo = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
@@ -92,14 +92,14 @@ type SwapStatusResponse = {
   with
   member this.SwapStatus =
     match this._Status with
-    | "swap.created" -> Created
-    | "invoice.set" -> InvoiceSet
-    | "transaction.mempool" -> TxMempool
-    | "transaction.confirmed" -> TxConfirmed
-    | "invoice.payed" -> InvoicePayed
-    | "invoice.failedToPay" -> InvoiceFailedToPay
-    | "transaction.claimed" -> TxClaimed
-    | x -> Unknown x
+    | "swap.created" -> SwapStatusType.Created
+    | "invoice.set" -> SwapStatusType.InvoiceSet
+    | "transaction.mempool" -> SwapStatusType.TxMempool
+    | "transaction.confirmed" -> SwapStatusType.TxConfirmed
+    | "invoice.payed" -> SwapStatusType.InvoicePayed
+    | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
+    | "transaction.claimed" -> SwapStatusType.TxClaimed
+    | x -> SwapStatusType.Unknown
 
 type CreateSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]

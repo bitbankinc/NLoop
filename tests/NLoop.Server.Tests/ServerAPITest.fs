@@ -1,18 +1,44 @@
 module ServerAPITest
 
 open System
+open System.Collections.Concurrent
 open System.IO
 open System.Net.Http
 
+open System.Threading.Tasks
 open Microsoft.AspNetCore.TestHost
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.DependencyInjection
+open NBitcoin.Crypto
 open NLoopClient
 open Xunit
 open FSharp.Control.Tasks
 
 open NLoop.CLI
 open NLoop.Server
+
+let getTestRepository() =
+  let keyDict = ConcurrentDictionary<_,_>()
+  let preimageDict = ConcurrentDictionary<_,_>()
+  { new IRepository with
+      member this.SetPrivateKey(k) =
+        keyDict.TryAdd(k.PubKey.Hash, k) |> ignore
+        Task.FromResult() :> Task
+      member this.GetPrivateKey(keyId) =
+        match keyDict.TryGetValue(keyId) with
+        | true, key -> Ok(key)
+        | false, _ -> Error("key not found")
+        |> Task.FromResult
+      member this.SetPreimage(p) =
+        preimageDict.TryAdd(p |> Hashes.Hash160, p) |> ignore
+        Task.FromResult() :> Task
+      member this.GetPreimage(hash) =
+        match preimageDict.TryGetValue(hash) with
+        | true, key -> Ok(key)
+        | false, _ -> Error("key not found")
+        |> Task.FromResult
+  }
 
 let getTestHost() =
   WebHostBuilder()
@@ -22,8 +48,8 @@ let getTestHost() =
       )
     .UseStartup<Startup>()
     .ConfigureLogging(Main.configureLogging)
-    .ConfigureTestServices(fun services ->
-      // services.AddSingleton()
+    .ConfigureTestServices(fun (services: IServiceCollection) ->
+      services.AddSingleton<IRepository>(getTestRepository()) |> ignore
       ()
     )
     .UseTestServer()

@@ -8,7 +8,7 @@ open NLoop.Server.DTOs
 
 
 [<AutoOpen>]
-module private Helpers =
+module Helpers =
   let byteGen = byte <!> Gen.choose(0, 127)
   let bytesGen = Gen.listOf(byteGen) |> Gen.map(List.toArray)
   let bytesOfNGen(n) = Gen.listOfLength n byteGen |> Gen.map(List.toArray)
@@ -66,7 +66,7 @@ module private Helpers =
           Gen.constant Litecoin.Instance |> Gen.map(unbox)
         ]
 
-type PrimitiveGenerator =
+type PrimitiveGenerator() =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
     bitcoinWitScriptAddressGen |> Arb.fromGen
 
@@ -95,6 +95,11 @@ type PrimitiveGenerator =
 
   static member UInt256Gen() : Arbitrary<uint256> =
     uint256Gen |> Arb.fromGen
+
+  static member KeyGen() : Arbitrary<Key> =
+    bytesOfNGen(32) |> Gen.map Key |> Arb.fromGen
+  static member ScriptGen(): Arbitrary<Script> =
+    pushScriptGen |> Arb.fromGen
 
 type ResponseGenerator =
   static member LoopOut() :Arbitrary<LoopOutResponse> =

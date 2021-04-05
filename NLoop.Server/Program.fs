@@ -1,8 +1,6 @@
 namespace NLoop.Server
 
 open System
-open System.Linq
-open System.CommandLine
 open System.CommandLine.Builder
 open System.CommandLine.Invocation
 open System.CommandLine.Hosting
@@ -11,8 +9,6 @@ open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
-open System.Threading
-open System.Threading.Tasks
 open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
@@ -24,6 +20,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Authentication.Certificate
 open Giraffe
 
+open Microsoft.Extensions.Options
 open Microsoft.IO
 open NLoop.Server
 open NLoop.Server.DTOs
@@ -48,8 +45,10 @@ module App =
       subRoutef "/v1/%s" (fun cryptoCode ->
         choose [
           POST >=>
-            route "/loop/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> (handleLoopOut cryptoCode)
-            route "/loop/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> (handleLoopIn cryptoCode)
+            route "/loop/out" >=> mustAuthenticate >=>
+              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut cryptoCode)
+            route "/loop/in" >=> mustAuthenticate >=>
+              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn cryptoCode)
       ])
       subRoute "/v1" (choose [
         GET >=>
@@ -71,17 +70,16 @@ module App =
   // Config and Main
   // ---------------------------------
 
-  let configureCors (builder : CorsPolicyBuilder) =
+  let configureCors (opts: NLoopOptions) (builder : CorsPolicyBuilder) =
       builder
-          .WithOrigins(
-              "http://localhost:5000",
-              "https://localhost:5001")
+          .WithOrigins(opts.RPCCors)
          .AllowAnyMethod()
          .AllowAnyHeader()
          |> ignore
 
   let configureApp (app : IApplicationBuilder) =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
+      let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
       (match env.IsDevelopment() with
       | true  ->
           app
@@ -90,7 +88,7 @@ module App =
       | false ->
           app
             .UseGiraffeErrorHandler(errorHandler))
-          .UseCors(configureCors)
+          .UseCors(configureCors opts)
           .UseAuthentication()
           .UseGiraffe(webApp)
 
@@ -99,7 +97,7 @@ module App =
 
       // json settings
       let jsonOptions = JsonSerializerOptions()
-      jsonOptions.AddNLoopJsonConverters(n)
+      jsonOptions.AddNLoopJsonConverters()
       services
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
@@ -138,10 +136,6 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
 
 
 module Main =
-  type KestrelServerOptions with
-    member this.ConfigureEndpoint(conf: IConfiguration, subsectionKey: string, defaultPort: int, defaultBind: string) =
-      let subSection = conf.GetSection(subsectionKey)
-      failwith ""
 
   let configureLogging (builder : ILoggingBuilder) =
       builder

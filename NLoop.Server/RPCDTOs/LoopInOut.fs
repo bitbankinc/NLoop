@@ -3,6 +3,9 @@ namespace NLoop.Server.DTOs
 open System.Text.Json.Serialization
 open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
+open Giraffe
+open Giraffe.HttpStatusCodeHandlers
+open Giraffe.ModelValidation
 open NBitcoin
 
 type LoopInRequest = {

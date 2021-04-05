@@ -1,7 +1,10 @@
 namespace NLoop.Server.Services
 
 open System
+open System.Collections.Concurrent
 open System.IO
+open System.Threading.Channels
+open FSharp.Control
 open System.Net.Http
 open System.Net.Http.Json
 open System.Runtime.InteropServices
@@ -22,7 +25,12 @@ open NLoop.Server.DTOs
 
 type D = DefaultParameterValueAttribute
 
-type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certificate2,
+type SwapStatusUpdate = {
+  NewStatus: SwapStatusResponse
+  Id: string
+}
+
+type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
                  [<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
@@ -37,7 +45,10 @@ type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certif
     BoltzClient(Uri($"%s{host}:%i{port}"), network, cert, httpClient)
   new (host: string, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
     BoltzClient(host, 443, network, cert,  httpClient)
+  member val SwapStatusChannel: Channel<_> = Channel.CreateBounded<_>(10) with get
+  member val ListenTasks = ConcurrentDictionary<string, Task>() with get, set
   with
+
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
                                                parameters: obj, ct: CancellationToken) = task {
     use httpReq =
@@ -100,3 +111,22 @@ type BoltzClient(address: Uri, network: ChainName, [<O;D(null)>]cert: X509Certif
 
   member this.SetInvoiceAsync(swapId: string, invoice: PaymentRequest, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<SetInvoiceResponse option>("setinvoice", HttpMethod.Post, {| Id = swapId; Invoice = invoice.ToString() |}, ct)
+
+  member this.StartListenToSwapStatusChange(id, [<O;D(null)>] ct: CancellationToken) =
+    let t = (unitTask {
+      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}")
+      use streamReader = new StreamReader(x)
+      while not <| streamReader.EndOfStream && not <| ct.IsCancellationRequested do
+        let! msg = streamReader.ReadLineAsync()
+        let j = JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
+        let mutable notComplete = true
+        while (notComplete && not <| ct.IsCancellationRequested) do
+          let! shouldContinue = this.SwapStatusChannel.Writer.WaitToWriteAsync(ct)
+          notComplete <- shouldContinue
+          do! this.SwapStatusChannel.Writer.WriteAsync({ NewStatus = j; Id = id }, ct)
+    })
+    this.ListenTasks.AddOrReplace(id, t)
+    ()
+
+
+type BoltzClientProvider = delegate of Network -> BoltzClient

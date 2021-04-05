@@ -10,6 +10,7 @@ open BTCPayServer.Lightning
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
+open NBitcoin.Altcoins
 
 
 type PeerConnectionStringJsonConverter() =
@@ -131,15 +132,19 @@ type NetworkSetJsonConverter() =
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
-  static member AddNLoopJsonConverters(this: JsonSerializerOptions, chainName: ChainName) =
+  static member AddNLoopJsonConverters(this: JsonSerializerOptions, ?n: Network) =
     this.Converters.Add(HexPubKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
     this.Converters.Add(PaymentRequestJsonConverter())
     this.Converters.Add(PairIdJsonConverter())
-    this.Converters.Add(BitcoinAddressJsonConverter(Bitcoin.Instance.GetNetwork chainName))
-    this.Converters.Add(HexTxConverter(Bitcoin.Instance.GetNetwork chainName))
+
+    n |> Option.iter(fun n ->
+      this.Converters.Add(BitcoinAddressJsonConverter(n))
+      this.Converters.Add(HexTxConverter(n))
+    )
+
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
     this.Converters.Add(NetworkSetJsonConverter())

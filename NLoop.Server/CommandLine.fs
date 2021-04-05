@@ -16,6 +16,19 @@ module NLoopServerCommandLine =
   module Validators =
     let getValidators =
       seq [
+        let cryptoCodeValidator = ValidateSymbol(fun (r: CommandResult) ->
+          let onChainArgName = nameof(NLoopOptions.Instance.OnChainCrypto)
+          let onChain = r.GetArgumentValueOrDefault<SupportedCryptoCode[]>($"--{onChainArgName}")
+          let offChainArgName = nameof(NLoopOptions.Instance.OffChainCrypto)
+          let offChain = r.GetArgumentValueOrDefault<SupportedCryptoCode[]>($"--{offChainArgName}")
+          if (offChain |> Seq.exists(fun off -> onChain |> Seq.contains(off) |> not)) then
+            $"{offChainArgName} ({offChain}) should not contains entry which does not exist in {onChainArgName} ({onChain}) "
+          else
+            null
+        )
+        // TODO: validate
+        //cryptoCodeValidator
+        ()
       ]
 
   let rpcOptions =
@@ -91,9 +104,18 @@ module NLoopServerCommandLine =
 
       yield! rpcOptions
     ]
+
   let getOptions(): Option seq =
     seq [
       yield! optionsForBothCliAndServer
+      let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCCors).ToLowerInvariant()}",
+                               $"Access-Control-Allow-Origin for the rpc (default: %A{NLoopOptions.Instance.RPCCors})")
+      o.Argument <-
+        let a = Argument<string[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+
       let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCAllowIP).ToLowerInvariant()}", "rpc allow ip")
       o.Argument <-
         let a = Argument<string[]>()
@@ -105,6 +127,27 @@ module NLoopServerCommandLine =
       o.Argument <-
         let a = Argument<int64>()
         a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
+      o.Argument <-
+        let a = Argument<bool>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OnChainCrypto).ToLowerInvariant()}",
+                                            $"the cryptocode we want to support for on-chain swap (default: %A{NLoopOptions.Instance.OnChainCrypto})")
+      o.Argument <-
+        let a = Argument<SupportedCryptoCode[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
+      let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OffChainCrypto).ToLowerInvariant()}",
+                                            $"the cryptocode we want to support for off-chain swap (default: %A{NLoopOptions.Instance.OffChainCrypto})")
+      o.Argument <-
+        let a = Argument<SupportedCryptoCode[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
         a
       o
     ]

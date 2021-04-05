@@ -28,12 +28,14 @@ module LoopHandlers =
           ctx.SetStatusCode 400
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok ourNetwork ->
-
-        let repo = ctx.GetService<Repository>()
-        let claimKey = new Key()
-        do! repo.SetPrivateKey(claimKey)
-        let preimage = RandomUtils.GetBytes(32)
-        do! repo.SetPreimage(preimage)
+        let repo = SupportedCryptoCode.TryParse cryptoCode |> Option.map(ctx.GetService<RepositoryProvider>().GetRepository)
+        match repo with
+        | None ->
+          ctx.SetStatusCode(StatusCodes.Status400BadRequest)
+          return! ctx.WriteJsonAsync({|error = $"cryptocode {cryptoCode} not supported" |})
+        | Some repo ->
+        use! claimKey = repo.NewPrivateKey()
+        let! preimage = repo.NewPreimage()
         let preimageHash = preimage |> Hashes.SHA256
 
         let! outResponse =
