@@ -21,7 +21,7 @@ let propConfig = {
 let checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
   let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
   let json =
-    opts.AddNLoopJsonConverters(Network.RegTest.ChainName, [Bitcoin.Instance])
+    opts.AddNLoopJsonConverters(Network.RegTest)
     JsonSerializer.Serialize<'TIn>(input, opts)
   let deserializeSettings = JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
   JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
