@@ -21,5 +21,5 @@ type NLoopExtensions() =
         |> ignore
       this
         .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
-        .AddSingleton<RepositoryProvider>()
+        .AddSingleton<IRepositoryProvider, RepositoryProvider>()
         .AddSingleton(Channel.CreateBounded<SwapEvent>(500))

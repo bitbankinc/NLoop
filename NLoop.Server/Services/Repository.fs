@@ -31,6 +31,34 @@ module private DBKeys =
   [<Literal>]
   let idToLoopInSwap = "ii"
 
+type IRepository =
+  abstract member SetPrivateKey: key: Key -> Task
+  abstract member GetPrivateKey: keyId: KeyId -> Task<Key option>
+  abstract member SetPreimage: preimage: byte[] -> Task
+  abstract member GetPreimage: preimageHashHash: uint160 -> Task<byte[] option>
+  abstract member SetLoopOut: loopOut: LoopOut -> Task
+  abstract member GetLoopOut: id: string -> Task<LoopOut option>
+  abstract member SetLoopIn: loopIn: LoopIn -> Task
+  abstract member GetLoopIn: id: string -> Task<LoopIn option>
+  abstract member JsonOpts: JsonSerializerOptions
+
+[<Sealed;AbstractClass;Extension>]
+type IRepositoryExtensions() =
+  [<Extension>]
+  static member NewPrivateKey(this: IRepository) = task {
+    use k = new Key()
+    do! this.SetPrivateKey(k)
+    return k
+  }
+
+  [<Extension>]
+  static member NewPreimage(this: IRepository) = task {
+    let preimage = RandomUtils.GetBytes(32)
+    do! this.SetPreimage(preimage)
+    return preimage
+  }
+
+
 type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
   let dbPath = conf.Value.DBPath
   let openEngine() = task {
@@ -47,8 +75,6 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
       Directory.CreateDirectory(dbPath) |> ignore
       ()
     engine.ConfigurePagePool(PagePool(pageSize, 50 * 1000 * 1000 / pageSize))
-
-  member val JsonOpts = jsonOpts with get
 
   member this.SetPrivateKey(key: Key, [<O;DefaultParameterValue(null)>]ct: CancellationToken) =
     if (key |> box |> isNull) then raise <| ArgumentNullException(nameof key) else
@@ -67,9 +93,9 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
         let k = pubKeyHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
         let! b = row.ReadValue()
-        return new Key(b.ToArray()) |> Ok
+        return new Key(b.ToArray()) |> Some
       with
-      | e -> return Error (e.Message)
+      | e -> return None
     }
   member this.SetPreimage(preimage: byte[], [<O;DefaultParameterValue(null)>]ct: CancellationToken) =
     if (preimage |> box |> isNull) then raise <| ArgumentNullException(nameof preimage) else
@@ -90,12 +116,12 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
         let k = preimageHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
         let! x = row.ReadValue()
-        return x.ToArray() |> Ok
+        return x.ToArray() |> Some
       with
-      | e -> return Error (e.Message)
+      | _ -> return None
     }
 
-    member this.SetLoopOut(loopOut) =
+    member this.SetLoopOut(loopOut: LoopOut) =
       if (loopOut |> box |> isNull) then raise <| ArgumentNullException(nameof loopOut) else
       unitTask {
         use! tx = engine.OpenTransaction()
@@ -110,9 +136,9 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
           use! tx = engine.OpenTransaction()
           let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
           let! x = row.ReadValue()
-          return x.ToArray() |> LoopOut.FromBytes |> Ok
+          return x.ToArray() |> LoopOut.FromBytes |> Some
         with
-        | e -> return Error (e.Message)
+        | e -> return None
       }
     member this.SetLoopIn(loopIn: LoopIn) =
       if (loopIn |> box |> isNull) then raise <| ArgumentNullException(nameof loopIn) else
@@ -129,31 +155,42 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
           use! tx = engine.OpenTransaction()
           let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
           let! x = row.ReadValue()
-          return x.ToArray() |> LoopIn.FromBytes |> Ok
+          return x.ToArray() |> LoopIn.FromBytes |> Some
         with
-        | e -> return Error (e.Message)
+        | e -> return None
       }
 
-[<Sealed;AbstractClass;Extension>]
-type IRepositoryExtensions() =
+    interface IRepository with
+      member this.GetLoopIn(id) = this.GetLoopIn(id)
+      member this.GetLoopOut(id) = this.GetLoopOut(id)
+      member this.GetPreimage(preimageHashHash) = this.GetPreimage(preimageHashHash)
+      member this.GetPrivateKey(keyId) = this.GetPrivateKey(keyId)
+      member this.SetLoopIn(loopIn) = this.SetLoopIn(loopIn)
+      member this.SetLoopOut(loopOut) = this.SetLoopOut(loopOut)
+      member this.SetPreimage(preimage) = this.SetPreimage(preimage)
+      member this.SetPrivateKey(key) = this.SetPrivateKey(key)
+      member val JsonOpts = jsonOpts with get
+
+
+type IRepositoryProvider =
+  abstract member TryGetRepository: crypto: SupportedCryptoCode -> IRepository option
+
+[<Extension;AbstractClass;Sealed>]
+type IRepositoryProviderExtensions()=
   [<Extension>]
-  static member NewPrivateKey(this: Repository) = task {
-    use k = new Key()
-    do! this.SetPrivateKey(k)
-    return k
-  }
+  static member GetRepository(this: IRepositoryProvider, crypto: SupportedCryptoCode): IRepository =
+    match this.TryGetRepository crypto with
+    | Some x -> x
+    | None ->
+      raise <| InvalidDataException($"cryptocode {crypto} not supported")
 
   [<Extension>]
-  static member NewPreimage(this: Repository) = task {
-    let preimage = RandomUtils.GetBytes(32)
-    do! this.SetPreimage(preimage)
-    return preimage
-  }
-
+  static member GetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository =
+    this.GetRepository(SupportedCryptoCode.Parse(cryptoCode))
 
 type RepositoryProvider(opts: IOptions<NLoopOptions>) =
   inherit BackgroundService()
-  let repositories = Dictionary<SupportedCryptoCode, Repository>()
+  let repositories = Dictionary<SupportedCryptoCode, IRepository>()
   let startCompletion = TaskCompletionSource<bool>()
   do
     for on in opts.Value.OnChainCrypto do
@@ -168,19 +205,12 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
 
   member this.StartCompletion = startCompletion.Task
 
-  member this.TryGetRepository(crypto: SupportedCryptoCode): Repository option =
-    match repositories.TryGetValue(crypto) with
-    | true, v -> Some v
-    | false, _ -> None
+  interface IRepositoryProvider with
+    member this.TryGetRepository(crypto: SupportedCryptoCode): IRepository option =
+      match repositories.TryGetValue(crypto) with
+      | true, v -> Some v
+      | false, _ -> None
 
-  member this.GetRepository(crypto: SupportedCryptoCode): Repository =
-    match this.TryGetRepository crypto with
-    | Some x -> x
-    | None ->
-      raise <| InvalidDataException($"cryptocode {crypto} not supported")
-
-  member this.GetRepository(cryptoCode: string): Repository =
-    this.GetRepository(SupportedCryptoCode.Parse(cryptoCode))
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
       try
@@ -190,7 +220,6 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
         let! e = openEngine(dir)
         engine <- e
         engine.ConfigurePagePool(PagePool(pageSize, 50 * 1000 * 1000 / pageSize))
-
         return failwith "todo"
       with
       | x ->

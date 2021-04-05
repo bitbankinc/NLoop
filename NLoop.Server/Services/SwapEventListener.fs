@@ -16,7 +16,7 @@ type SwapEvent =
 
 type SwapEventListener(boltzClient: BoltzClient,
                        logger: ILogger<SwapEventListener>,
-                       repositoryProvider: RepositoryProvider,
+                       repositoryProvider: IRepositoryProvider,
                        opts: IOptions<NLoopOptions>) =
   inherit BackgroundService()
 
@@ -35,9 +35,9 @@ type SwapEventListener(boltzClient: BoltzClient,
     let! ourReverseSwap = repository.GetLoopOut(swapStatus.Id)
     let! ourSwap = repository.GetLoopIn(swapStatus.Id)
     match ourSwap, ourReverseSwap with
-    | Ok s, Error _ ->
+    | Some s, None ->
       return failwith "TODO: non-reverse swap"
-    | Error _, Ok s ->
+    | None , Some s ->
       if (swapStatus.NewStatus.SwapStatus = s.State) then
         logger.LogDebug($"Swap Status update is not new for us.")
         return ()
@@ -55,7 +55,7 @@ type SwapEventListener(boltzClient: BoltzClient,
         ()
       | _ -> ()
       return failwith ""
-    | Error _, Error s ->
+    | None, None ->
       return failwith "todo"
   }
 

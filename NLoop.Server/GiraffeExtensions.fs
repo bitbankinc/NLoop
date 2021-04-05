@@ -13,7 +13,7 @@ open FSharp.Control.Tasks.Affine
 type GiraffeExtensions() =
   [<Extension>]
   static member BindJsonWithCryptoCodeAsync(this: HttpContext, cryptoCode: string) = task {
-    let repo = this.GetService<RepositoryProvider>().GetRepository(cryptoCode)
+    let repo = this.GetService<IRepositoryProvider>().GetRepository(cryptoCode)
     return! JsonSerializer.DeserializeAsync(this.Request.Body, repo.JsonOpts)
   }
 
