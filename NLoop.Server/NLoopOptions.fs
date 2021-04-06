@@ -16,8 +16,8 @@ type ChainOptions() =
 
   member val CryptoCode = SupportedCryptoCode.BTC with get, set
 
-  member this.GetNetwork(cryptoCode: string) =
-    this.CryptoCode.ToNetworkSet().GetNetwork(ChainName cryptoCode)
+  member this.GetNetwork(chainName: string) =
+    this.CryptoCode.ToNetworkSet().GetNetwork(ChainName chainName)
 
 type NLoopOptions() =
   // -- general --
@@ -25,6 +25,8 @@ type NLoopOptions() =
   member val ChainOptions = Dictionary<SupportedCryptoCode, ChainOptions>() with get
   member val Network = Network.Main.ChainName.ToString() with get, set
 
+  member this.GetNetwork(cryptoCode: SupportedCryptoCode) =
+    this.ChainOptions.[cryptoCode].GetNetwork(this.Network)
 
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --

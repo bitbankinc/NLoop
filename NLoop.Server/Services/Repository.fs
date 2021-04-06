@@ -116,7 +116,9 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
       if (loopOut |> box |> isNull) then raise <| ArgumentNullException(nameof loopOut) else
       unitTask {
         use! tx = engine.OpenTransaction()
-        let v = JsonSerializer.Serialize(loopOut, jsonOpts)
+        let v =
+          let j = JsonSerializer.SerializeToUtf8Bytes(loopOut, jsonOpts)
+          ReadOnlyMemory(j)
         let! _ = tx.GetTable(DBKeys.idToLoopOutSwap).Insert(loopOut.Id, v)
         do! tx.Commit()
       }
@@ -127,7 +129,8 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
           use! tx = engine.OpenTransaction()
           let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
           let! x = row.ReadValue()
-          return x.ToArray() |> LoopOut.FromBytes |> Some
+          let! x = row.ReadValueString()
+          return JsonSerializer.Deserialize<LoopOut>(x, jsonOpts) |> Some
         with
         | e -> return None
       }

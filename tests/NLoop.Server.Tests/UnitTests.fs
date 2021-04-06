@@ -26,4 +26,7 @@ let ``BoltzClient tests (GetNodes)`` () = task {
     Assert.NotEmpty(p.Nodes)
   }
 
-
+[<Fact>]
+let ``Repository`` () = task {
+  ()
+}

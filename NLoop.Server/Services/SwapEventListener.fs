@@ -1,6 +1,7 @@
 namespace NLoop.Server.Services
 
 
+open System
 open FSharp.Control
 open System.Threading.Channels
 open FSharp.Control.Tasks.Affine
@@ -20,8 +21,12 @@ type SwapEventListener(boltzClient: BoltzClient,
                        opts: IOptions<NLoopOptions>) =
   inherit BackgroundService()
 
-  let repository: Repository = failwith "" // repositoryProvider.GetRepository()
-  override this.ExecuteAsync(stoppingToken) =
+  override this.ExecuteAsync(stoppingToken) = unitTask {
+    for c in Enum.GetValues<SupportedCryptoCode>() do
+      do! this.ExecuteAsync(c, stoppingToken)
+    }
+
+  member this.ExecuteAsync(cryptoCode, stoppingToken) =
     unitTask {
         let mutable notComplete = true
         while notComplete do
@@ -29,9 +34,10 @@ type SwapEventListener(boltzClient: BoltzClient,
           notComplete <- shouldContinue
           let! swapStatus = boltzClient.SwapStatusChannel.Reader.ReadAsync(stoppingToken)
           logger.LogInformation($"Swap {swapStatus.Id} status update: {swapStatus.NewStatus.SwapStatus}")
-          do! this.HandleSwapUpdate(swapStatus)
+          do! this.HandleSwapUpdate(swapStatus, cryptoCode)
     }
-  member private this.HandleSwapUpdate(swapStatus) = unitTask {
+  member private this.HandleSwapUpdate(swapStatus, cryptoCode) = unitTask {
+    let repository = repositoryProvider.GetRepository(cryptoCode)
     let! ourReverseSwap = repository.GetLoopOut(swapStatus.Id)
     let! ourSwap = repository.GetLoopIn(swapStatus.Id)
     match ourSwap, ourReverseSwap with
@@ -46,7 +52,7 @@ type SwapEventListener(boltzClient: BoltzClient,
       | SwapStatusType.TxConfirmed ->
         let _ = swapStatus.NewStatus.Transaction
         let! feeMap = boltzClient.GetFeeEstimation()
-        let n = opts.Value.ChainOptions
+        let n = opts.Value.GetNetwork(cryptoCode)
         let fee = failwith "todo" // FeeRate(feeMap.TryGetValue(s))
         let lockupTx = swapStatus.NewStatus.Transaction.Value.Tx // TODO: stop using Value
         let claimTx =
