@@ -1,12 +1,24 @@
 namespace NLoop.Server
 
 open System
+open System.Collections.Generic
 open System.IO
 open NBitcoin
+
+type ChainOptions() =
+  static member val Instance = ChainOptions() with get
+  member val RPCHost = "localhost" with get, set
+  member val RPCPort = 18332 with get, set
+  member val RPCUser = String.Empty with get, set
+  member val RPCPassword = String.Empty with get, set
+  member val RPCCookieFile = String.Empty with get, set
+
+type ChainOptionsProvider = delegate of Network -> ChainOptions
 
 type NLoopOptions() =
   // -- general --
   static member val Instance = NLoopOptions() with get
+  member val ChainOptions = Dictionary<SupportedCryptoCode, ChainOptions>() with get
   member val Network = Network.Main with get, set
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --

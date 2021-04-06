@@ -80,6 +80,10 @@ module App =
   let configureApp (app : IApplicationBuilder) =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
       let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
+      printfn "KV of chainoptions"
+      for c in opts.ChainOptions do
+        printfn $"{c.Key}:{c.Value.RPCHost}"
+
       (match env.IsDevelopment() with
       | true  ->
           app

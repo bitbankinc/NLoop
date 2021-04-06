@@ -211,7 +211,6 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
       | true, v -> Some v
       | false, _ -> None
 
-
   override this.ExecuteAsync(stoppingToken) = unitTask {
       try
         let dir = Path.Combine(opts.Value.DataDir, "db")

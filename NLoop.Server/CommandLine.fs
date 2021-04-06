@@ -105,6 +105,47 @@ module NLoopServerCommandLine =
       yield! rpcOptions
     ]
 
+  let getChainOptions(c) =
+     let b = $"--{c.ToString().ToLowerInvariant()}."
+     seq [
+       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCHost).ToLowerInvariant()}",
+                              "RPC host name of the blockchain client")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o :> Option
+       let o = Option<int>(b + $"{nameof(ChainOptions.Instance.RPCPort).ToLowerInvariant()}",
+                              "RPC port number of the blockchain client")
+       o.Argument <-
+         let a = Argument<int>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCUser).ToLowerInvariant()}",
+                              "RPC username of the blockchain client")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+
+       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCPassword).ToLowerInvariant()}",
+                              "RPC password of the blockchain client")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+
+       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCCookieFile).ToLowerInvariant()}",
+                              "RPC cookie file path of the blockchain client")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+     ]
   let getOptions(): Option seq =
     seq [
       yield! optionsForBothCliAndServer
@@ -150,7 +191,11 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ZeroOrMore
         a
       o
+
+      for c in Enum.GetValues<SupportedCryptoCode>() do
+        yield! getChainOptions c
     ]
+
 
   let getRootCommand() =
     let rc = RootCommand()
