@@ -12,9 +12,9 @@ type GetInfoResponse = {
 }
 and SupportedCoins = {
   [<JsonPropertyName "on_chain">]
-  OnChain: INetworkSet seq
+  OnChain: SupportedCryptoCode seq
   [<JsonPropertyName "off_chain">]
-  OffChain: INetworkSet seq
+  OffChain: SupportedCryptoCode seq
 }
 
 

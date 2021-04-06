@@ -4,6 +4,7 @@ open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
+open NLoop.Server
 open NLoop.Server.DTOs
 
 
@@ -127,8 +128,8 @@ type ResponseGenerator =
   static member GetInfo(): Arbitrary<GetInfoResponse> =
     gen {
       let! v = Arb.generate<NonNull<string>>
-      let! onChain = networkSetGen |> Gen.arrayOf
-      let! offChain = networkSetGen |> Gen.arrayOf
+      let! onChain = Arb.generate<SupportedCryptoCode> |> Gen.arrayOf
+      let! offChain = Arb.generate<SupportedCryptoCode> |> Gen.arrayOf
       return {
         GetInfoResponse.Version = v.Get
         SupportedCoins = { SupportedCoins.OffChain = offChain; OnChain = onChain } }

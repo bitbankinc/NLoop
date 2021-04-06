@@ -22,13 +22,15 @@ module LoopHandlers =
   let handleLoopOut (cryptoCode: string) (req: LoopOutRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
-        let boltzCli = ctx.GetService<BoltzClient>()
-        match cryptoCode.GetNetworkFromCryptoCode() with
+        match SupportedCryptoCode.Parse cryptoCode with
         | Error e ->
           ctx.SetStatusCode 400
           return! ctx.WriteJsonAsync({| error = e |})
-        | Ok ourNetwork ->
+        | Ok ourCryptoCode ->
         let repo = SupportedCryptoCode.TryParse cryptoCode |> Option.map(ctx.GetService<RepositoryProvider>().GetRepository)
+        let opts = ctx.GetService<IOptions<NLoopOptions>>()
+        let n = opts.Value.GetNetwork(ourCryptoCode)
+        let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
         match repo with
         | None ->
           ctx.SetStatusCode(StatusCodes.Status400BadRequest)
@@ -41,9 +43,10 @@ module LoopHandlers =
         let! outResponse =
           let req =
             let counterPartyPair =
-              req.CounterPartyPair |> Option.defaultValue (ourNetwork)
+              req.CounterPartyPair
+              |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
             { CreateReverseSwapRequest.InvoiceAmount = req.Amount
-              PairId = (ourNetwork, counterPartyPair)
+              PairId = (ourCryptoCode, counterPartyPair)
               OrderSide = OrderType.buy
               ClaimPublicKey = claimKey.PubKey
               PreimageHash = preimageHash |> uint256 }
@@ -85,8 +88,8 @@ module LoopHandlers =
         let _logger = ctx.GetLogger("handleGetInfo")
         let response = {
           GetInfoResponse.Version = Constants.AssemblyVersion
-          SupportedCoins = { OnChain = [Bitcoin.Instance; Litecoin.Instance]
-                             OffChain = [Bitcoin.Instance] }
+          SupportedCoins = { OnChain = [SupportedCryptoCode.BTC; SupportedCryptoCode.LTC]
+                             OffChain = [SupportedCryptoCode.BTC] }
         }
         let! r = json response next ctx
         return r

@@ -120,3 +120,8 @@ let ``ServerTest(getversion)`` () = task {
   Assert.NotEmpty(v)
   Assert.Equal(v.Split(".").Length, 4)
 }
+
+[<Fact>]
+let ``ServerTest(LoopOut)`` () = task {
+  return ()
+}

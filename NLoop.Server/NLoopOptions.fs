@@ -53,7 +53,7 @@ type NLoopOptions() =
   member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 
-  member this.OnChainNetworks = this.OnChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkFromCryptoCodeUnsafe())
-  member this.OffChainNetworks = this.OffChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkFromCryptoCodeUnsafe())
+  member this.OnChainNetworks = this.OnChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
+  member this.OffChainNetworks = this.OffChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
 
   member this.DBPath = Path.Join(this.DataDir, "nloop.db")

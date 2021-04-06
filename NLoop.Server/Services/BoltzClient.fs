@@ -88,8 +88,8 @@ type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
   member this.GetFeeEstimation([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<Map<string, int64>>("getfeeestimation", HttpMethod.Get, null, ct)
 
-  member this.GetTransactionAsync(currency: INetworkSet, txId: uint256, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<GetTxResponse>("gettransaction", HttpMethod.Post, {| transactionId = txId; Currency = currency.CryptoCode.ToUpperInvariant() |}, ct)
+  member this.GetTransactionAsync(currency: SupportedCryptoCode, txId: uint256, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetTxResponse>("gettransaction", HttpMethod.Post, {| transactionId = txId; Currency = currency.ToString() |}, ct)
 
   member this.GetSwapTransactionAsync(id: string, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, {| Id = id |}, ct)

@@ -65,4 +65,4 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (INetworkSet * INetworkSet)
+type PairId = (SupportedCryptoCode * SupportedCryptoCode)

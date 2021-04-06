@@ -93,19 +93,14 @@ type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
   override this.Write(writer, value, _options) =
     let bid, ask = value
-    $"{bid.CryptoCode.ToUpperInvariant()}/{ask.CryptoCode.ToUpperInvariant()}"
+    $"{bid.ToString()}/{ask.ToString()}"
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
 
     let v = reader.GetString()
     let s = v.Split("/")
     if (s.Length <> 2) then raise <| JsonException() else
-    let fromString s =
-      match s with
-      | "BTC" -> Bitcoin.Instance :> INetworkSet
-      | s -> raise <| JsonException($"Unknown network {s}")
-
-    (fromString s.[0], fromString s.[1])
+    (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
 
 type ScriptJsonConverter() =
   inherit JsonConverter<Script>()
@@ -120,14 +115,6 @@ type ShortChannelIdJsonConverter() =
     value.AsString |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> ShortChannelId.ParseUnsafe
-
-type NetworkSetJsonConverter() =
-  inherit JsonConverter<INetworkSet>()
-  override this.Write(writer, value, _options) =
-    value.CryptoCode.ToUpperInvariant() |> writer.WriteStringValue
-  override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString().GetNetworkFromCryptoCode()
-    |> function Ok r -> r | Error e -> raise <| JsonException(e)
 
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
@@ -147,5 +134,4 @@ type Extensions() =
 
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
-    this.Converters.Add(NetworkSetJsonConverter())
     this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))
