@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FsCheck.XUnit" Version="2.15.1" />
     <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
     <PackageReference Include="Microsoft.AspnetCore.TestHost" Version="5.0.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.7.1" />
@@ -36,6 +37,7 @@
     <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
     <ProjectReference Include="..\DockerComposeFixture\DockerComposeFixture\DockerComposeFixture.csproj" />
+    <ProjectReference Include="..\NLoop.Server.PropertyTests\NLoop.Server.PropertyTests.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

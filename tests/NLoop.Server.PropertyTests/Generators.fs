@@ -1,5 +1,6 @@
 module Generators
 
+open System
 open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
@@ -102,6 +103,13 @@ type PrimitiveGenerator() =
   static member ScriptGen(): Arbitrary<Script> =
     pushScriptGen |> Arb.fromGen
 
+  static member String() =
+    Arb.generate<char>
+    |> Gen.arrayOf
+    |> Gen.filter(Seq.exists(Char.IsControl) >> not)
+    |> Gen.map(String)
+    |> Arb.fromGen
+
 type ResponseGenerator =
   static member LoopOut() :Arbitrary<LoopOutResponse> =
     gen {
@@ -135,3 +143,4 @@ type ResponseGenerator =
         SupportedCoins = { SupportedCoins.OffChain = offChain; OnChain = onChain } }
     }
     |> Arb.fromGen
+

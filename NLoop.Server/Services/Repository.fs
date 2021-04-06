@@ -127,7 +127,7 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
       task {
         try
           use! tx = engine.OpenTransaction()
-          let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
+          let! row = tx.GetTable(DBKeys.idToLoopOutSwap).Get(id)
           let! x = row.ReadValue()
           let! x = row.ReadValueString()
           return JsonSerializer.Deserialize<LoopOut>(x, jsonOpts) |> Some
@@ -141,7 +141,7 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
         let v =
           let j = JsonSerializer.SerializeToUtf8Bytes(loopIn, jsonOpts)
           ReadOnlyMemory(j)
-        let! _ = tx.GetTable(DBKeys.idToLoopOutSwap).Insert(loopIn.Id, v)
+        let! _ = tx.GetTable(DBKeys.idToLoopInSwap).Insert(loopIn.Id, v)
         do! tx.Commit()
       }
     member this.GetLoopIn(id: string) =
@@ -149,11 +149,16 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
       task {
         try
           use! tx = engine.OpenTransaction()
-          let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
-          let! x = row.ReadValueString()
-          return JsonSerializer.Deserialize<LoopIn>(x, jsonOpts) |> Some
+          let! row = tx.GetTable(DBKeys.idToLoopInSwap).Get(id)
+          match row with
+          | null ->
+            return None
+          | r ->
+            let! x = r.ReadValueString()
+            return JsonSerializer.Deserialize<LoopIn>(x, jsonOpts) |> Some
         with
-        | e -> return None
+        | e ->
+          return None
       }
 
     interface IRepository with
