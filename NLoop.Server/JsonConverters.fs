@@ -11,6 +11,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Altcoins
+open NBitcoin.DataEncoders
 
 
 type PeerConnectionStringJsonConverter() =
@@ -32,6 +33,16 @@ type HexPubKeyJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> PubKey
 
+type PrivKeyJsonConverter() =
+  inherit JsonConverter<Key>()
+  let hex = HexEncoder()
+
+  override this.Write(writer, value, _options) =
+    value.ToBytes()
+    |> hex.EncodeData
+    |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> hex.DecodeData |> Key
 type BlockHeightJsonConverter() =
   inherit JsonConverter<BlockHeight>()
   override this.Write(writer, value, _options) =
@@ -121,6 +132,7 @@ type Extensions() =
   [<Extension>]
   static member AddNLoopJsonConverters(this: JsonSerializerOptions, ?n: Network) =
     this.Converters.Add(HexPubKeyJsonConverter())
+    this.Converters.Add(PrivKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
@@ -132,6 +144,7 @@ type Extensions() =
       this.Converters.Add(HexTxConverter(n))
     )
 
+    this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
     this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))

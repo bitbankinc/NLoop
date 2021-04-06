@@ -3,6 +3,7 @@ module BoltzTests
 open System.IO
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
+open System.Text.Json
 open System.Threading
 open Xunit
 open FsCheck
@@ -84,7 +85,9 @@ type RepositoryTests() =
 
   [<Property(MaxTest = 10)>]
   member this.``Repository(LoopOut)`` (loopOut: LoopOut) =
-    let testRepo v (repo: IRepository) = unitTask {
+    let testRepo (v: LoopOut) (repo: IRepository) = unitTask {
+      let! shouldBeNone = repo.GetLoopOut(v.Id)
+      Assert.Equal(shouldBeNone, None)
       do! repo.SetLoopOut(v)
       let! actual = repo.GetLoopOut(v.Id)
       Assert.NotEqual(actual, None)
@@ -102,7 +105,9 @@ type RepositoryTests() =
 
   [<Property(MaxTest = 10)>]
   member this.``Repository(LoopIn)`` (loopIn: LoopIn) =
-    let testRepo v (repo: IRepository) = unitTask {
+    let testRepo (v: LoopIn) (repo: IRepository) = unitTask {
+      let! shouldBeNone = repo.GetLoopIn(v.Id)
+      Assert.Equal(shouldBeNone, None)
       do! repo.SetLoopIn(v)
       let! actual = repo.GetLoopIn(v.Id)
       Assert.NotEqual(actual, None)
