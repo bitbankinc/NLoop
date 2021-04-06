@@ -24,6 +24,7 @@ type NLoopExtensions() =
           config.Bind(opts)
           for c in Enum.GetValues<SupportedCryptoCode>() do
             let cOpts = ChainOptions()
+            cOpts.CryptoCode <- c
             for p in typeof<ChainOptions>.GetProperties() do
               let op = bindingContext.ParseResult.ValueForOption($"--{c.ToString().ToLowerInvariant()}.{p.Name.ToLowerInvariant()}")
               let tyDefault = if p.PropertyType = typeof<String> then String.Empty |> box else Activator.CreateInstance(p.PropertyType)

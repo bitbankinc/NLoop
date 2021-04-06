@@ -77,18 +77,3 @@ type LoopOut = {
 type LoopIn = {
   Id: string
 }
-  with
-  static member Deserialize(ls: LightningReaderStream): LoopIn =
-    failwith "todo"
-  member this.Serialize(ls: LightningWriterStream) =
-    failwith "todo"
-  static member FromBytes(b: byte[]) =
-    use m = new MemoryStream(b)
-    use ls = new LightningReaderStream(m)
-    LoopIn.Deserialize(ls)
-  member this.ToBytes() =
-    use m = new MemoryStream()
-    use ls = new LightningWriterStream(m)
-    this.Serialize(ls)
-    m.ToArray()
-

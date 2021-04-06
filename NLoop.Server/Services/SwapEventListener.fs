@@ -46,7 +46,7 @@ type SwapEventListener(boltzClient: BoltzClient,
       | SwapStatusType.TxConfirmed ->
         let _ = swapStatus.NewStatus.Transaction
         let! feeMap = boltzClient.GetFeeEstimation()
-        let n = opts.Value.Network
+        let n = opts.Value.ChainOptions
         let fee = failwith "todo" // FeeRate(feeMap.TryGetValue(s))
         let lockupTx = swapStatus.NewStatus.Transaction.Value.Tx // TODO: stop using Value
         let claimTx =

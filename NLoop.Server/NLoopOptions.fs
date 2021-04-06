@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open NBitcoin
+open NBitcoin.Altcoins
 
 type ChainOptions() =
   static member val Instance = ChainOptions() with get
@@ -13,13 +14,18 @@ type ChainOptions() =
   member val RPCPassword = String.Empty with get, set
   member val RPCCookieFile = String.Empty with get, set
 
-type ChainOptionsProvider = delegate of Network -> ChainOptions
+  member val CryptoCode = SupportedCryptoCode.BTC with get, set
+
+  member this.GetNetwork(cryptoCode: string) =
+    this.CryptoCode.ToNetworkSet().GetNetwork(ChainName cryptoCode)
 
 type NLoopOptions() =
   // -- general --
   static member val Instance = NLoopOptions() with get
   member val ChainOptions = Dictionary<SupportedCryptoCode, ChainOptions>() with get
-  member val Network = Network.Main with get, set
+  member val Network = Network.Main.ChainName.ToString() with get, set
+
+
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --
   // -- https --

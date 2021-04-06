@@ -59,22 +59,13 @@ type IRepositoryExtensions() =
   }
 
 
-type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
-  let dbPath = conf.Value.DBPath
-  let openEngine() = task {
-    return! DBTrieEngine.OpenFromFolder(dbPath)
-  }
-
-  let serializerOpts = JsonSerializerOptions()
+type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions, dbPath) =
   let jsonOpts = JsonSerializerOptions()
-  let pageSize = 8192
 
-  let engine = openEngine().GetAwaiter().GetResult()
   do
     if dbPath |> Directory.Exists |> not then
       Directory.CreateDirectory(dbPath) |> ignore
-      ()
-    engine.ConfigurePagePool(PagePool(pageSize, 50 * 1000 * 1000 / pageSize))
+    jsonOpts.AddNLoopJsonConverters(settings.GetNetwork(chainName))
 
   member this.SetPrivateKey(key: Key, [<O;DefaultParameterValue(null)>]ct: CancellationToken) =
     if (key |> box |> isNull) then raise <| ArgumentNullException(nameof key) else
@@ -144,7 +135,9 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
       if (loopIn |> box |> isNull) then raise <| ArgumentNullException(nameof loopIn) else
       unitTask {
         use! tx = engine.OpenTransaction()
-        let v = ReadOnlyMemory(loopIn.ToBytes())
+        let v =
+          let j = JsonSerializer.SerializeToUtf8Bytes(loopIn, jsonOpts)
+          ReadOnlyMemory(j)
         let! _ = tx.GetTable(DBKeys.idToLoopOutSwap).Insert(loopIn.Id, v)
         do! tx.Commit()
       }
@@ -154,8 +147,8 @@ type Repository(conf: IOptions<NLoopOptions>, crypto: SupportedCryptoCode) =
         try
           use! tx = engine.OpenTransaction()
           let! row = tx.GetTable(DBKeys.HashToKey).Get(id)
-          let! x = row.ReadValue()
-          return x.ToArray() |> LoopIn.FromBytes |> Some
+          let! x = row.ReadValueString()
+          return JsonSerializer.Deserialize<LoopIn>(x, jsonOpts) |> Some
         with
         | e -> return None
       }
@@ -189,12 +182,8 @@ type IRepositoryProviderExtensions()=
     this.GetRepository(SupportedCryptoCode.Parse(cryptoCode))
 
 type RepositoryProvider(opts: IOptions<NLoopOptions>) =
-  inherit BackgroundService()
   let repositories = Dictionary<SupportedCryptoCode, IRepository>()
   let startCompletion = TaskCompletionSource<bool>()
-  do
-    for on in opts.Value.OnChainCrypto do
-      repositories.Add(on, Repository(opts, on))
 
   let openEngine(dbPath) = task {
     return! DBTrieEngine.OpenFromFolder(dbPath)
@@ -211,17 +200,31 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
       | true, v -> Some v
       | false, _ -> None
 
-  override this.ExecuteAsync(stoppingToken) = unitTask {
+  interface IHostedService with
+    member this.StartAsync(stoppingToken) = unitTask {
       try
-        let dir = Path.Combine(opts.Value.DataDir, "db")
-        if (not <| Directory.Exists(dir)) then
-          Directory.CreateDirectory(dir) |> ignore
-        let! e = openEngine(dir)
+        let dbPath = opts.Value.DBPath
+        if (not <| Directory.Exists(dbPath)) then
+          Directory.CreateDirectory(dbPath) |> ignore
+        let! e = openEngine(dbPath)
         engine <- e
         engine.ConfigurePagePool(PagePool(pageSize, 50 * 1000 * 1000 / pageSize))
-        return failwith "todo"
+        for kv in opts.Value.ChainOptions do
+          let repo =
+            let dbPath = Path.Join(dbPath, kv.Key.ToString())
+            Repository(engine, opts.Value.Network, kv.Value, dbPath)
+
+          repositories.Add(kv.Key, repo)
+
+        startCompletion.TrySetResult(true)
+          |> ignore
       with
       | x ->
         startCompletion.TrySetCanceled() |> ignore
         raise <| x
+    }
+
+    member this.StopAsync(cancellationToken) = unitTask {
+      if (engine |> isNull |> not) then
+        do! engine.DisposeAsync()
     }
