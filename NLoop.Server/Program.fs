@@ -52,7 +52,7 @@ module App =
       ])
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> handleGetInfo
+          route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
         ])
       setStatusCode 404 >=> text "Not Found"

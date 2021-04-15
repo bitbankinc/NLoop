@@ -1,29 +1,26 @@
 namespace NLoop.Server
 
-open System.Runtime.CompilerServices
 open System.Text.Json
-open System.Text.Json.Serialization
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Giraffe
-open Giraffe.Core
 open FSharp.Control.Tasks.Affine
-
-[<Extension;AbstractClass;Sealed>]
-type GiraffeExtensions() =
-  [<Extension>]
-  static member BindJsonWithCryptoCodeAsync(this: HttpContext, cryptoCode: string) = task {
-    let repo = this.GetService<IRepositoryProvider>().GetRepository(cryptoCode)
-    return! JsonSerializer.DeserializeAsync(this.Request.Body, repo.JsonOpts)
-  }
-
-
 
 [<AutoOpen>]
 module CustomHandlers =
   let bindJsonWithCryptoCode<'T> cryptoCode (f: 'T -> HttpHandler): HttpHandler =
       fun (next : HttpFunc) (ctx : HttpContext) ->
           task {
-              let! model = ctx.BindJsonWithCryptoCodeAsync<'T>(cryptoCode)
-              return! f model next ctx
+              let modelR =
+                SupportedCryptoCode.Parse cryptoCode
+                |> Result.map(fun ourCryptoCode ->
+                  let repo = ctx.GetService<IRepositoryProvider>().GetRepository(crypto=ourCryptoCode)
+                  JsonSerializer.DeserializeAsync<'T>(ctx.Request.Body, repo.JsonOpts)
+                  )
+              match modelR with
+              | Ok modelT ->
+                let! model = modelT
+                return! f model next ctx
+              | Error e ->
+                ctx.SetStatusCode StatusCodes.Status400BadRequest
+                return! ctx.WriteJsonAsync({|error = e|})
           }

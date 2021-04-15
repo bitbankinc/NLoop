@@ -82,12 +82,6 @@ let getTestRepositoryProvider() =
 
 
 let getTestHost() =
-  let rc = NLoopServerCommandLine.getRootCommand()
-  let p =
-    CommandLineBuilder(rc)
-      .UseMiddleware(Main.useWebHostMiddleware)
-      .Build()
-  let parseResult = p.Parse("") // dummy to inject BindingContext so that NLoop can run `BindCommandLine` without throwing an exception
   WebHostBuilder()
     .UseContentRoot(Directory.GetCurrentDirectory())
     .ConfigureAppConfiguration(fun configBuilder ->
@@ -96,8 +90,13 @@ let getTestHost() =
     .UseStartup<Startup>()
     .ConfigureLogging(Main.configureLogging)
     .ConfigureTestServices(fun (services: IServiceCollection) ->
+      let rc = NLoopServerCommandLine.getRootCommand()
+      let p =
+        CommandLineBuilder(rc)
+          .UseMiddleware(Main.useWebHostMiddleware)
+          .Build()
       services
-        .AddSingleton<BindingContext>(BindingContext(parseResult))
+        .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
         .AddSingleton<IRepositoryProvider>(getTestRepositoryProvider())
         |> ignore
     )

@@ -14,6 +14,8 @@ type ChainOptions() =
   member val RPCPassword = String.Empty with get, set
   member val RPCCookieFile = String.Empty with get, set
 
+  member val LightningConnectionString = String.Empty with get, set
+
   member val CryptoCode = SupportedCryptoCode.BTC with get, set
 
   member this.GetNetwork(chainName: string) =

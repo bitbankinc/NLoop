@@ -42,11 +42,13 @@
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\FeeEstimator.fs" />
     <Compile Include="Services\Repository.fs" />
+    <Compile Include="Services\LightningClientProvider.fs" />
     <Compile Include="Services\SwapEventListener.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
     <Compile Include="GiraffeExtensions.fs" />
     <Compile Include="LoopHandlers.fs" />
+    <Compile Include="QueryHandlers.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System
+open System.Threading.Tasks
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -27,15 +28,11 @@ module LoopHandlers =
           ctx.SetStatusCode 400
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok ourCryptoCode ->
-        let repo = SupportedCryptoCode.TryParse cryptoCode |> Option.map(ctx.GetService<RepositoryProvider>().GetRepository)
+        let repo = ctx.GetService<IRepositoryProvider>().GetRepository cryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
         let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
-        match repo with
-        | None ->
-          ctx.SetStatusCode(StatusCodes.Status400BadRequest)
-          return! ctx.WriteJsonAsync({|error = $"cryptocode {cryptoCode} not supported" |})
-        | Some repo ->
+
         use! claimKey = repo.NewPrivateKey()
         let! preimage = repo.NewPreimage()
         let preimageHash = preimage |> Hashes.SHA256
@@ -52,22 +49,44 @@ module LoopHandlers =
               PreimageHash = preimageHash |> uint256 }
           boltzCli.CreateReverseSwapAsync(req)
 
-        let conf = ctx.GetService<IOptions<NLoopOptions>>()
-        match outResponse.Validate(uint256 preimageHash, req.Amount, conf.Value.MaxAcceptableSwapFee) with
+        let! addr =
+          match req.Address with
+          | Some addr -> Task.FromResult addr
+          | None ->
+            ctx.GetService<LightningClientProvider>().GetClient(ourCryptoCode).GetDepositAddress()
+
+        let reverseSwap = {
+          LoopOut.Id = outResponse.Id
+          Status = SwapStatusType.Created
+          Error = String.Empty
+          AcceptZeroConf = req.AcceptZeroConf
+          PrivateKey = claimKey
+          Preimage = preimage |> uint256
+          RedeemScript = outResponse.RedeemScript
+          Invoice = outResponse.Invoice.ToString() // failwith "todo"
+          ClaimAddress = addr.ToString()
+          OnChainAmount = outResponse.OnchainAmount
+          TimeoutBlockHeight = outResponse.TimeoutBlockHeight
+          LockupTransactionId = None
+          ClaimTransactionId = None
+          CryptoCode = ourCryptoCode
+        }
+
+        do! repo.SetLoopOut(reverseSwap)
+
+        match outResponse.Validate(uint256 preimageHash, req.Amount, opts.Value.MaxAcceptableSwapFee) with
         | Error e ->
-          ctx.SetStatusCode StatusCodes.Status400BadRequest
+          ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-          match req.ConfTarget with
-          | None
-          | Some(0) ->
+          if req.AcceptZeroConf then
             let response = {
               LoopOutResponse.Id = outResponse.Id
               Address = outResponse.LockupAddress
               ClaimTxId = None
             }
             return! json response next ctx
-          | Some x ->
+          else
             return failwith "TODO"
       }
 
@@ -79,18 +98,4 @@ module LoopHandlers =
           Address = BitcoinAddress.Create("bc1qcw9l54jre2wc4uju222wz8su6am2fs3vufsc8c", Network.RegTest)
         }
         return! json response next ctx
-      }
-
-  let handleGetInfo =
-    fun (next: HttpFunc) (ctx: HttpContext) ->
-      task {
-        printfn $"opts: {ctx.GetService<IOptions<NLoopOptions>>().Value.RPCHost}"
-        let _logger = ctx.GetLogger("handleGetInfo")
-        let response = {
-          GetInfoResponse.Version = Constants.AssemblyVersion
-          SupportedCoins = { OnChain = [SupportedCryptoCode.BTC; SupportedCryptoCode.LTC]
-                             OffChain = [SupportedCryptoCode.BTC] }
-        }
-        let! r = json response next ctx
-        return r
       }

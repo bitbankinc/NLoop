@@ -126,6 +126,19 @@ type CreateSwapResponse = {
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
 }
+
+type CreateChannelRequest = {
+  [<JsonConverter(typeof<PairIdJsonConverter>)>]
+  PairId: PairId
+  OrderSide: OrderType
+  [<JsonConverter(typeof<HexPubKeyJsonConverter>)>]
+  RefundPublicKey: PubKey
+  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
+  Invoice: PaymentRequest
+  [<JsonConverter(typeof<UInt256JsonConverter>)>]
+  PreimageHash: uint256
+  Channel: ChannelOpenRequest
+}
 type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId

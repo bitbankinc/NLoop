@@ -145,6 +145,14 @@ module NLoopServerCommandLine =
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
+
+       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.LightningConnectionString).ToLowerInvariant()}",
+                              "Connection string to connect to Lightning Daemon instance. See BTCPayServer.Lightning for the detail. (https://github.com/btcpayserver/BTCPayServer.Lightning#examples)")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
      ]
   let getOptions(): Option seq =
     seq [

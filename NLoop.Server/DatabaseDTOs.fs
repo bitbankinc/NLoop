@@ -5,18 +5,13 @@ open System.Text.Json.Serialization
 open DotNetLightning.Serialization
 open DotNetLightning.Utils.Primitives
 open NBitcoin
-open NBitcoin.DataEncoders
-open NBitcoin.DataEncoders
 open NLoop.Server.DTOs
-
-type SwapUpdateEvent = int
 
 type LoopOut = {
   Id: string
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
-  State: SwapStatusType
+  Status: SwapStatusType
   Error: string
-  Status: SwapUpdateEvent
   AcceptZeroConf: bool
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   PrivateKey: Key
@@ -26,12 +21,11 @@ type LoopOut = {
   RedeemScript: Script
   Invoice: string
   ClaimAddress: string
-  OnChainAmount: int64
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  OnChainAmount: Money
   TimeoutBlockHeight: BlockHeight
-  [<JsonConverter(typeof<UInt256JsonConverter>)>]
-  LockupTransactionId: uint256
-  [<JsonConverter(typeof<UInt256JsonConverter>)>]
-  ClaimTransactionId: uint256
+  LockupTransactionId: uint256 option
+  ClaimTransactionId: uint256 option
   CryptoCode: SupportedCryptoCode
 }
 

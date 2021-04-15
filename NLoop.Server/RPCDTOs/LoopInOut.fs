@@ -31,6 +31,12 @@ type LoopOutRequest = {
   ConfTarget: int option
   Label: string option
 }
+  with
+  member this.AcceptZeroConf =
+    match this.ConfTarget with
+    | None
+    | Some(0) -> true
+    | _ -> false
 
 type LoopInResponse = {
   /// Unique id for the swap.

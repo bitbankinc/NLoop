@@ -15,7 +15,7 @@ open NLoop.Server.Swap
 type SwapEvent =
   | Foo
 
-type SwapEventListener(boltzClient: BoltzClient,
+type SwapEventListener(boltzClientProvider: BoltzClientProvider,
                        logger: ILogger<SwapEventListener>,
                        repositoryProvider: IRepositoryProvider,
                        opts: IOptions<NLoopOptions>) =
@@ -28,6 +28,7 @@ type SwapEventListener(boltzClient: BoltzClient,
 
   member this.ExecuteAsync(cryptoCode, stoppingToken) =
     unitTask {
+        let boltzClient = boltzClientProvider.Invoke(opts.Value.GetNetwork(cryptoCode))
         let mutable notComplete = true
         while notComplete do
           let! shouldContinue = boltzClient.SwapStatusChannel.Reader.WaitToReadAsync(stoppingToken)
@@ -44,7 +45,7 @@ type SwapEventListener(boltzClient: BoltzClient,
     | Some s, None ->
       return failwith "TODO: non-reverse swap"
     | None , Some s ->
-      if (swapStatus.NewStatus.SwapStatus = s.State) then
+      if (swapStatus.NewStatus.SwapStatus = s.Status) then
         logger.LogDebug($"Swap Status update is not new for us.")
         return ()
       match swapStatus.NewStatus.SwapStatus with

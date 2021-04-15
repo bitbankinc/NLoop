@@ -39,4 +39,6 @@ type NLoopExtensions() =
       this
         .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
         .AddSingleton<IRepositoryProvider, RepositoryProvider>()
+        .AddHostedService<RepositoryProvider>()
         .AddSingleton(Channel.CreateBounded<SwapEvent>(500))
+        .AddHostedService<LightningClientProvider>()

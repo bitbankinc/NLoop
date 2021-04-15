@@ -104,7 +104,7 @@ type PrimitiveGenerator() =
     pushScriptGen |> Arb.fromGen
 
   static member String() =
-    Arb.generate<char>
+    Arb.generate<char> // It seems that `Arb.generate<string>` has a bug which causes stack overflow.
     |> Gen.arrayOf
     |> Gen.filter(Seq.exists(Char.IsControl) >> not)
     |> Gen.map(String)
