@@ -10,3 +10,5 @@ type BitcoinRPCFeeEstimator() =
   interface IFeeEstimator with
     member this.Estimate() =
       failwith "todo"
+
+type Broadcaster()
