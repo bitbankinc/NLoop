@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Utils.fs" />
+    <Compile Include="NBitcoinExtensions.fs" />
+    <Compile Include="ValueObjects.fs" />
+    <Compile Include="DomainUtils.fs" />
+    <Compile Include="HTLC.fs" />
+    <Compile Include="Transactions.fs" />
+    <Compile Include="DatabaseDTOs.fs" />
+    <Compile Include="Actor.fs" />
+    <Compile Include="Interfaces.fs" />
+    <Compile Include="Swap.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetLightning" Version="1.1.2-date20201108-0549-git-2f3ada4" />
+    <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
+    <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
+    <PackageReference Include="NBitcoin.Altcoins" Version="2.0.31" />
+  </ItemGroup>
+</Project>

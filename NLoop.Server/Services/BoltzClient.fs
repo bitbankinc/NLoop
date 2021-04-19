@@ -30,6 +30,8 @@ type SwapStatusUpdate = {
   Id: string
 }
 
+exception BoltzRPCException of string
+
 type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
                  [<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())

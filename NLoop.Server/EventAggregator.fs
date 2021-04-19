@@ -1,4 +1,4 @@
-namespace NLoop.Server.Services
+namespace NLoop.Server
 
 open System
 open System.Collections.Generic
@@ -61,9 +61,7 @@ type EventAggregator(logError: Action<string>) =
       ())
     tcs.Task.ConfigureAwait(false)
 
-  member this.Publish<'T when 'T: null>(evt: 'T) =
-    if (evt |> isNull) then raise <| ArgumentNullException("")
-
+  member this.Publish<'T>(evt: 'T) =
     let mutable actionList = ResizeArray<Action<obj>>()
     lock (this._Subscriptions) <| fun () ->
       match this._Subscriptions.TryGetValue(typeof<'T>) with
@@ -81,6 +79,11 @@ type EventAggregator(logError: Action<string>) =
 
   member this.WaitNext<'T>(ct: CancellationToken) =
     this.WaitNext<'T>((fun _ -> true), ct)
+
+  member this.WaitNext<'T>(predicate: Func<'T, bool>) =
+    this.WaitNext<'T>(predicate, CancellationToken.None)
+  member this.WaitNext<'T>() =
+    this.WaitNext<'T>((fun _ -> true), CancellationToken.None)
 
   interface IDisposable with
     member this.Dispose() =

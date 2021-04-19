@@ -1,4 +1,4 @@
-namespace NLoop.Server.Swap
+namespace NLoop.Server
 
 open System.IO
 open NBitcoin

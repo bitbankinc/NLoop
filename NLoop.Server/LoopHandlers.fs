@@ -7,7 +7,9 @@ open Microsoft.Extensions.Options
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.Crypto
+open NLoop.Domain
 open NLoop.Server
+open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Services
 module private HandlerHelpers =
@@ -37,11 +39,11 @@ module LoopHandlers =
         let! preimage = repo.NewPreimage()
         let preimageHash = preimage |> Hashes.SHA256
 
+        let counterPartyPair =
+          req.CounterPartyPair
+          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
         let! outResponse =
           let req =
-            let counterPartyPair =
-              req.CounterPartyPair
-              |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
             { CreateReverseSwapRequest.InvoiceAmount = req.Amount
               PairId = (ourCryptoCode, counterPartyPair)
               OrderSide = OrderType.buy
@@ -69,25 +71,33 @@ module LoopHandlers =
           TimeoutBlockHeight = outResponse.TimeoutBlockHeight
           LockupTransactionId = None
           ClaimTransactionId = None
-          CryptoCode = ourCryptoCode
+          PairId = ourCryptoCode, counterPartyPair
         }
 
         do! repo.SetLoopOut(reverseSwap)
-
         match outResponse.Validate(uint256 preimageHash, req.Amount, opts.Value.MaxAcceptableSwapFee) with
         | Error e ->
+          do! repo.SetLoopOut({ reverseSwap with Error = e })
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-          if req.AcceptZeroConf then
-            let response = {
-              LoopOutResponse.Id = outResponse.Id
-              Address = outResponse.LockupAddress
-              ClaimTxId = None
-            }
-            return! json response next ctx
-          else
-            return failwith "TODO"
+
+          let actor = ctx.GetService<SwapActor>()
+          do! actor.Put(Swap.Command.NewLoopOut(reverseSwap))
+          let eventAggregator = ctx.GetService<EventAggregator>()
+          let mutable txId = None
+          if (req.AcceptZeroConf) then
+            let! e = eventAggregator.WaitNext<Swap.Event>(function Swap.Event.ClaimTxPublished(_txid, swapId) -> swapId = reverseSwap.Id | _ -> false)
+            txId <-
+              e
+              |> function Swap.Event.ClaimTxPublished (txid, _swapId) -> txid
+              |> Some
+          let response = {
+            LoopOutResponse.Id = outResponse.Id
+            Address = outResponse.LockupAddress
+            ClaimTxId = txId
+          }
+          return! json response next ctx
       }
 
   let handleLoopIn (cryptoCode: string) (loopIn: LoopInRequest) =

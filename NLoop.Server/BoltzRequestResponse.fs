@@ -7,7 +7,7 @@ open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Server
 open NLoop.Server.DTOs
-open NLoop.Server.Swap
+open NLoop.Domain
 
 type GetVersionResponse = {
   Version: string
@@ -64,17 +64,6 @@ type GetSwapTxResponse = {
   member this.TimeoutEta =
     this._TimeoutEta |> Option.map NBitcoin.Utils.UnixTimeToDateTime
 
-
-type SwapStatusType =
-  | Created = 0uy
-  | InvoiceSet = 1uy
-  | TxMempool = 2uy
-  | TxConfirmed = 3uy
-  | InvoicePayed = 4uy
-  | InvoiceFailedToPay = 5uy
-  | TxClaimed = 6uy
-  | Unknown = 7uy
-
 type TxInfo = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
   [<JsonPropertyName("id")>]
@@ -83,6 +72,12 @@ type TxInfo = {
   Tx: Transaction
   Eta: int
 }
+  with
+  member this.ToDomain = {
+    Swap.Data.TxInfo.TxId = this.TxId
+    Swap.Data.TxInfo.Tx = this.Tx
+    Swap.Data.TxInfo.Eta = this.Eta
+  }
 type SwapStatusResponse = {
   [<JsonPropertyName("status")>]
   _Status: string
@@ -99,7 +94,12 @@ type SwapStatusResponse = {
     | "invoice.payed" -> SwapStatusType.InvoicePayed
     | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
     | "transaction.claimed" -> SwapStatusType.TxClaimed
-    | x -> SwapStatusType.Unknown
+    | _x -> SwapStatusType.Unknown
+
+  member this.ToDomain =
+    { Swap.Data.SwapStatusResponseData._Status = this._Status
+      Swap.Data.SwapStatusResponseData.Transaction = this.Transaction |> Option.map(fun t -> t.ToDomain)
+      Swap.Data.SwapStatusResponseData.FailureReason = this.FailureReason }
 
 type CreateSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]

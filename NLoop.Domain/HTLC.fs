@@ -1,4 +1,4 @@
-namespace NLoop.Server.Swap
+namespace NLoop.Server
 
 open System.Collections.Generic
 open DotNetLightning.Utils.Primitives

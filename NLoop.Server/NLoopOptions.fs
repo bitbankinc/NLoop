@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.IO
 open NBitcoin
 open NBitcoin.Altcoins
+open NBitcoin.RPC
 
 type ChainOptions() =
   static member val Instance = ChainOptions() with get
@@ -21,6 +22,9 @@ type ChainOptions() =
   member this.GetNetwork(chainName: string) =
     this.CryptoCode.ToNetworkSet().GetNetwork(ChainName chainName)
 
+  member this.GetRPCClient(chainName: string) =
+    RPCClient($"{this.RPCUser}:{this.RPCPassword}", $"{this.RPCHost}:{this.RPCPort}", this.GetNetwork(chainName))
+
 type NLoopOptions() =
   // -- general --
   static member val Instance = NLoopOptions() with get
@@ -29,6 +33,9 @@ type NLoopOptions() =
 
   member this.GetNetwork(cryptoCode: SupportedCryptoCode) =
     this.ChainOptions.[cryptoCode].GetNetwork(this.Network)
+
+  member this.GetRPCClient(cryptoCode: SupportedCryptoCode) =
+    this.ChainOptions.[cryptoCode].GetRPCClient(this.Network)
 
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --

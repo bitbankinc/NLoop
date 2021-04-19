@@ -1,21 +1,21 @@
 ﻿namespace NLoop.Server
 
 open System
+open System.Runtime.CompilerServices
+open System.Text.Json
+open System.Threading.Tasks
+open NBitcoin
+
 open System.Collections.Generic
 open System.IO
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open System.Text.Json
 open System.Threading
-open System.Threading.Tasks
 open DBTrie.Storage.Cache
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
 open FSharp.Control.Tasks
 open DBTrie
-open NBitcoin
 open NBitcoin.Crypto
-open NLoop.Server.DTOs
 open NLoop.Server.Utils
 
 module private DBKeys =
