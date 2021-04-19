@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <Compile Include="Constants.fs" />
+    <Compile Include="Helpers.fs" />
     <Compile Include="NLoopOptions.fs" />
     <Compile Include="JsonConverters.fs" />
     <Compile Include="RPCDTOs\Client.fs" />

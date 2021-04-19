@@ -43,11 +43,11 @@ type SwapEventListener(boltzClient: BoltzClient,
     do! actor.Put(Swap.Command.SwapUpdate(cmd))
   }
 
-type SwapEventListenerProvider(boltzClientProvider: BoltzClientProvider,
+type SwapEventListeners(boltzClientProvider: BoltzClientProvider,
                                opts: IOptions<NLoopOptions>,
                                loggerFactory: ILoggerFactory,
-                               sp: ServiceProvider,
-                               swapState: Swap.State) =
+                               sp: IServiceProvider) =
+
   let d = Dictionary<string, SwapEventListener>()
   do
     for kv in opts.Value.ChainOptions do

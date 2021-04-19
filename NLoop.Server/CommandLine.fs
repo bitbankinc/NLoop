@@ -106,23 +106,23 @@ module NLoopServerCommandLine =
     ]
 
   let getChainOptions(c) =
-     let b = $"--{c.ToString().ToLowerInvariant()}."
+     let b = getChainOptionString (c)
      seq [
-       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCHost).ToLowerInvariant()}",
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCHost).ToLowerInvariant()),
                               "RPC host name of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o :> Option
-       let o = Option<int>(b + $"{nameof(ChainOptions.Instance.RPCPort).ToLowerInvariant()}",
+       let o = Option<int>(b (nameof(ChainOptions.Instance.RPCPort).ToLowerInvariant()),
                               "RPC port number of the blockchain client")
        o.Argument <-
          let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCUser).ToLowerInvariant()}",
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCUser).ToLowerInvariant()),
                               "RPC username of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -130,7 +130,7 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCPassword).ToLowerInvariant()}",
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCPassword).ToLowerInvariant()),
                               "RPC password of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -138,7 +138,7 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.RPCCookieFile).ToLowerInvariant()}",
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCCookieFile).ToLowerInvariant()),
                               "RPC cookie file path of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -146,11 +146,12 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b + $"{nameof(ChainOptions.Instance.LightningConnectionString).ToLowerInvariant()}",
+       let o = Option<string>(b (nameof(ChainOptions.Instance.LightningConnectionString).ToLowerInvariant()),
                               "Connection string to connect to Lightning Daemon instance. See BTCPayServer.Lightning for the detail. (https://github.com/btcpayserver/BTCPayServer.Lightning#examples)")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
+         a.SetDefaultValue(Constants.DefaultLightningConnectionString)
          a
        o
      ]

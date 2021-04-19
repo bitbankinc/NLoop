@@ -81,7 +81,6 @@ module LoopHandlers =
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-
           let actor = ctx.GetService<SwapActor>()
           do! actor.Put(Swap.Command.NewLoopOut(reverseSwap))
           let eventAggregator = ctx.GetService<EventAggregator>()

@@ -15,6 +15,7 @@ type IEventAggregator =
     abstract member GetObservable: unit -> IObservable<'T>
 
 type EventAggregator(logError: Action<string>) =
+  new() = new EventAggregator(fun s -> ())
   member val _Subscriptions = Dictionary<Type, Dictionary<Subscription, Action<obj>>>() with get
   member this.Subscribe<'T, 'TReturn>(subsc: Func<'T, 'TReturn>) =
     this.Subscribe(Action<'T>(fun t -> subsc.Invoke(t) |> ignore))

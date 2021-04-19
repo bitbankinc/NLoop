@@ -29,7 +29,9 @@ type NLoopExtensions() =
             let cOpts = ChainOptions()
             cOpts.CryptoCode <- c
             for p in typeof<ChainOptions>.GetProperties() do
-              let op = bindingContext.ParseResult.ValueForOption($"--{c.ToString().ToLowerInvariant()}.{p.Name.ToLowerInvariant()}")
+              let op =
+                let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
+                bindingContext.ParseResult.ValueForOption(optsString)
               let tyDefault = if p.PropertyType = typeof<String> then String.Empty |> box else Activator.CreateInstance(p.PropertyType)
               if op <> null && op <> tyDefault && op.GetType() = p.PropertyType then
                 p.SetValue(cOpts, op)
@@ -47,6 +49,6 @@ type NLoopExtensions() =
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<EventAggregator>()
         .AddHostedService<LightningClientProvider>()
-        |> ignore
+        .AddHostedService<SwapEventListeners>()
+        .AddSingleton<SwapActor>()
 
-      this.AddSingleton<SwapActor>()
