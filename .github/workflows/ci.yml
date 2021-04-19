@@ -36,6 +36,9 @@ jobs:
         run: |
           dotnet build --configuration Debug NLoop.Server
 
+      - name: Run Domain test in ${{ matrix.os }}
+        run: dotnet test tests/NLoop.Domain.Tests
+
       - name: Run property test in ${{ matrix.os }}
         run: dotnet run --project tests/NLoop.Server.PropertyTests
 

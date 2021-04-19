@@ -99,7 +99,7 @@ type PrimitiveGenerator() =
     uint256Gen |> Arb.fromGen
 
   static member KeyGen() : Arbitrary<Key> =
-    bytesOfNGen(32) |> Gen.map Key |> Arb.fromGen
+    bytesOfNGen(32) |> Gen.map(fun x -> new Key(x)) |> Arb.fromGen
   static member ScriptGen(): Arbitrary<Script> =
     pushScriptGen |> Arb.fromGen
 

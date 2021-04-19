@@ -16,14 +16,12 @@ module Swap =
   }
   type State = {
     OnGoing: SwapList
-    Logger: ILogger
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
   }
     with
-    static member Create(l, b, f) = {
+    static member Create(b, f) = {
       State.OnGoing = { Out = []; In = [] }
-      Logger = l
       Broadcaster = b
       FeeEstimator = f
     }
@@ -90,7 +88,6 @@ module Swap =
       | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
         let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
         if (u.Response.SwapStatus = ourSwap.Status) then
-          s.Logger.LogDebug($"Swap Status for id {ourSwap.Id} update is not new for us.")
           return []
         else
         match u.Response.SwapStatus with
@@ -115,13 +112,11 @@ module Swap =
           let txid = claimTx.GetWitHash()
           return [ClaimTxPublished(txid, ourSwap.Id)]
         | swapStatus ->
-          s.Logger.LogWarning($"Unexpected Swap Status {swapStatus}")
           return []
       | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
         let _ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
         return []
-      | SwapUpdate u ->
-        s.Logger.LogWarning($"unknown swap id {u.Id}")
+      | SwapUpdate _u ->
         return []
     }
 
