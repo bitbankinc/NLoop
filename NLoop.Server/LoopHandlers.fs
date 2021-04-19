@@ -74,13 +74,12 @@ module LoopHandlers =
           PairId = ourCryptoCode, counterPartyPair
         }
 
-        do! repo.SetLoopOut(reverseSwap)
         match outResponse.Validate(uint256 preimageHash, req.Amount, opts.Value.MaxAcceptableSwapFee) with
         | Error e ->
           do! repo.SetLoopOut({ reverseSwap with Error = e })
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
-        | Ok () ->
+        | Ok _ ->
           let actor = ctx.GetService<SwapActor>()
           do! actor.Put(Swap.Command.NewLoopOut(reverseSwap))
           let eventAggregator = ctx.GetService<EventAggregator>()

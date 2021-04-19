@@ -62,7 +62,7 @@ type GetSwapTxResponse = {
 }
   with
   member this.TimeoutEta =
-    this._TimeoutEta |> Option.map NBitcoin.Utils.UnixTimeToDateTime
+    this._TimeoutEta |> Option.map Utils.UnixTimeToDateTime
 
 type TxInfo = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
@@ -164,7 +164,7 @@ type CreateReverseSwapResponse = {
   RedeemScript: Script
 }
   with
-  member this.Validate(preimageHash: uint256, offChainAmountWePay: Money, maxSwapServiceFee: Money) =
+  member this.Validate(preimageHash: uint256, offChainAmountWePay: Money, maxSwapServiceFee: Money): Result<_, string> =
     let actualSpk = this.LockupAddress.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
@@ -174,11 +174,12 @@ type CreateReverseSwapResponse = {
     else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
       Error ($"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay}).")
     else
-    let swapServiceFee =
-      offChainAmountWePay - this.OnchainAmount
-    if maxSwapServiceFee < swapServiceFee then
-      Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
-    else (this.RedeemScript |> Scripts.validateScript)
+      let swapServiceFee =
+        offChainAmountWePay - this.OnchainAmount
+      if maxSwapServiceFee < swapServiceFee then
+        Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+      else
+        (this.RedeemScript |> Scripts.validateScript)
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

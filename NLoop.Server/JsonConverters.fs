@@ -42,7 +42,7 @@ type PrivKeyJsonConverter() =
     |> hex.EncodeData
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString() |> hex.DecodeData |> Key
+    reader.GetString() |> hex.DecodeData |> fun x -> new Key(x)
 type BlockHeightJsonConverter() =
   inherit JsonConverter<BlockHeight>()
   override this.Write(writer, value, _options) =

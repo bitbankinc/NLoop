@@ -11,8 +11,8 @@ open FsToolkit.ErrorHandling
 module Swap =
   // ------ state -----
   type SwapList = {
-    Out: LoopOut seq
-    In: LoopIn seq
+    Out: LoopOut list
+    In: LoopIn list
   }
   type State = {
     OnGoing: SwapList
@@ -51,7 +51,7 @@ module Swap =
         | "invoice.payed" -> SwapStatusType.InvoicePayed
         | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
         | "transaction.claimed" -> SwapStatusType.TxClaimed
-        | x -> SwapStatusType.Unknown
+        | _ -> SwapStatusType.Unknown
 
     and SwapStatusUpdate = {
       Id: string
@@ -67,6 +67,9 @@ module Swap =
   // ------ event -----
 
   type Event =
+    | KnownSwapAddedAgain of id: string
+    | NewLoopOutAdded of LoopOut
+    | NewLoopInAdded of LoopIn
     | ClaimTxPublished of txid: uint256 * swapId: string
 
   // ------ error -----
@@ -76,6 +79,14 @@ module Swap =
   let executeCommand (s: State) (command: Command): Task<Result<Event list, Error>> =
     taskResult {
       match command with
+      | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
+        return [KnownSwapAddedAgain loopOut.Id]
+      | NewLoopOut loopOut ->
+        return [NewLoopOutAdded loopOut]
+      | NewLoopIn loopIn when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
+        return [KnownSwapAddedAgain loopIn.Id]
+      | NewLoopIn loopIn ->
+        return [NewLoopInAdded loopIn]
       | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
         let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
         if (u.Response.SwapStatus = ourSwap.Status) then
@@ -107,7 +118,7 @@ module Swap =
           s.Logger.LogWarning($"Unexpected Swap Status {swapStatus}")
           return []
       | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
+        let _ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
         return []
       | SwapUpdate u ->
         s.Logger.LogWarning($"unknown swap id {u.Id}")
@@ -116,9 +127,15 @@ module Swap =
 
   let applyChanges (state: State) (event: Event) =
     match event with
+    | KnownSwapAddedAgain _ ->
+      state
     | ClaimTxPublished (txid, id) ->
       let newOuts =
-        state.OnGoing.Out |> Seq.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
+        state.OnGoing.Out |> List.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
       { state with OnGoing = { state.OnGoing with Out = newOuts } }
+    | NewLoopOutAdded loopOut ->
+      { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } }
+    | NewLoopInAdded loopIn ->
+      { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }
 
   type Aggregate = Aggregate<State, Command, Event, Error>

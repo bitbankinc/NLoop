@@ -42,25 +42,13 @@ module Scripts =
     l.Add(Op.op_Implicit (OpcodeType.OP_CHECKSIG))
     Script(l)
 
-  let isSwapScriptV1 (sc: Script) =
-    failwith ""
+  let isSwapScriptV1 (_sc: Script) =
+    failwith "TODO"
 
   let validateScript (script: Script) =
-    for op in script.ToOps() do
-      Error ("")
+    for _op in script.ToOps() do
+      ()
     Ok ()
-
-type HTLCScript =
-  | V1
-  | Unknown of Script
-  with
-  member this.GetSuccessWitness =
-    failwith "TODO"
-  member this.Script =
-    match this with
-    | V1 ->
-      failwith ""
-
 
 type HTLC = {
   HTLCScript: Script

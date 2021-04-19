@@ -32,7 +32,7 @@ type SwapStatusUpdate = {
 
 exception BoltzRPCException of string
 
-type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
+type BoltzClient(address: Uri, network, [<O;D(null)>]_cert: X509Certificate2,
                  [<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
