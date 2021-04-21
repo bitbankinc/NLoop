@@ -7,6 +7,7 @@ open System.Collections.Generic
 open BTCPayServer.Lightning
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
+open NLoop.Domain
 open NLoop.Server
 
 

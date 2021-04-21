@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Text.Json
 open System.Threading
+open NLoop.Domain
 open Xunit
 open FsCheck
 open FsCheck.Xunit

@@ -1,12 +1,16 @@
 module Tests
 
+open System
 open System.Threading.Tasks
+open NLoop.Domain.IO
+open NLoop.Server
 open Xunit
 open FsCheck
 open FsCheck.Xunit
 open Generators
 open NBitcoin
 open NLoop.Domain
+open FSharp.Control.Tasks
 
 type SwapDomainTests() =
   let mockBroadcaster =
@@ -27,7 +31,7 @@ type SwapDomainTests() =
   do
     Arb.register<PrimitiveGenerator>() |> ignore
 
-  [<Property(MaxTest=50)>]
+  [<Property(MaxTest=10)>]
   member this.``AddSwapWithSameIdShouldReturnError`` (loopOut) =
     let aggr = getAggr()
     let state = aggr.Zero
@@ -48,3 +52,34 @@ type SwapDomainTests() =
     Assert.Equal(out, loopOut)
     ()
 
+
+  [<Property(MaxTest=10)>]
+  member this.``SwapUpdate (BogusDepsWillRaiseException)`` (loopOut) =
+    // prepare
+    let aggr = getAggr()
+    let bogusFeeEstimator = {
+      new IFeeEstimator with
+        member this.Estimate(cryptoCode) = task {
+          return raise <| Exception("Failed!")
+        }
+    }
+    let state = { aggr.Zero with FeeEstimator = bogusFeeEstimator }
+    let state =
+      let t = aggr.Exec(state) (Swap.Command.NewLoopOut({ loopOut with Status = SwapStatusType.Created }))
+      let evt = t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
+      aggr.Apply(state) (evt)
+
+    // (Check exception)
+    let swapUpdate =
+      let tx = Network.RegTest.CreateTransaction()
+      { Swap.Data.SwapStatusUpdate.Id = loopOut.Id
+        Swap.Data.SwapStatusUpdate.Response = {
+          Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
+          Transaction = Some({ Tx = tx
+                               TxId = tx.GetWitHash()
+                               Eta = 1 })
+          FailureReason = None }
+        Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
+    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec(state) (Swap.Command.SwapUpdate(swapUpdate)) :> Task)
+    Assert.Equal(e.GetAwaiter().GetResult().Message, "Failed!")
+    ()

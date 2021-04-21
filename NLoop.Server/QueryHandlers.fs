@@ -4,6 +4,7 @@ open Microsoft.AspNetCore.Http
 open Giraffe
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
+open NLoop.Domain
 open NLoop.Server.DTOs
 
 module QueryHandlers =

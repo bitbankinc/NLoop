@@ -4,24 +4,19 @@ open System
 open System.Collections.Concurrent
 open System.IO
 open System.Threading.Channels
-open FSharp.Control
 open System.Net.Http
-open System.Net.Http.Json
 open System.Runtime.InteropServices
 open System.Text
 open System.Text.Json
-open System.Text.Json.Serialization
 open System.Threading.Tasks
 open System.Threading
 open DotNetLightning.Payment
-open DotNetLightning.Utils
 open FSharp.Control.Tasks
-open Macaroons
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
 open NLoop.Server
-open NLoop.Server.Utils
-open NLoop.Server.DTOs
+open NLoop.Domain.IO
+open NLoop.Domain
 
 type D = DefaultParameterValueAttribute
 

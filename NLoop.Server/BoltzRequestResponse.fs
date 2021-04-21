@@ -5,6 +5,8 @@ open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
+open NBitcoin.JsonConverters
+open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Domain
@@ -120,12 +122,28 @@ type ChannelOpenRequest = {
 type CreateSwapResponse = {
   Id: string
   Address: BitcoinAddress
+  [<JsonConverter(typeof<ScriptJsonConverter>)>]
+  RedeemScript: Script
   AcceptZeroConf: bool
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
 }
+  with
+  member this.Validate(preimageHash: uint256, ourInvoiceAmount: Money, maxSwapServiceFee: Money): Result<_, string> =
+    let actualSpk = this.Address.ScriptPubKey
+    let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
+    if (actualSpk <> expectedSpk) then
+      Error ($"Address {this.Address} and redeem script ({this.RedeemScript}) does not match")
+    else
+      let swapServiceFee =
+        ourInvoiceAmount - this.ExpectedAmount
+      if maxSwapServiceFee < swapServiceFee then
+        Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+      else
+        (this.RedeemScript |> Scripts.validateSwapScript preimageHash)
+
 
 type CreateChannelRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
@@ -150,7 +168,6 @@ type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
   PreimageHash: uint256
 }
-
 type CreateReverseSwapResponse = {
   Id: string
   LockupAddress: BitcoinAddress
@@ -179,7 +196,7 @@ type CreateReverseSwapResponse = {
       if maxSwapServiceFee < swapServiceFee then
         Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
       else
-        (this.RedeemScript |> Scripts.validateScript)
+        (this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash)
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

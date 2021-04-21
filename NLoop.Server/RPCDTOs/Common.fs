@@ -2,6 +2,7 @@ namespace NLoop.Server.DTOs
 
 open System.Text.Json.Serialization
 open NBitcoin
+open NLoop.Domain
 open NLoop.Server
 
 type GetInfoResponse = {

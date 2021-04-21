@@ -11,6 +11,7 @@ open Newtonsoft.Json
 open System.Text.Json
 open Expecto
 open NLoop.Server
+open NLoop.Domain.IO
 
 let propConfig = {
   FsCheckConfig.defaultConfig with

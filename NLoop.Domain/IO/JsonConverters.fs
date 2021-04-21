@@ -1,17 +1,14 @@
-namespace NLoop.Server
+namespace NLoop.Domain.IO
 
 open System
-open System.Collections.Generic
-open System.Reflection
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Text.Json.Serialization
-open BTCPayServer.Lightning
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
-open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
+open NLoop.Domain
 
 
 type PeerConnectionStringJsonConverter() =

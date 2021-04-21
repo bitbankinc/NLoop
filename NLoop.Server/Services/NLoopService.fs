@@ -6,6 +6,7 @@ open System.CommandLine.Hosting
 open System.Threading.Channels
 open Microsoft.Extensions.Logging
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration

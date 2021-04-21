@@ -18,12 +18,14 @@ open Microsoft.Extensions.DependencyInjection
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.Crypto
+open NLoop.Domain
 open NLoopClient
 open Xunit
 open FSharp.Control.Tasks
 
 open NLoop.CLI
 open NLoop.Server
+open NLoop.Domain.IO
 
 let getTestRepository(n) =
   let keyDict = ConcurrentDictionary<_,_>()

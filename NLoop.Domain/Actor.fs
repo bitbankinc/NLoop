@@ -7,7 +7,7 @@ open Microsoft.Extensions.Logging
 
 
 [<AbstractClass>]
-type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError>, log: ILogger, ?capacity: int) =
+type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError>, log: ILogger, ?capacity: int) as this =
     let mutable disposed = false
     let capacity = defaultArg capacity 600
     let communicationChannel =
@@ -16,10 +16,7 @@ type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, '
         options.SingleWriter <- false
         Channel.CreateBounded<'TCommand * TaskCompletionSource<unit> option>(options)
 
-    member val State = aggregate.Zero with get, set
-    abstract member PublishEvent: e: 'TEvent -> Task
-    abstract member HandleError: 'TError -> Task
-    member this.StartAsync() = task {
+    let startAsync() = task {
         let mutable nonFinished = true
         while nonFinished && (not disposed) do
             let! cont = communicationChannel.Reader.WaitToReadAsync()
@@ -46,6 +43,11 @@ type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, '
         log.LogInformation "disposing actor"
         return ()
     }
+    do
+      startAsync() |> ignore
+    member val State = aggregate.Zero with get, set
+    abstract member PublishEvent: e: 'TEvent -> Task
+    abstract member HandleError: 'TError -> Task
 
     member this.Put(cmd: 'TCommand) = unitTask {
             do! communicationChannel.Writer.WriteAsync((cmd, None))

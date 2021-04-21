@@ -3,6 +3,7 @@ namespace NLoop.Server.Actors
 open System.Threading.Tasks
 open Microsoft.Extensions.Logging
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Server
 
 type SwapActor(logger: ILoggerFactory, broadcaster: IBroadcaster, feeEstimator: IFeeEstimator, eventAggregator: EventAggregator) =

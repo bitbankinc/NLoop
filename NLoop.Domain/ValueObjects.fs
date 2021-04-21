@@ -1,4 +1,4 @@
-namespace NLoop.Server
+namespace NLoop.Domain
 
 open System
 open System.Net
@@ -77,3 +77,5 @@ type SwapStatusType =
   | TxClaimed = 6uy
   | Unknown = 7uy
 
+
+type SwapId = SwapId of string

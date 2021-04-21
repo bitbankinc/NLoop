@@ -1,4 +1,4 @@
-namespace NLoop.Server
+namespace NLoop.Domain
 
 open System
 open System.Runtime.CompilerServices

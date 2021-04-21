@@ -6,6 +6,7 @@ open System.IO
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.RPC
+open NLoop.Domain
 
 type ChainOptions() =
   static member val Instance = ChainOptions() with get

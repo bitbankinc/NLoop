@@ -7,6 +7,7 @@ open Giraffe
 open Giraffe.HttpStatusCodeHandlers
 open Giraffe.ModelValidation
 open NBitcoin
+open NLoop.Domain
 open NLoop.Server
 
 type LoopInRequest = {
@@ -14,6 +15,8 @@ type LoopInRequest = {
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId option
   Label: string option
+  [<JsonPropertyName "counter_party_pair">]
+  CounterPartyPair: SupportedCryptoCode option
 }
 
 type LoopOutRequest = {

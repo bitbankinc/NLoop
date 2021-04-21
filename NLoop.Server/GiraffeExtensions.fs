@@ -4,6 +4,7 @@ open System.Text.Json
 open Giraffe
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
+open NLoop.Domain
 
 [<AutoOpen>]
 module CustomHandlers =

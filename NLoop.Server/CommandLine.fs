@@ -10,6 +10,7 @@ open System.CommandLine
 open System.CommandLine.Parsing
 open Microsoft.Extensions.Configuration
 open NBitcoin
+open NLoop.Domain
 open NLoop.Server
 
 module NLoopServerCommandLine =

@@ -2,9 +2,9 @@ namespace NLoop.Domain
 
 open System.Linq
 open System.Threading.Tasks
-open Microsoft.Extensions.Logging
 open NBitcoin
-open NLoop.Server
+open NLoop.Domain
+open NLoop.Domain.IO
 open FsToolkit.ErrorHandling
 
 [<RequireQualifiedAccess>]
@@ -61,19 +61,20 @@ module Swap =
     | NewLoopOut of LoopOut
     | NewLoopIn of LoopIn
     | SwapUpdate of Data.SwapStatusUpdate
+    | SetValidationError of id: string * err: string
 
   // ------ event -----
-
   type Event =
     | KnownSwapAddedAgain of id: string
     | NewLoopOutAdded of LoopOut
     | NewLoopInAdded of LoopIn
+    | LoopErrored of id: string * err: string
     | ClaimTxPublished of txid: uint256 * swapId: string
 
   // ------ error -----
   type Error =
-    | NoOp
-
+    | BogusResponseFromBoltz
+    | TransactionError of Transactions.Error
   let executeCommand (s: State) (command: Command): Task<Result<Event list, Error>> =
     taskResult {
       match command with
@@ -96,27 +97,36 @@ module Swap =
         | SwapStatusType.TxMempool
         | SwapStatusType.TxConfirmed ->
           let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
-          let! feeRate = s.FeeEstimator.Estimate(counterPartyCryptoCode)
-          let lockupTx =
-            u.Response.Transaction.Value.Tx // In case of TxConfirmed or TxMempool, it must always have a tx.
-          let claimTx =
+          let! feeRate =
+            s.FeeEstimator.Estimate(counterPartyCryptoCode)
+          let! lockupTx =
+            u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
+          let! claimTx =
             Transactions.createClaimTx
-              (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
+              (ourSwap.ClaimAddress)
               (ourSwap.PrivateKey)
               (ourSwap.Preimage)
               (ourSwap.RedeemScript)
               (feeRate)
-              (lockupTx)
+              (lockupTx.Tx)
               (u.Network)
-          do! s.Broadcaster.BroadcastTx(claimTx, ourCryptoCode)
+            |> Result.mapError(TransactionError)
+          do!
+            s.Broadcaster.BroadcastTx(claimTx, ourCryptoCode)
           let txid = claimTx.GetWitHash()
           return [ClaimTxPublished(txid, ourSwap.Id)]
-        | swapStatus ->
+        | _ ->
           return []
       | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
         let _ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
         return []
       | SwapUpdate _u ->
+        return []
+      | SetValidationError(id, err) when
+          s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
+          s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
+        return [LoopErrored( id, err )]
+      | SetValidationError _ ->
         return []
     }
 
@@ -132,5 +142,11 @@ module Swap =
       { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } }
     | NewLoopInAdded loopIn ->
       { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }
+    | LoopErrored (id, err)->
+      let newLoopIns =
+        state.OnGoing.In |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
+      let newLoopOuts =
+        state.OnGoing.Out |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
+      { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }
 
   type Aggregate = Aggregate<State, Command, Event, Error>

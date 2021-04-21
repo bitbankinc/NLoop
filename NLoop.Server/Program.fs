@@ -9,25 +9,27 @@ open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
+open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Options
+open Microsoft.IO
+open Microsoft.Extensions.Hosting
+
+open Microsoft.AspNetCore.Authentication.Certificate
 open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Server.Kestrel.Core
-open Microsoft.Extensions.Configuration
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.DependencyInjection
-open Microsoft.AspNetCore.Authentication.Certificate
+
 open Giraffe
 
-open Microsoft.Extensions.Options
-open Microsoft.IO
+open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
-
-open Microsoft.Extensions.Hosting
 
 open FSharp.Control.Tasks.Affine
 

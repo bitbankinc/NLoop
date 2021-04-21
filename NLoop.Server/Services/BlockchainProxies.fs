@@ -1,10 +1,12 @@
 namespace NLoop.Server.Services
 
 open System.Threading.Tasks
+open DotNetLightning.Chain
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Server
 
 type BoltzFeeEstimator(boltzClientProvider: BoltzClientProvider, opts: IOptions<NLoopOptions>) =
