@@ -1,9 +1,8 @@
-module Tests
+module SwapTests
 
 open System
 open System.Threading.Tasks
 open NLoop.Domain.IO
-open NLoop.Server
 open Xunit
 open FsCheck
 open FsCheck.Xunit
@@ -32,7 +31,7 @@ type SwapDomainTests() =
     Arb.register<PrimitiveGenerator>() |> ignore
 
   [<Property(MaxTest=10)>]
-  member this.``AddSwapWithSameIdShouldReturnError`` (loopOut) =
+  member this.AddSwapWithSameIdShouldReturnError (loopOut) =
     let aggr = getAggr()
     let state = aggr.Zero
     let t = aggr.Exec(state) (Swap.Command.NewLoopOut(loopOut))

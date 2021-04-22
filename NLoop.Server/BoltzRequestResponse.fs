@@ -131,7 +131,7 @@ type CreateSwapResponse = {
   TimeoutBlockHeight: BlockHeight
 }
   with
-  member this.Validate(preimageHash: uint256, ourInvoiceAmount: Money, maxSwapServiceFee: Money): Result<_, string> =
+  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money): Result<_, string> =
     let actualSpk = this.Address.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
@@ -142,7 +142,7 @@ type CreateSwapResponse = {
       if maxSwapServiceFee < swapServiceFee then
         Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
       else
-        (this.RedeemScript |> Scripts.validateSwapScript preimageHash)
+        (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
 
 
 type CreateChannelRequest = {
@@ -181,7 +181,7 @@ type CreateReverseSwapResponse = {
   RedeemScript: Script
 }
   with
-  member this.Validate(preimageHash: uint256, offChainAmountWePay: Money, maxSwapServiceFee: Money): Result<_, string> =
+  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money): Result<_, string> =
     let actualSpk = this.LockupAddress.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
@@ -196,7 +196,7 @@ type CreateReverseSwapResponse = {
       if maxSwapServiceFee < swapServiceFee then
         Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
       else
-        (this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash)
+        (this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash claimPubKey this.TimeoutBlockHeight)
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

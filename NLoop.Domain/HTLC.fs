@@ -56,23 +56,23 @@ module Scripts =
   let private checkPushData (os: Op []) index expected =
     (Utils.ArrayEqual(os.[index].PushData, expected))
     |> Result.requireTrue
-      $"The push {index}the opcode's pushdata must be {expected |> hex.EncodeData} it was {os.[index].PushData |> hex.EncodeData}"
-  let validateReverseSwapScript (preimageHash: uint256) (script: Script) =
+      $"The {index}th opcode's pushdata must be {expected |> hex.EncodeData} it was {os.[index].PushData |> hex.EncodeData}"
+  let validateReverseSwapScript (preimageHash: uint256) (claimPubKey: PubKey) (BlockHeight timeout) (script: Script) =
     let os = script.ToOps() |> Seq.toArray
     let checkOpcode = checkOpcode os
     let checkPushData = checkPushData os
     result {
       do! checkOpcode 0 OpcodeType.OP_SIZE
-
+      do! checkPushData 1 (Op.GetPushOp(int64 32).PushData)
       do! checkOpcode 2 OpcodeType.OP_EQUAL
       do! checkOpcode 3 OpcodeType.OP_IF
       do! checkOpcode 4 OpcodeType.OP_HASH160
       do! checkPushData 5 (preimageHash.ToBytes() |> Hashes.RIPEMD160)
       do! checkOpcode 6 OpcodeType.OP_EQUALVERIFY
-
+      do! checkPushData 7 (claimPubKey.ToBytes())
       do! checkOpcode 8 OpcodeType.OP_ELSE
       do! checkOpcode 9 OpcodeType.OP_DROP
-
+      do! checkPushData 10 (Op.GetPushOp(int64 timeout).PushData)
       do! checkOpcode 11 OpcodeType.OP_CHECKLOCKTIMEVERIFY
       do! checkOpcode 12 OpcodeType.OP_DROP
 
@@ -81,7 +81,7 @@ module Scripts =
     }
 
 
-  let validateSwapScript (preimageHash: uint256) (script: Script) =
+  let validateSwapScript (preimageHash: uint256) (refundKey: PubKey) (BlockHeight timeout) (script: Script) =
     let os = script.ToOps() |> Seq.toArray
     let checkOpcode = checkOpcode os
     let checkPushData = checkPushData os
@@ -92,10 +92,10 @@ module Scripts =
       do! checkOpcode 3 OpcodeType.OP_IF
 
       do! checkOpcode 5 OpcodeType.OP_ELSE
-
+      do! checkPushData 6 (Op.GetPushOp(int64 timeout).PushData)
       do! checkOpcode 7 OpcodeType.OP_CHECKLOCKTIMEVERIFY
       do! checkOpcode 8 OpcodeType.OP_DROP
-
+      do! checkPushData 9 (refundKey.ToBytes())
       do! checkOpcode 10 OpcodeType.OP_ENDIF
       do! checkOpcode 11 OpcodeType.OP_CHECKSIG
     }

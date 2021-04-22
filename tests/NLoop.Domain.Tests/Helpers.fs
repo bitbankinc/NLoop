@@ -7,3 +7,4 @@ module Result =
     function
       | Ok r -> r
       | Error e -> failwithf "%A" e
+

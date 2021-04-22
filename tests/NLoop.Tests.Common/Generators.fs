@@ -1,6 +1,8 @@
 module Generators
 
 open System
+open DotNetLightning.Payment
+open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
@@ -8,6 +10,7 @@ open NBitcoin.Altcoins
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.DTOs
+open NLoop.Domain
 
 
 [<AutoOpen>]
@@ -110,6 +113,38 @@ type PrimitiveGenerator() =
     |> Gen.filter(Seq.exists(Char.IsControl) >> not)
     |> Gen.map(String)
     |> Arb.fromGen
+
+  static member PaymentRequest(): Arbitrary<PaymentRequest> =
+    let taggedFieldGen =
+      seq [
+        PrimitiveGenerator.String().Generator |> Gen.map(TaggedField.DescriptionTaggedField)
+        Arb.generate<DateTimeOffset>
+          |> Gen.filter(fun d -> d.IsValidUnixTime())
+          |> Gen.map(TaggedField.ExpiryTaggedField)
+      ]
+      |> Gen.oneof
+    let taggedFieldsGen = gen {
+      let! f = taggedFieldGen |> Gen.listOf
+      let f =
+        if f |> List.exists(function | TaggedField.PaymentHashTaggedField t -> true | _ -> false) then
+          f
+        else
+          PaymentHashTaggedField(PaymentHash (RandomUtils.GetUInt256())) :: f
+      return { TaggedFields.Fields = f }
+    }
+    gen {
+      let! m = moneyGen |> Gen.map(fun m -> m.ToLNMoney()) |> Gen.optionOf
+      let! t = Arb.generate<DateTimeOffset> |> Gen.filter(fun d -> d.IsValidUnixTime())
+      let! nodeSecret = keyGen
+      let nodeId = nodeSecret.PubKey |> NodeId
+      let! tags = taggedFieldsGen
+      let r = PaymentRequest.TryCreate("lnbc", m, t, nodeId, tags, nodeSecret)
+      return r
+    }
+    |> Gen.filter(function | Ok _ -> true | x -> false)
+    |> Gen.map(function | Ok r -> r | _ -> failwith "Unreachable")
+    |> Arb.fromGen
+
 
 type ResponseGenerator =
   static member LoopOut() :Arbitrary<LoopOutResponse> =

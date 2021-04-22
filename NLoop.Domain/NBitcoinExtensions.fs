@@ -20,3 +20,9 @@ type NBitcoinExtensions() =
     | "BTC" -> Bitcoin.Instance :> INetworkSet
     | "LTC" -> Litecoin.Instance :> INetworkSet
     | x -> raise <| InvalidOperationException($"Unknown CryptoCode {x}")
+
+  [<Extension>]
+  static member IsValidUnixTime(this: DateTimeOffset): bool =
+    let unixRef = DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    let dt = this.ToUniversalTime()
+    (unixRef <= dt) && ((dt - unixRef).TotalSeconds <= float UInt32.MaxValue)

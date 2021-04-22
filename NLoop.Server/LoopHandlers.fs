@@ -77,7 +77,7 @@ module LoopHandlers =
         }
 
         let actor = ctx.GetService<SwapActor>()
-        match outResponse.Validate(uint256 preimageHash, req.Amount, opts.Value.MaxAcceptableSwapFee) with
+        match outResponse.Validate(uint256 preimageHash, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee) with
         | Error e ->
           do! actor.Put(Swap.Command.SetValidationError(loopOut.Id, e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
@@ -113,7 +113,7 @@ module LoopHandlers =
           let n = opts.Value.GetNetwork(ourCryptoCode)
           let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
 
-          let! key = repo.NewPrivateKey()
+          let! refundKey = repo.NewPrivateKey()
           let! invoice =
             let amt = LightMoney.Satoshis(loopIn.Amount.Satoshi)
             ctx
@@ -129,11 +129,11 @@ module LoopHandlers =
               { CreateSwapRequest.Invoice = invoice
                 PairId = (ourCryptoCode, counterPartyPair)
                 OrderSide = OrderType.buy
-                RefundPublicKey = key.PubKey }
+                RefundPublicKey = refundKey.PubKey }
             boltzCli.CreateSwapAsync(req)
 
           let actor = ctx.GetService<SwapActor>()
-          match inResponse.Validate(invoice.PaymentHash.Value, loopIn.Amount, opts.Value.MaxAcceptableSwapFee) with
+          match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee) with
           | Error e ->
             do! actor.Put(Swap.Command.SetValidationError(inResponse.Id, e))
             ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
@@ -143,7 +143,7 @@ module LoopHandlers =
             LoopIn.Id = inResponse.Id
             Status = SwapStatusType.InvoiceSet
             Error = String.Empty
-            PrivateKey = key
+            PrivateKey = refundKey
             Preimage = None
             RedeemScript = inResponse.RedeemScript
             Invoice = invoice
