@@ -19,11 +19,11 @@ open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.Crypto
 open NLoop.Domain
+open NLoop.Server.Services
 open NLoopClient
 open Xunit
 open FSharp.Control.Tasks
 
-open NLoop.CLI
 open NLoop.Server
 open NLoop.Domain.IO
 
@@ -73,6 +73,10 @@ let getTestRepository(n) =
       member this.JsonOpts = jsonOpts
   }
 
+let getDummyLightningClientProvider() =
+  { new ILightningClientProvider with
+      member this.TryGetClient(cryptoCode) =
+        failwith "" }
 let getTestRepositoryProvider() =
   let repos = Dictionary<SupportedCryptoCode, IRepository>()
   repos.Add(SupportedCryptoCode.BTC, getTestRepository(Bitcoin.Instance.Regtest))
@@ -100,11 +104,13 @@ let getTestHost() =
       services
         .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
         .AddSingleton<IRepositoryProvider>(getTestRepositoryProvider())
+        .AddSingleton<ILightningClientProvider>(getDummyLightningClientProvider())
         |> ignore
     )
     .UseTestServer()
 
 [<Fact>]
+[<Trait("Docker", "Off")>]
 let ``ServerTest(getversion)`` () = task {
   use server = new TestServer(getTestHost())
   use httpClient = server.CreateClient()
@@ -123,6 +129,7 @@ let ``ServerTest(getversion)`` () = task {
 }
 
 [<Fact>]
+[<Trait("Docker", "Off")>]
 let ``ServerTest(LoopOut)`` () = task {
   return ()
 }

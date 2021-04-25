@@ -103,7 +103,7 @@ module Swap =
             u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
           let! claimTx =
             Transactions.createClaimTx
-              (ourSwap.ClaimAddress)
+              (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
               (ourSwap.PrivateKey)
               (ourSwap.Preimage)
               (ourSwap.RedeemScript)

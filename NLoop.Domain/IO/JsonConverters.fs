@@ -87,7 +87,9 @@ type PaymentRequestJsonConverter() =
     value.ToString() |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
     let s = reader.GetString()
-    PaymentRequest.Parse s
+    let r = PaymentRequest.Parse s
+    r |> ResultUtils.Result.mapError(fun e -> printfn "JsonConverterError: %A" e) |> ignore
+    r
     |> ResultUtils.Result.defaultWith (fun () -> raise <| JsonException())
 
 type BitcoinAddressJsonConverter(n: Network) =

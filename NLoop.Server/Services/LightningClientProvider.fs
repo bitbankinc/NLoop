@@ -1,6 +1,7 @@
 namespace NLoop.Server.Services
 
 open System.IO
+open System.Runtime.CompilerServices
 open System.Threading.Tasks
 open FSharp.Control.Tasks
 open System.Collections.Generic
@@ -10,6 +11,17 @@ open Microsoft.Extensions.Options
 open NLoop.Domain
 open NLoop.Server
 
+type ILightningClientProvider =
+  abstract member TryGetClient: crypto: SupportedCryptoCode -> ILightningClient option
+
+
+[<AbstractClass;Sealed;Extension>]
+type ILightningClientProviderExtensions =
+  [<Extension>]
+  static member GetClient(this: ILightningClientProvider, crypto: SupportedCryptoCode) =
+    match this.TryGetClient crypto with
+    | Some v -> v
+    | None -> raise <| InvalidDataException($"cryptocode {crypto} is not supported for layer 2")
 
 type LightningClientProvider(opts: IOptions<NLoopOptions>) =
   let clients = Dictionary<SupportedCryptoCode, ILightningClient>()
@@ -36,12 +48,9 @@ type LightningClientProvider(opts: IOptions<NLoopOptions>) =
       return ()
     }
 
-  member this.TryGetClient(crypto: SupportedCryptoCode) =
-    match clients.TryGetValue(crypto) with
-    | true, v -> v |> Some
-    | _, _ -> None
+  interface ILightningClientProvider with
+    member this.TryGetClient(crypto: SupportedCryptoCode) =
+      match clients.TryGetValue(crypto) with
+      | true, v -> v |> Some
+      | _, _ -> None
 
-  member this.GetClient(crypto: SupportedCryptoCode) =
-    match this.TryGetClient crypto with
-    | Some v -> v
-    | None -> raise <| InvalidDataException($"cryptocode {crypto} is not supported for layer 2")

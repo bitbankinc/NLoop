@@ -4,6 +4,7 @@ open System
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -42,6 +43,7 @@ type NLoopExtensions() =
         .BindCommandLine()
         |> ignore
 
+      this.AddSingleton<ILightningClientProvider, LightningClientProvider>() |> ignore
       this
         .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
         .AddSingleton<IRepositoryProvider, RepositoryProvider>()
@@ -49,7 +51,6 @@ type NLoopExtensions() =
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<EventAggregator>()
-        .AddHostedService<LightningClientProvider>()
         .AddHostedService<SwapEventListeners>()
         .AddSingleton<SwapActor>()
 

@@ -38,8 +38,8 @@ module Helpers =
 
   let networkGen =
     Gen.oneof [
-      Gen.constant Network.Main
-      Gen.constant Network.TestNet
+      // Gen.constant Network.Main
+      // Gen.constant Network.TestNet
       Gen.constant Network.RegTest
     ]
 
@@ -141,8 +141,8 @@ type PrimitiveGenerator() =
       let r = PaymentRequest.TryCreate("lnbc", m, t, nodeId, tags, nodeSecret)
       return r
     }
-    |> Gen.filter(function | Ok _ -> true | x -> false)
-    |> Gen.map(function | Ok r -> r | _ -> failwith "Unreachable")
+    |> Gen.filter(ResultUtils.Result.isOk)
+    |> Gen.map(ResultUtils.Result.deref)
     |> Arb.fromGen
 
 

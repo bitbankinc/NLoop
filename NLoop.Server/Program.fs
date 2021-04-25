@@ -82,7 +82,6 @@ module App =
   let configureApp (app : IApplicationBuilder) =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
       let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
-      printfn $"{opts.Network}"
       (match env.IsDevelopment() with
       | true  ->
           app
@@ -91,9 +90,12 @@ module App =
       | false ->
           app
             .UseGiraffeErrorHandler(errorHandler))
-          .UseCors(configureCors opts)
-          .UseAuthentication()
-          .UseGiraffe(webApp)
+            .UseCors(configureCors opts) |> ignore
+      // Warm up HostedServices
+      app.ApplicationServices.GetService<ILightningClientProvider>() |> ignore
+      app
+        .UseAuthentication()
+        .UseGiraffe(webApp)
 
   let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
       let n = conf.GetChainName()

@@ -4,7 +4,6 @@ open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
-open NBitcoin
 open Newtonsoft.Json
 open NLoop.Domain
 
@@ -20,9 +19,8 @@ type LoopOut = {
   Preimage: uint256
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
-  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
-  Invoice: PaymentRequest
-  ClaimAddress: BitcoinAddress
+  Invoice: string
+  ClaimAddress: string
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   OnChainAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
@@ -43,9 +41,9 @@ type LoopIn = {
   Preimage: uint256 option
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
-  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
-  Invoice: PaymentRequest
-  Address: BitcoinAddress
+  Invoice: string
+  Address: string
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight

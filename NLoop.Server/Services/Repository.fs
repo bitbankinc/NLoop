@@ -129,11 +129,10 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
         try
           use! tx = engine.OpenTransaction()
           let! row = tx.GetTable(DBKeys.idToLoopOutSwap).Get(id)
-          let! x = row.ReadValue()
           let! x = row.ReadValueString()
           return JsonSerializer.Deserialize<LoopOut>(x, jsonOpts) |> Some
         with
-        | e -> return None
+        | _e -> return None
       }
     member this.SetLoopIn(loopIn: LoopIn) =
       if (loopIn |> box |> isNull) then raise <| ArgumentNullException(nameof loopIn) else
@@ -158,7 +157,8 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
             let! x = r.ReadValueString()
             return JsonSerializer.Deserialize<LoopIn>(x, jsonOpts) |> Some
         with
-        | e ->
+        | _e ->
+          printfn "\n\n\nRepo: %A\n\n\n" _e
           return None
       }
 
