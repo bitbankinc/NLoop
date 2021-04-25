@@ -143,6 +143,9 @@ components:
             default is the one it has least.
           nullable: true
         counter_party_pair:
+          enum:
+            - LTC
+            - BTC
           description: <
             counterparty's cryptoCode to swap against.
           default:
@@ -183,6 +186,15 @@ components:
           description: <
             ShortChannelId for the one you want to get inbound liquidity.
             default is the one it has least.
+          nullable: true
+        counter_party_pair:
+          enum:
+            - LTC
+            - BTC
+          description: <
+            counterparty's cryptoCode to swap against.
+          default:
+            The same cryptocurrency with the one you pay.
           nullable: true
         label:
           type: string
