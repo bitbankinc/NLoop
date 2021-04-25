@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DotNetLightning" Version="1.1.2-date20201108-0549-git-2f3ada4" />
+    <PackageReference Include="DotNetLightning" Version="1.1.2-date20210425-1044-git-40e7e2c" />
     <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
     <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
     <PackageReference Include="NBitcoin.Altcoins" Version="2.0.31" />
