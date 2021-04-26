@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Threading.Tasks
+open Microsoft.Extensions.Logging
 open NBitcoin
 
 open System.IO
@@ -87,7 +88,7 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
         let! b = row.ReadValue()
         return new Key(b.ToArray()) |> Some
       with
-      | e -> return None
+      | _e -> return None
     }
   member this.SetPreimage(preimage: byte[], [<O;DefaultParameterValue(null)>]ct: CancellationToken) =
     if (preimage |> box |> isNull) then raise <| ArgumentNullException(nameof preimage) else
@@ -187,10 +188,16 @@ type IRepositoryProviderExtensions()=
       raise <| InvalidDataException($"cryptocode {crypto} not supported")
 
   [<Extension>]
-  static member GetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository =
-    this.GetRepository(SupportedCryptoCode.Parse(cryptoCode))
+  static member TryGetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository option =
+    cryptoCode |> SupportedCryptoCode.TryParse |> Option.bind this.TryGetRepository
 
-type RepositoryProvider(opts: IOptions<NLoopOptions>) =
+  [<Extension>]
+  static member GetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository =
+    match this.TryGetRepository(cryptoCode) with
+    | Some x -> x
+    | None ->
+      raise <| InvalidDataException($"cryptocode {cryptoCode} not supported")
+type RepositoryProvider(opts: IOptions<NLoopOptions>, logger: ILogger<RepositoryProvider>) =
   let repositories = Dictionary<SupportedCryptoCode, IRepository>()
   let startCompletion = TaskCompletionSource<bool>()
 
@@ -210,7 +217,8 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
       | false, _ -> None
 
   interface IHostedService with
-    member this.StartAsync(stoppingToken) = unitTask {
+    member this.StartAsync(_stoppingToken) = unitTask {
+      logger.LogDebug($"Starting RepositoryProvider")
       try
         let dbPath = opts.Value.DBPath
         if (not <| Directory.Exists(dbPath)) then
@@ -222,18 +230,16 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>) =
           let repo =
             let dbPath = Path.Join(dbPath, kv.Key.ToString())
             Repository(engine, opts.Value.Network, kv.Value, dbPath)
-
           repositories.Add(kv.Key, repo)
-
         startCompletion.TrySetResult(true)
-          |> ignore
+        |> ignore
       with
       | x ->
         startCompletion.TrySetCanceled() |> ignore
         raise <| x
     }
 
-    member this.StopAsync(cancellationToken) = unitTask {
+    member this.StopAsync(_cancellationToken) = unitTask {
       if (engine |> isNull |> not) then
         do! engine.DisposeAsync()
     }

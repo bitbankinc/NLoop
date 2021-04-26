@@ -26,9 +26,13 @@ module LoopIn =
   let handler = CommandHandler.Create(Func<IHost,_>(handle))
   let command: Command =
     let command = Command("in", "Perform submarine swap And get outbound liquidity")
-    command.AddAmountOption()
-    command.AddChannelOption()
-    command.AddLabelOption()
+    command
+      .AddAmountOption()
+      .AddChannelOption()
+      .AddCounterPartyPairOption()
+      .AddCryptoCodeOption()
+      .AddLabelOption()
+      |> ignore
     command.Handler <- handler
     command
 

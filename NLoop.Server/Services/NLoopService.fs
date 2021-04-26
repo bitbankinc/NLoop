@@ -17,8 +17,8 @@ open NLoop.Server.Actors
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, conf: IConfiguration) =
-      let n = conf.GetChainName()
+  static member AddNLoopServices(this: IServiceCollection, conf: IConfiguration, ?test: bool) =
+      let test = defaultArg test false
       let addr = conf.GetOrDefault("boltz-url", Constants.DefaultBoltzServer)
       let port = conf.GetOrDefault("boltz-port", Constants.DefaultBoltzPort)
       this
@@ -43,11 +43,20 @@ type NLoopExtensions() =
         .BindCommandLine()
         |> ignore
 
-      this.AddSingleton<ILightningClientProvider, LightningClientProvider>() |> ignore
+      if (not <| test) then
+        this
+          .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+          )
+          .AddSingleton<IRepositoryProvider, RepositoryProvider>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
+          )
+        |> ignore
+
       this
         .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
-        .AddSingleton<IRepositoryProvider, RepositoryProvider>()
-        .AddHostedService<RepositoryProvider>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<EventAggregator>()

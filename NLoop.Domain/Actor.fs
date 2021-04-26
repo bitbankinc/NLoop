@@ -7,7 +7,7 @@ open Microsoft.Extensions.Logging
 
 
 [<AbstractClass>]
-type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError>, log: ILogger, ?capacity: int) as this =
+type Actor<'TState, 'TCommand, 'TEvent, 'TError, 'TDeps>(aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError, 'TDeps>, deps: 'TDeps, log: ILogger, ?capacity: int) as this =
     let mutable disposed = false
     let capacity = defaultArg capacity 600
     let communicationChannel =
@@ -26,7 +26,7 @@ type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, '
                 | true, (cmd, maybeTcs)->
                     let msg = sprintf "read cmd '%A from communication channel" (cmd)
                     log.LogTrace(msg)
-                    match! aggregate.Exec this.State cmd with
+                    match! aggregate.Exec deps this.State cmd with
                     | Ok events ->
                         let msg = sprintf "Successfully executed command (%A) and got events %A" cmd events
                         log.LogTrace(msg)
@@ -46,12 +46,11 @@ type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, '
     do
       startAsync() |> ignore
     member val State = aggregate.Zero with get, set
-    abstract member PublishEvent: e: 'TEvent -> Task
-    abstract member HandleError: 'TError -> Task
+    abstract member PublishEvent: evt: 'TEvent -> Task
+    abstract member HandleError: error: 'TError -> Task
 
-    member this.Put(cmd: 'TCommand) = unitTask {
-            do! communicationChannel.Writer.WriteAsync((cmd, None))
-        }
+    member this.Put(cmd: 'TCommand) =
+        communicationChannel.Writer.WriteAsync((cmd, None))
 
     member this.PutAndWaitProcess(cmd: 'TCommand) =
         let tcs = TaskCompletionSource<unit>()
@@ -60,4 +59,3 @@ type Actor<'TState, 'TCommand, 'TEvent, 'TError>(aggregate: Aggregate<'TState, '
 
     member this.Dispose() =
         disposed <- true
-        ()

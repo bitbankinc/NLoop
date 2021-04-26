@@ -24,15 +24,10 @@ module LoopHandlers =
   open FSharp.Control.Tasks
   open Giraffe
 
-  let handleLoopOut (cryptoCode: string) (req: LoopOutRequest) =
+  let handleLoopOut (ourCryptoCode: SupportedCryptoCode) (req: LoopOutRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
-        match SupportedCryptoCode.Parse cryptoCode with
-        | Error e ->
-          ctx.SetStatusCode 400
-          return! ctx.WriteJsonAsync({| error = e |})
-        | Ok ourCryptoCode ->
-        let repo = ctx.GetService<IRepositoryProvider>().GetRepository cryptoCode
+        let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
         let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
@@ -100,63 +95,58 @@ module LoopHandlers =
           return! json response next ctx
       }
 
-  let handleLoopIn (cryptoCode: string) (loopIn: LoopInRequest) =
+  let handleLoopIn (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
-        match SupportedCryptoCode.Parse cryptoCode with
+        let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
+        let opts = ctx.GetService<IOptions<NLoopOptions>>()
+        let n = opts.Value.GetNetwork(ourCryptoCode)
+        let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
+
+        let! refundKey = repo.NewPrivateKey()
+        let! invoice =
+          let amt = LightMoney.Satoshis(loopIn.Amount.Satoshi)
+          ctx
+            .GetService<LightningClientProvider>()
+            .GetClient(ourCryptoCode)
+            .CreateInvoice(amt, $"This is an invoice for LoopIn by NLoop ({loopIn.Label})", TimeSpan.FromMinutes(5.))
+        let invoice = invoice.ToDNLInvoice()
+        let counterPartyPair =
+          loopIn.CounterPartyPair
+          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
+        let! inResponse =
+          let req =
+            { CreateSwapRequest.Invoice = invoice
+              PairId = (ourCryptoCode, counterPartyPair)
+              OrderSide = OrderType.buy
+              RefundPublicKey = refundKey.PubKey }
+          boltzCli.CreateSwapAsync(req)
+
+        let actor = ctx.GetService<SwapActor>()
+        match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee) with
         | Error e ->
-          ctx.SetStatusCode 400
+          do! actor.Put(Swap.Command.SetValidationError(inResponse.Id, e))
+          ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
-        | Ok ourCryptoCode ->
-          let repo = ctx.GetService<IRepositoryProvider>().GetRepository cryptoCode
-          let opts = ctx.GetService<IOptions<NLoopOptions>>()
-          let n = opts.Value.GetNetwork(ourCryptoCode)
-          let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
-
-          let! refundKey = repo.NewPrivateKey()
-          let! invoice =
-            let amt = LightMoney.Satoshis(loopIn.Amount.Satoshi)
-            ctx
-              .GetService<LightningClientProvider>()
-              .GetClient(ourCryptoCode)
-              .CreateInvoice(amt, $"This is an invoice for LoopIn by NLoop ({loopIn.Label})", TimeSpan.FromMinutes(5.))
-          let invoice = invoice.ToDNLInvoice()
-          let counterPartyPair =
-            loopIn.CounterPartyPair
-            |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
-          let! inResponse =
-            let req =
-              { CreateSwapRequest.Invoice = invoice
-                PairId = (ourCryptoCode, counterPartyPair)
-                OrderSide = OrderType.buy
-                RefundPublicKey = refundKey.PubKey }
-            boltzCli.CreateSwapAsync(req)
-
-          let actor = ctx.GetService<SwapActor>()
-          match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee) with
-          | Error e ->
-            do! actor.Put(Swap.Command.SetValidationError(inResponse.Id, e))
-            ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-            return! ctx.WriteJsonAsync({| error = e |})
-          | Ok () ->
-          let loopIn = {
-            LoopIn.Id = inResponse.Id
-            Status = SwapStatusType.InvoiceSet
-            Error = String.Empty
-            PrivateKey = refundKey
-            Preimage = None
-            RedeemScript = inResponse.RedeemScript
-            Invoice = invoice.ToString()
-            Address = inResponse.Address.ToString()
-            ExpectedAmount = Money.Zero
-            TimeoutBlockHeight = inResponse.TimeoutBlockHeight
-            LockupTransactionId = None
-            RefundTransactionId = None
-            PairId = (ourCryptoCode, counterPartyPair) }
-          do! actor.Put(Swap.Command.NewLoopIn(loopIn))
-          let response = {
-            LoopInResponse.Id = inResponse.Id
-            Address = inResponse.Address
-          }
-          return! json response next ctx
+        | Ok () ->
+        let loopIn = {
+          LoopIn.Id = inResponse.Id
+          Status = SwapStatusType.InvoiceSet
+          Error = String.Empty
+          PrivateKey = refundKey
+          Preimage = None
+          RedeemScript = inResponse.RedeemScript
+          Invoice = invoice.ToString()
+          Address = inResponse.Address.ToString()
+          ExpectedAmount = Money.Zero
+          TimeoutBlockHeight = inResponse.TimeoutBlockHeight
+          LockupTransactionId = None
+          RefundTransactionId = None
+          PairId = (ourCryptoCode, counterPartyPair) }
+        do! actor.Put(Swap.Command.NewLoopIn(loopIn))
+        let response = {
+          LoopInResponse.Id = inResponse.Id
+          Address = inResponse.Address
+        }
+        return! json response next ctx
       }

@@ -14,16 +14,13 @@ module Swap =
     Out: LoopOut list
     In: LoopIn list
   }
+
   type State = {
     OnGoing: SwapList
-    Broadcaster: IBroadcaster
-    FeeEstimator: IFeeEstimator
   }
     with
-    static member Create(b, f) = {
+    static member Zero = {
       State.OnGoing = { Out = []; In = [] }
-      Broadcaster = b
-      FeeEstimator = f
     }
 
   // ------ command -----
@@ -75,7 +72,19 @@ module Swap =
   type Error =
     | BogusResponseFromBoltz
     | TransactionError of Transactions.Error
-  let executeCommand (s: State) (command: Command): Task<Result<Event list, Error>> =
+
+  // ------ deps -----
+  type Deps = {
+    Broadcaster: IBroadcaster
+    FeeEstimator: IFeeEstimator
+  }
+
+  // ----- aggregates ----
+
+  let executeCommand
+    { Broadcaster = broadcaster; FeeEstimator = feeEstimator }
+    (s: State)
+    (command: Command): Task<Result<Event list, Error>> =
     taskResult {
       match command with
       | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
@@ -98,7 +107,7 @@ module Swap =
         | SwapStatusType.TxConfirmed ->
           let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
           let! feeRate =
-            s.FeeEstimator.Estimate(counterPartyCryptoCode)
+            feeEstimator.Estimate(counterPartyCryptoCode)
           let! lockupTx =
             u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
           let! claimTx =
@@ -112,7 +121,7 @@ module Swap =
               (u.Network)
             |> Result.mapError(TransactionError)
           do!
-            s.Broadcaster.BroadcastTx(claimTx, ourCryptoCode)
+            broadcaster.BroadcastTx(claimTx, ourCryptoCode)
           let txid = claimTx.GetWitHash()
           return [ClaimTxPublished(txid, ourSwap.Id)]
         | _ ->
@@ -149,4 +158,4 @@ module Swap =
         state.OnGoing.Out |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
       { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }
 
-  type Aggregate = Aggregate<State, Command, Event, Error>
+  type Aggregate = Aggregate<State, Command, Event, Error, Deps>

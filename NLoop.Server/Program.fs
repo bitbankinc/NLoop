@@ -9,6 +9,7 @@ open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
+open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
@@ -34,13 +35,16 @@ open NLoop.Server.Services
 open FSharp.Control.Tasks.Affine
 
 module App =
-  let noCookie =
+  let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
       "Basic"
       "Access to the protected API"
       "You must authenticate with cookie or certificate"
 
-  let mustAuthenticate = requiresAuthentication noCookie
+  let mustAuthenticate =
+    // TODO: perform real authentication
+    fun (next: HttpFunc) (ctx: HttpContext) -> next ctx
+    // requiresAuthentication noCookie
 
   let webApp =
     choose [
@@ -48,9 +52,9 @@ module App =
         choose [
           POST >=>
             route "/loop/out" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut cryptoCode)
+              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut)
             route "/loop/in" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn cryptoCode)
+              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn)
       ])
       subRoute "/v1" (choose [
         GET >=>
@@ -91,14 +95,12 @@ module App =
           app
             .UseGiraffeErrorHandler(errorHandler))
             .UseCors(configureCors opts) |> ignore
-      // Warm up HostedServices
-      app.ApplicationServices.GetService<ILightningClientProvider>() |> ignore
+
       app
         .UseAuthentication()
         .UseGiraffe(webApp)
 
   let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
-      let n = conf.GetChainName()
 
       // json settings
       let jsonOptions = JsonSerializerOptions()
@@ -165,7 +167,7 @@ module Main =
             .UseStartup<Startup>()
             .UseUrls()
             .UseKestrel(fun kestrelOpts ->
-              let opts = kestrelOpts.ApplicationServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoopOptions>>().Value
+              let opts = kestrelOpts.ApplicationServices.GetRequiredService<IOptions<NLoopOptions>>().Value
               let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
 
               let ipAddresses = ResizeArray<_>()

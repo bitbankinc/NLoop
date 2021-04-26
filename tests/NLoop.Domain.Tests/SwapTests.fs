@@ -22,7 +22,7 @@ type SwapDomainTests() =
         member this.Estimate(cryptoCode) = FeeRate(10m) |> Task.FromResult }
 
   let getAggr() =
-    let s = Swap.State.Create(mockBroadcaster, mockFeeEstimator)
+    let s = Swap.State.Zero(mockBroadcaster, mockFeeEstimator)
     { Swap.Aggregate.Zero = s
       Apply = Swap.applyChanges
       Exec = Swap.executeCommand }
