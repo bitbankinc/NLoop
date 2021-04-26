@@ -17,11 +17,11 @@ jobs:
         dotnet: ['5.0.202']
         include:
           - os: ubuntu-18.04
-            RID: linux
+            RID: linux-x64
           - os: windows-latest
-            RID: win
+            RID: win-x64
           - os: macos-latest
-            RID: osx
+            RID: osx-x64
       fail-fast: true
     steps:
       - uses: actions/checkout@v2
@@ -32,7 +32,9 @@ jobs:
         with:
           dotnet-version: 3.1.200
 
-      - name: pack and push to nuget
+      - name: publish (server)
         run: |
-          bash -c "dotnet publish -p:Configuration=Release NLoop.Server --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}"
-          bash -c "dotnet nuget push NLoop.Server/bin/Release/NLoop.*.nupkg -k ${{ secrets.NUGET_API_KEY }} -s https://api.nuget.org/v3/index.json"
+          bash -c "dotnet publish -c Release --self-contained true -r ${{ matrix.RID }} NLoop.Server --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}"
+      - name: publish (cli)
+        run: |
+          bash -c "dotnet publish -c Release --self-contained true -r ${{ matrix.RID }} NLoop.CLI --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}"
