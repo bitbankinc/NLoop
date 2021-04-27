@@ -4,6 +4,7 @@ open System.IO
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Threading
+open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Domain.IO
 open Xunit
@@ -19,7 +20,7 @@ open FSharp.Control.Tasks
 [<Fact>]
 [<Trait("Docker", "Off")>]
 let ``BoltzClient tests (GetVersion)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/")
     let! v = b.GetVersionAsync()
     Assert.NotNull(v.Version)
   }
@@ -27,7 +28,7 @@ let ``BoltzClient tests (GetVersion)`` () = task {
 [<Fact>]
 [<Trait("Docker", "Off")>]
 let ``BoltzClient tests (GetPairs)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/")
     let! p = b.GetPairsAsync()
     Assert.NotEmpty(p.Pairs)
   }
@@ -35,7 +36,7 @@ let ``BoltzClient tests (GetPairs)`` () = task {
 [<Fact>]
 [<Trait("Docker", "Off")>]
 let ``BoltzClient tests (GetNodes)`` () = task {
-    let b = BoltzClient("https://testnet.boltz.exchange/api/", Network.TestNet)
+    let b = BoltzClient("https://testnet.boltz.exchange/api/")
     let! p = b.GetNodesAsync()
     Assert.NotEmpty(p.Nodes)
   }
@@ -56,7 +57,9 @@ type RepositoryTests() =
     opts.DataDir <- Path.Join(Directory.GetCurrentDirectory(), caller)
     opts.Network <- nameof(Network.RegTest)
     if (opts.DataDir |> Directory.Exists) then Directory.Delete(opts.DataDir, true)
-    let repositoryProvider = RepositoryProvider(Microsoft.Extensions.Options.Options.Create(opts))
+    let repositoryProvider =
+      let l = (new LoggerFactory()).CreateLogger<RepositoryProvider>()
+      RepositoryProvider(Microsoft.Extensions.Options.Options.Create(opts), l)
     do! (repositoryProvider :> IHostedService).StartAsync(CancellationToken.None)
     let! _ = repositoryProvider.StartCompletion
     return repositoryProvider

@@ -87,7 +87,7 @@ module Scripts =
     let checkPushData = checkPushData os
     result {
       do! checkOpcode 0 OpcodeType.OP_HASH160
-      do! checkPushData 1 (preimageHash.ToBytes() |> Hashes.RIPEMD160)
+      do! checkPushData 1 (preimageHash.ToBytes(false) |> Hashes.RIPEMD160)
       do! checkOpcode 2 OpcodeType.OP_EQUAL
       do! checkOpcode 3 OpcodeType.OP_IF
 

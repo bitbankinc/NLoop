@@ -31,10 +31,6 @@ let private handle (host: IHost) =
       r.Channel_id <- pr.ValueForOption<string>("channel")
       r
 
-    printfn "request.Channel_id is : %A" req.Channel_id
-    printfn "request.Addr is : %A" req.Address
-    printfn "request.Amount is : %A" req.Amount
-    printfn "request.Conf_target is : %A" req.Conf_target
     let! resp = cli.OutAsync(cryptoCode, req)
     return resp
   }

@@ -9,11 +9,10 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 
-type BoltzFeeEstimator(boltzClientProvider: BoltzClientProvider, opts: IOptions<NLoopOptions>) =
+type BoltzFeeEstimator(boltzClient: BoltzClient) =
   interface IFeeEstimator with
     member this.Estimate(cryptoCode) = task {
-      let cli = boltzClientProvider.Invoke(opts.Value.GetNetwork(cryptoCode))
-      let! feeMap = cli.GetFeeEstimation()
+      let! feeMap = boltzClient.GetFeeEstimation()
       match feeMap.TryGetValue(cryptoCode.ToString()) with
       | true, fee ->
         return FeeRate(fee |> decimal)

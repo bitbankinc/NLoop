@@ -29,22 +29,22 @@ type LightningClientProvider(opts: IOptions<NLoopOptions>) =
   let startCompletion = TaskCompletionSource()
   member val StartCompletion = startCompletion.Task with get
 
-  member this.CheckClientConnection(c) = task {
+  member this.CheckClientConnection(c, ct) = task {
     let n  = opts.Value.GetNetwork(c)
     let cli = LightningClientFactory.CreateClient(opts.Value.ChainOptions.[c].LightningConnectionString, n)
-    let! _info = cli.GetInfo()
+    let! _info = cli.GetInfo(ct)
     clients.Add(c, cli)
     return ()
   }
 
   interface IHostedService with
     member this.StartAsync(ct) = unitTask {
-      let! _ = Task.WhenAll([for c in opts.Value.OffChainCrypto -> this.CheckClientConnection(c)])
+      let! _ = Task.WhenAll([for c in opts.Value.OffChainCrypto -> this.CheckClientConnection(c, ct)])
       startCompletion.TrySetResult() |> ignore
       ()
     }
 
-    member this.StopAsync(cancellationToken) = unitTask {
+    member this.StopAsync(_cancellationToken) = unitTask {
       return ()
     }
 

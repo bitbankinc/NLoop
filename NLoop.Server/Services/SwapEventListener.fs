@@ -20,7 +20,6 @@ open NLoop.Server.Actors
 
 type SwapEventListener(boltzClient: BoltzClient,
                        logger: ILogger<SwapEventListener>,
-                       eventAggregator: EventAggregator,
                        network: Network,
                        actor: SwapActor
                        ) =
@@ -28,6 +27,15 @@ type SwapEventListener(boltzClient: BoltzClient,
 
   override this.ExecuteAsync(stoppingToken) =
     unitTask {
+        try
+          let! boltzVersion = boltzClient.GetVersionAsync()
+          logger.LogInformation($"Listening to boltz version {boltzVersion.Version}")
+          ()
+        with
+        | ex ->
+          logger.LogCritical($"Connection to Boltz server {boltzClient.HttpClient.BaseAddress} failed!")
+          logger.LogError($"{ex.Message}")
+          raise <| ex
         let mutable notComplete = true
         while notComplete do
           let! shouldContinue = boltzClient.SwapStatusChannel.Reader.WaitToReadAsync(stoppingToken)
@@ -43,19 +51,17 @@ type SwapEventListener(boltzClient: BoltzClient,
     do! actor.Put(Swap.Command.SwapUpdate(cmd))
   }
 
-type SwapEventListeners(boltzClientProvider: BoltzClientProvider,
-                               opts: IOptions<NLoopOptions>,
-                               loggerFactory: ILoggerFactory,
-                               sp: IServiceProvider) =
+type SwapEventListeners(opts: IOptions<NLoopOptions>,
+                        loggerFactory: ILoggerFactory,
+                        sp: IServiceProvider) =
 
   let d = Dictionary<string, SwapEventListener>()
   do
     for kv in opts.Value.ChainOptions do
       let n = opts.Value.GetNetwork(kv.Key)
       let listener =
-        new SwapEventListener(boltzClientProvider.Invoke(n),
+        new SwapEventListener(sp.GetRequiredService<BoltzClient>(),
                               loggerFactory.CreateLogger(),
-                              sp.GetRequiredService<EventAggregator>(),
                               n,
                               sp.GetRequiredService<SwapActor>()
                               )

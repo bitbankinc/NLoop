@@ -3,10 +3,8 @@ namespace NLoop.Server
 open System
 open System.Threading.Tasks
 open BTCPayServer.Lightning
-open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
-open NBitcoin.Altcoins
 open NBitcoin.Crypto
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -16,7 +14,6 @@ open NLoop.Server.DTOs
 open NLoop.Server.Services
 module private HandlerHelpers =
   open Giraffe
-  open System.Threading.Tasks
   let earlyReturn : HttpFunc = Some >> Task.FromResult
 
 module LoopHandlers =
@@ -30,7 +27,7 @@ module LoopHandlers =
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
-        let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
+        let boltzCli = ctx.GetService<BoltzClient>()
 
         use! claimKey = repo.NewPrivateKey()
         let! preimage = repo.NewPreimage()
@@ -52,7 +49,7 @@ module LoopHandlers =
           match req.Address with
           | Some addr -> Task.FromResult addr
           | None ->
-            ctx.GetService<LightningClientProvider>().GetClient(ourCryptoCode).GetDepositAddress()
+            ctx.GetService<ILightningClientProvider>().GetClient(ourCryptoCode).GetDepositAddress()
 
         let loopOut = {
           LoopOut.Id = outResponse.Id
@@ -72,7 +69,7 @@ module LoopHandlers =
         }
 
         let actor = ctx.GetService<SwapActor>()
-        match outResponse.Validate(uint256 preimageHash, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee) with
+        match outResponse.Validate(uint256(preimageHash), claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
           do! actor.Put(Swap.Command.SetValidationError(loopOut.Id, e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
@@ -89,7 +86,7 @@ module LoopHandlers =
               |> Some
           let response = {
             LoopOutResponse.Id = outResponse.Id
-            Address = outResponse.LockupAddress
+            Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
             ClaimTxId = txId
           }
           return! json response next ctx
@@ -101,13 +98,13 @@ module LoopHandlers =
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
-        let boltzCli = ctx.GetService<BoltzClientProvider>().Invoke(n)
+        let boltzCli = ctx.GetService<BoltzClient>()
 
         let! refundKey = repo.NewPrivateKey()
         let! invoice =
           let amt = LightMoney.Satoshis(loopIn.Amount.Satoshi)
           ctx
-            .GetService<LightningClientProvider>()
+            .GetService<ILightningClientProvider>()
             .GetClient(ourCryptoCode)
             .CreateInvoice(amt, $"This is an invoice for LoopIn by NLoop ({loopIn.Label})", TimeSpan.FromMinutes(5.))
         let invoice = invoice.ToDNLInvoice()
@@ -123,7 +120,7 @@ module LoopHandlers =
           boltzCli.CreateSwapAsync(req)
 
         let actor = ctx.GetService<SwapActor>()
-        match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee) with
+        match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
           do! actor.Put(Swap.Command.SetValidationError(inResponse.Id, e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
@@ -146,7 +143,7 @@ module LoopHandlers =
         do! actor.Put(Swap.Command.NewLoopIn(loopIn))
         let response = {
           LoopInResponse.Id = inResponse.Id
-          Address = inResponse.Address
+          Address = BitcoinAddress.Create(inResponse.Address, n)
         }
         return! json response next ctx
       }

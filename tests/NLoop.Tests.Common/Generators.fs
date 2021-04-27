@@ -126,7 +126,7 @@ type PrimitiveGenerator() =
     let taggedFieldsGen = gen {
       let! f = taggedFieldGen |> Gen.listOf
       let f =
-        if f |> List.exists(function | TaggedField.PaymentHashTaggedField t -> true | _ -> false) then
+        if f |> List.exists(function | TaggedField.PaymentHashTaggedField _  -> true | _ -> false) then
           f
         else
           PaymentHashTaggedField(PaymentHash (RandomUtils.GetUInt256())) :: f

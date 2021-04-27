@@ -121,7 +121,7 @@ type ChannelOpenRequest = {
 
 type CreateSwapResponse = {
   Id: string
-  Address: BitcoinAddress
+  Address: string
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   AcceptZeroConf: bool
@@ -131,8 +131,18 @@ type CreateSwapResponse = {
   TimeoutBlockHeight: BlockHeight
 }
   with
-  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money): Result<_, string> =
-    let actualSpk = this.Address.ScriptPubKey
+  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money, n: Network): Result<_, string> =
+    let mutable addr = null
+    let mutable e = null
+    try
+      addr <-
+        BitcoinAddress.Create(this.Address, n)
+    with
+    | :? FormatException as ex ->
+      e <- ex
+      ()
+    if isNull addr then Error($"Boltz returned invalid bitcoin address ({this.Address}): error msg: {e.Message}") else
+    let actualSpk = addr.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
       Error ($"Address {this.Address} and redeem script ({this.RedeemScript}) does not match")
@@ -170,7 +180,7 @@ type CreateReverseSwapRequest = {
 }
 type CreateReverseSwapResponse = {
   Id: string
-  LockupAddress: BitcoinAddress
+  LockupAddress: string
   [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
   Invoice: PaymentRequest
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
@@ -181,8 +191,18 @@ type CreateReverseSwapResponse = {
   RedeemScript: Script
 }
   with
-  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money): Result<_, string> =
-    let actualSpk = this.LockupAddress.ScriptPubKey
+  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, n): Result<_, string> =
+    let mutable addr = null
+    let mutable e = null
+    try
+      addr <-
+        BitcoinAddress.Create(this.LockupAddress, n)
+    with
+    | :? FormatException as ex ->
+      e <- ex
+      ()
+    if isNull addr then Error($"Boltz returned invalid bitcoin address for lockup address ({this.LockupAddress}): error msg: {e.Message}") else
+    let actualSpk = addr.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
       Error ($"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match")

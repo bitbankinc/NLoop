@@ -48,7 +48,7 @@ type IRepository =
 type IRepositoryExtensions() =
   [<Extension>]
   static member NewPrivateKey(this: IRepository) = task {
-    use k = new Key()
+    let k = new Key()
     do! this.SetPrivateKey(k)
     return k
   }

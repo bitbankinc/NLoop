@@ -55,6 +55,11 @@ type NLoopOptions() =
   member val RPCCors = [|"https://localhost:5001"; "http://localhost:5000"|] with get,set
   // -- --
 
+  // -- boltz --
+  member val BoltzHost = Constants.DefaultBoltzServer with get, set
+  member val BoltzPort = Constants.DefaultBoltzPort with get, set
+  member val BoltzHttps = Constants.DefaultBoltzHttps with get, set
+  // -- --
   member val MaxAcceptableSwapFeeSat = 10000L with get, set
   member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSat)
 

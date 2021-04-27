@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Linq
+open System.Net.Http
 open BTCPayServer.Lightning
 open BTCPayServer.Lightning.CLightning
 open BTCPayServer.Lightning.LND
@@ -72,7 +73,10 @@ module DockerFixtureExtensions =
         let lndMacaroonPath = Path.Join(dataPath, "lnd_server", "chain", "bitcoin", "regtest", "admin.macaroon")
         let lndCertThumbprint = getCertFingerPrintHex(Path.Join(dataPath, "lnd_server", "tls.cert"))
         LightningClientFactory.CreateClient($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{ports.[3]}", Network.RegTest) :?> LndClient
-      let serverBoltz = BoltzClient(Uri($"http://localhost:{ports.[4]}"), Network.RegTest)
+      let serverBoltz =
+        let httpClient = new HttpClient()
+        httpClient.BaseAddress <- Uri($"http://localhost:{ports.[4]}")
+        BoltzClient(httpClient)
       { Clients.Bitcoin = bitcoinClient
         Litecoin = litecoinClient
         User = {| Lnd = userLnd |}

@@ -1,11 +1,13 @@
 namespace NLoop.Server.Services
 
 open System
+open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Options
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
@@ -17,16 +19,14 @@ open NLoop.Server.Actors
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, conf: IConfiguration, ?test: bool) =
+  static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
       let test = defaultArg test false
-      let addr = conf.GetOrDefault("boltz-url", Constants.DefaultBoltzServer)
-      let port = conf.GetOrDefault("boltz-port", Constants.DefaultBoltzPort)
       this
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
-          let bindingContext = serviceProvider.GetService<BindingContext>()
           config.Bind(opts)
+          let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
             let cOpts = ChainOptions()
             cOpts.CryptoCode <- c
@@ -56,7 +56,16 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
+        .AddHttpClient<BoltzClient>()
+        .ConfigureHttpClient(fun sp client ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+          client.BaseAddress <-
+            let u = UriBuilder($"{opts.BoltzHost}:{opts.BoltzPort}")
+            u.Scheme <- if opts.BoltzHttps then "https" else "http"
+            u.Uri
+        )
+        |> ignore
+      this
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<EventAggregator>()

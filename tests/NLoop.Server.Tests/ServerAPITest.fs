@@ -86,6 +86,12 @@ let getTestRepositoryProvider() =
         match repos.TryGetValue(crypto) with
         | true, x -> Some x | false, _ -> None }
 
+type TestStartup(env) =
+  member this.Configure(appBuilder) =
+    App.configureApp(appBuilder)
+
+  member this.ConfigureServices(services) =
+    App.configureServices true env services
 
 let getTestHost() =
   WebHostBuilder()
@@ -93,7 +99,7 @@ let getTestHost() =
     .ConfigureAppConfiguration(fun configBuilder ->
       configBuilder.AddJsonFile("appsettings.test.json") |> ignore
       )
-    .UseStartup<Startup>()
+    .UseStartup<TestStartup>()
     .ConfigureLogging(Main.configureLogging)
     .ConfigureTestServices(fun (services: IServiceCollection) ->
       let rc = NLoopServerCommandLine.getRootCommand()
@@ -101,6 +107,12 @@ let getTestHost() =
         CommandLineBuilder(rc)
           .UseMiddleware(Main.useWebHostMiddleware)
           .Build()
+      services
+        .AddHttpClient<BoltzClient>()
+        .ConfigureHttpClient(fun _sp _client ->
+          () // TODO: Inject Mock ?
+          )
+        |> ignore
       services
         .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
         .AddSingleton<IRepositoryProvider>(getTestRepositoryProvider())

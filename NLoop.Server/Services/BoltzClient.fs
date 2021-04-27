@@ -12,6 +12,7 @@ open System.Threading.Tasks
 open System.Threading
 open DotNetLightning.Payment
 open FSharp.Control.Tasks
+open Microsoft.Extensions.Options
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
 open NLoop.Server
@@ -27,23 +28,25 @@ type SwapStatusUpdate = {
 
 exception BoltzRPCException of string
 
-type BoltzClient(address: Uri, network, [<O;D(null)>]_cert: X509Certificate2,
-                 [<O;D(null)>]httpClient: HttpClient) =
+type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
-    jsonOpts.AddNLoopJsonConverters(network)
+    jsonOpts.AddNLoopJsonConverters(Network.RegTest)
     jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
-    if (isNull address) then raise <| ArgumentNullException(nameof(address)) else
-    if (isNull network) then raise <| ArgumentNullException(nameof(network)) else
-    httpClient.BaseAddress <- address
-  new (host: string, port, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
-    BoltzClient(Uri($"%s{host}:%i{port}"), network, cert, httpClient)
-  new (host: string, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
-    BoltzClient(host, 443, network, cert,  httpClient)
+  new (uri: Uri) =
+    let h = new HttpClient()
+    h.BaseAddress <- uri
+    BoltzClient(h)
+
+  new (host: string, ?port: int) =
+    let port = port |> Option.defaultValue(if host.StartsWith("https") then 443 else 80)
+    BoltzClient(Uri($"{host}:{port}"))
+
   member val SwapStatusChannel: Channel<_> = Channel.CreateBounded<_>(10) with get
   member val ListenTasks = ConcurrentDictionary<string, Task>() with get, set
+  member val HttpClient = httpClient with get
   with
 
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
@@ -129,5 +132,3 @@ type BoltzClient(address: Uri, network, [<O;D(null)>]_cert: X509Certificate2,
     this.ListenTasks.AddOrReplace(id, t)
     ()
 
-
-type BoltzClientProvider = delegate of Network -> BoltzClient

@@ -201,9 +201,27 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ZeroOrMore
         a
       o
-
       for c in Enum.GetValues<SupportedCryptoCode>() do
         yield! getChainOptions c
+
+      let o = Option<string>($"--boltzhost", $"Host name of your boltz server: (default: {Constants.DefaultBoltzServer})")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      let o = Option<int>($"--boltzport", $"port of your boltz server: (default: {Constants.DefaultBoltzPort})")
+      o.Argument <-
+        let a = Argument<int>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      let o = Option<bool>($"--boltzhttps", $"Whether to use https for the boltz server or not (default: {Constants.DefaultBoltzHttps})")
+      o.Argument <-
+        let a = Argument<bool>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
     ]
 
 

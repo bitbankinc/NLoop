@@ -42,6 +42,9 @@ module Constants =
   let DefaultBoltzPort = 443
 
   [<Literal>]
+  let DefaultBoltzHttps = true
+
+  [<Literal>]
   let DefaultLightningConnectionString = "type=lnd-rest;server=http://localhost:8080;allowinsecure=true"
 
   type private Foo = Bar

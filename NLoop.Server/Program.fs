@@ -100,7 +100,7 @@ module App =
         .UseAuthentication()
         .UseGiraffe(webApp)
 
-  let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
+  let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
 
       // json settings
       let jsonOptions = JsonSerializerOptions()
@@ -109,7 +109,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(conf) |> ignore
+      services.AddNLoopServices(test) |> ignore
 
       if (env.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -134,8 +134,7 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices conf env services
-
+    App.configureServices false env services
 
 module Main =
 
