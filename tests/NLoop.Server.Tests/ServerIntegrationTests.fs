@@ -72,14 +72,21 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
                             Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
+      b.StartListenToSwapStatusChange(resp.Id)
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
       Assert.NotNull(resp.ExpectedAmount)
       Assert.NotNull(resp.TimeoutBlockHeight)
       // ------
 
+      let! t = b.SwapStatusChannel.Reader.WaitToReadAsync()
+      Assert.True(t)
+      let! status = b.SwapStatusChannel.Reader.ReadAsync()
+      Assert.Equal(status.Id, resp.Id)
+
       let! statusResp = b.GetSwapStatusAsync(resp.Id)
       Assert.Equal(SwapStatusType.InvoiceSet, statusResp.SwapStatus)
+      Assert.Equal(status.NewStatus, statusResp)
     }
 
   (*
