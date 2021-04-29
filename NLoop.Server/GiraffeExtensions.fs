@@ -25,3 +25,10 @@ module CustomHandlers =
                 | None -> return! errorResp()
               | None -> return! errorResp()
           }
+
+  type SSEEvent = {
+    Name: string
+    Data: obj
+    Id: string
+    Retry: int option
+  }

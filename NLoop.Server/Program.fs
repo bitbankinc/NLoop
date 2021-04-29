@@ -60,6 +60,7 @@ module App =
         GET >=>
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
+          route "/events" >=> QueryHandlers.handleListenEvent
         ])
       setStatusCode 404 >=> text "Not Found"
     ]
