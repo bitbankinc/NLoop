@@ -69,6 +69,6 @@ type NLoopExtensions() =
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<EventAggregator>()
-        .AddHostedService<SwapEventListeners>()
+        .AddHostedService<SwapEventListener>()
         .AddSingleton<SwapActor>()
 

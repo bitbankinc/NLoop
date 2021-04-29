@@ -10,6 +10,7 @@ open System.Threading.Tasks
 open BTCPayServer.Lightning
 open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
+open FSharp.Control
 open NBitcoin
 open NBitcoin.Crypto
 open NLoop.Domain
@@ -72,25 +73,15 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
                             Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
-      Console.WriteLine("Check 1")
-      b.StartListenToSwapStatusChange(resp.Id)
-      Console.WriteLine("Check 2")
+      let updateSeq = b.StartListenToSwapStatusChange(resp.Id)
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
       Assert.NotNull(resp.ExpectedAmount)
       Assert.NotNull(resp.TimeoutBlockHeight)
       // ------
 
-      let! t = b.SwapStatusChannel.Reader.WaitToReadAsync()
-      Console.WriteLine("Check 3")
-      Assert.True(t)
-      let! status = b.SwapStatusChannel.Reader.ReadAsync()
-      Console.WriteLine("Check 4")
-      Assert.Equal(status.Id, resp.Id)
-
       let! statusResp = b.GetSwapStatusAsync(resp.Id)
       Assert.Equal(SwapStatusType.InvoiceSet, statusResp.SwapStatus)
-      Assert.Equal(status.NewStatus, statusResp)
     }
 
   (*

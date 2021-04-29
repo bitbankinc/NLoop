@@ -45,6 +45,8 @@ module LoopHandlers =
               PreimageHash = preimageHash |> uint256 }
           boltzCli.CreateReverseSwapAsync(req)
 
+        ctx.GetService<SwapEventListener>().RegisterSwap(outResponse.Id, n)
+
         let! addr =
           match req.Address with
           | Some addr -> Task.FromResult addr
@@ -118,6 +120,8 @@ module LoopHandlers =
               OrderSide = OrderType.buy
               RefundPublicKey = refundKey.PubKey }
           boltzCli.CreateSwapAsync(req)
+
+        ctx.GetService<SwapEventListener>().RegisterSwap(inResponse.Id, n)
 
         let actor = ctx.GetService<SwapActor>()
         match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
