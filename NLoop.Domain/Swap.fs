@@ -127,7 +127,11 @@ module Swap =
         | _ ->
           return []
       | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let _ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
+        let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
+        match u.Response.SwapStatus with
+        | SwapStatusType.TxMempool when not <| ourSwap ->
+          failwith ""
+        | _ ->
         return []
       | SwapUpdate _u ->
         return []

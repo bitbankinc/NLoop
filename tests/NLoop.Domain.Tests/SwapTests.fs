@@ -21,8 +21,12 @@ type SwapDomainTests() =
         with
         member this.Estimate(cryptoCode) = FeeRate(10m) |> Task.FromResult }
 
+  let mockDeps = {
+    Swap.Deps.Broadcaster = mockBroadcaster
+    Swap.Deps.FeeEstimator = mockFeeEstimator }
+
   let getAggr() =
-    let s = Swap.State.Zero(mockBroadcaster, mockFeeEstimator)
+    let s = Swap.State.Zero
     { Swap.Aggregate.Zero = s
       Apply = Swap.applyChanges
       Exec = Swap.executeCommand }
@@ -34,7 +38,7 @@ type SwapDomainTests() =
   member this.AddSwapWithSameIdShouldReturnError (loopOut) =
     let aggr = getAggr()
     let state = aggr.Zero
-    let t = aggr.Exec(state) (Swap.Command.NewLoopOut(loopOut))
+    let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut(loopOut))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     Assert.Equal(Swap.Event.NewLoopOutAdded(loopOut), r)
@@ -42,7 +46,7 @@ type SwapDomainTests() =
     let out = Assert.Single(state.OnGoing.Out)
     Assert.Equal(out, loopOut)
 
-    let t = aggr.Exec(state) (Swap.Command.NewLoopOut(loopOut))
+    let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut(loopOut))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     Assert.Equal(Swap.Event.KnownSwapAddedAgain(loopOut.Id), r)
@@ -62,9 +66,9 @@ type SwapDomainTests() =
           return raise <| Exception("Failed!")
         }
     }
-    let state = { aggr.Zero with FeeEstimator = bogusFeeEstimator }
+    let state = aggr.Zero
     let state =
-      let t = aggr.Exec(state) (Swap.Command.NewLoopOut({ loopOut with Status = SwapStatusType.Created }))
+      let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut({ loopOut with Status = SwapStatusType.Created }))
       let evt = t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
       aggr.Apply(state) (evt)
 
@@ -79,6 +83,6 @@ type SwapDomainTests() =
                                Eta = 1 })
           FailureReason = None }
         Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec(state) (Swap.Command.SwapUpdate(swapUpdate)) :> Task)
+    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec mockDeps (state) (Swap.Command.SwapUpdate(swapUpdate)) :> Task)
     Assert.Equal(e.GetAwaiter().GetResult().Message, "Failed!")
     ()
