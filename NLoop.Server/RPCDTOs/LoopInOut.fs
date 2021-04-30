@@ -7,12 +7,16 @@ open Giraffe
 open Giraffe.HttpStatusCodeHandlers
 open Giraffe.ModelValidation
 open NBitcoin
+open NLoop.Domain
+open NLoop.Server
 
 type LoopInRequest = {
   Amount: Money
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId option
   Label: string option
+  [<JsonPropertyName "counter_party_pair">]
+  CounterPartyPair: SupportedCryptoCode option
 }
 
 type LoopOutRequest = {
@@ -23,13 +27,20 @@ type LoopOutRequest = {
   [<JsonPropertyName "address">]
   Address: BitcoinAddress option
   [<JsonPropertyName "counter_party_pair">]
-  CounterPartyPair: INetworkSet option
+  CounterPartyPair: SupportedCryptoCode option
+  [<JsonPropertyName "amount">]
   Amount: Money
   /// Confirmation target before we make an offer. zero-conf by default.
   [<JsonPropertyName "conf_target">]
   ConfTarget: int option
   Label: string option
 }
+  with
+  member this.AcceptZeroConf =
+    match this.ConfTarget with
+    | None
+    | Some(0) -> true
+    | _ -> false
 
 type LoopInResponse = {
   /// Unique id for the swap.

@@ -5,9 +5,11 @@ open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
+open NBitcoin.JsonConverters
+open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
-open NLoop.Server.Swap
+open NLoop.Domain
 
 type GetVersionResponse = {
   Version: string
@@ -62,18 +64,7 @@ type GetSwapTxResponse = {
 }
   with
   member this.TimeoutEta =
-    this._TimeoutEta |> Option.map NBitcoin.Utils.UnixTimeToDateTime
-
-
-type SwapStatusType =
-  | Created = 0uy
-  | InvoiceSet = 1uy
-  | TxMempool = 2uy
-  | TxConfirmed = 3uy
-  | InvoicePayed = 4uy
-  | InvoiceFailedToPay = 5uy
-  | TxClaimed = 6uy
-  | Unknown = 7uy
+    this._TimeoutEta |> Option.map Utils.UnixTimeToDateTime
 
 type TxInfo = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
@@ -83,6 +74,12 @@ type TxInfo = {
   Tx: Transaction
   Eta: int
 }
+  with
+  member this.ToDomain = {
+    Swap.Data.TxInfo.TxId = this.TxId
+    Swap.Data.TxInfo.Tx = this.Tx
+    Swap.Data.TxInfo.Eta = this.Eta
+  }
 type SwapStatusResponse = {
   [<JsonPropertyName("status")>]
   _Status: string
@@ -99,7 +96,12 @@ type SwapStatusResponse = {
     | "invoice.payed" -> SwapStatusType.InvoicePayed
     | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
     | "transaction.claimed" -> SwapStatusType.TxClaimed
-    | x -> SwapStatusType.Unknown
+    | _x -> SwapStatusType.Unknown
+
+  member this.ToDomain =
+    { Swap.Data.SwapStatusResponseData._Status = this._Status
+      Swap.Data.SwapStatusResponseData.Transaction = this.Transaction |> Option.map(fun t -> t.ToDomain)
+      Swap.Data.SwapStatusResponseData.FailureReason = this.FailureReason }
 
 type CreateSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
@@ -119,12 +121,51 @@ type ChannelOpenRequest = {
 
 type CreateSwapResponse = {
   Id: string
-  Address: BitcoinAddress
+  Address: string
+  [<JsonConverter(typeof<ScriptJsonConverter>)>]
+  RedeemScript: Script
   AcceptZeroConf: bool
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
+}
+  with
+  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money, n: Network): Result<_, string> =
+    let mutable addr = null
+    let mutable e = null
+    try
+      addr <-
+        BitcoinAddress.Create(this.Address, n)
+    with
+    | :? FormatException as ex ->
+      e <- ex
+      ()
+    if isNull addr then Error($"Boltz returned invalid bitcoin address ({this.Address}): error msg: {e.Message}") else
+    let actualSpk = addr.ScriptPubKey
+    let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
+    if (actualSpk <> expectedSpk) then
+      Error ($"Address {this.Address} and redeem script ({this.RedeemScript}) does not match")
+    else
+      let swapServiceFee =
+        ourInvoiceAmount - this.ExpectedAmount
+      if maxSwapServiceFee < swapServiceFee then
+        Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+      else
+        (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
+
+
+type CreateChannelRequest = {
+  [<JsonConverter(typeof<PairIdJsonConverter>)>]
+  PairId: PairId
+  OrderSide: OrderType
+  [<JsonConverter(typeof<HexPubKeyJsonConverter>)>]
+  RefundPublicKey: PubKey
+  [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
+  Invoice: PaymentRequest
+  [<JsonConverter(typeof<UInt256JsonConverter>)>]
+  PreimageHash: uint256
+  Channel: ChannelOpenRequest
 }
 type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
@@ -137,10 +178,9 @@ type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
   PreimageHash: uint256
 }
-
 type CreateReverseSwapResponse = {
   Id: string
-  LockupAddress: BitcoinAddress
+  LockupAddress: string
   [<JsonConverter(typeof<PaymentRequestJsonConverter>)>]
   Invoice: PaymentRequest
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
@@ -151,8 +191,18 @@ type CreateReverseSwapResponse = {
   RedeemScript: Script
 }
   with
-  member this.Validate(preimageHash: uint256, offChainAmountWePay: Money, maxSwapServiceFee: Money) =
-    let actualSpk = this.LockupAddress.ScriptPubKey
+  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, n): Result<_, string> =
+    let mutable addr = null
+    let mutable e = null
+    try
+      addr <-
+        BitcoinAddress.Create(this.LockupAddress, n)
+    with
+    | :? FormatException as ex ->
+      e <- ex
+      ()
+    if isNull addr then Error($"Boltz returned invalid bitcoin address for lockup address ({this.LockupAddress}): error msg: {e.Message}") else
+    let actualSpk = addr.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
       Error ($"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match")
@@ -161,11 +211,12 @@ type CreateReverseSwapResponse = {
     else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
       Error ($"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay}).")
     else
-    let swapServiceFee =
-      offChainAmountWePay - this.OnchainAmount
-    if maxSwapServiceFee < swapServiceFee then
-      Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
-    else (this.RedeemScript |> Scripts.validateScript)
+      let swapServiceFee =
+        offChainAmountWePay - this.OnchainAmount
+      if maxSwapServiceFee < swapServiceFee then
+        Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+      else
+        (this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash claimPubKey this.TimeoutBlockHeight)
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

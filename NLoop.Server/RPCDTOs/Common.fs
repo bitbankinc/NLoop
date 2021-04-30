@@ -2,6 +2,7 @@ namespace NLoop.Server.DTOs
 
 open System.Text.Json.Serialization
 open NBitcoin
+open NLoop.Domain
 open NLoop.Server
 
 type GetInfoResponse = {
@@ -12,9 +13,9 @@ type GetInfoResponse = {
 }
 and SupportedCoins = {
   [<JsonPropertyName "on_chain">]
-  OnChain: INetworkSet seq
+  OnChain: SupportedCryptoCode seq
   [<JsonPropertyName "off_chain">]
-  OffChain: INetworkSet seq
+  OffChain: SupportedCryptoCode seq
 }
 
 

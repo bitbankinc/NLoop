@@ -1,27 +1,24 @@
 namespace NLoop.Server.Services
 
 open System
+open FSharp.Control
 open System.Collections.Concurrent
 open System.IO
 open System.Threading.Channels
-open FSharp.Control
 open System.Net.Http
-open System.Net.Http.Json
 open System.Runtime.InteropServices
 open System.Text
 open System.Text.Json
-open System.Text.Json.Serialization
 open System.Threading.Tasks
 open System.Threading
 open DotNetLightning.Payment
-open DotNetLightning.Utils
 open FSharp.Control.Tasks
-open Macaroons
+open Microsoft.Extensions.Options
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
 open NLoop.Server
-open NLoop.Server.Utils
-open NLoop.Server.DTOs
+open NLoop.Domain.IO
+open NLoop.Domain
 
 type D = DefaultParameterValueAttribute
 
@@ -30,23 +27,25 @@ type SwapStatusUpdate = {
   Id: string
 }
 
-type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
-                 [<O;D(null)>]httpClient: HttpClient) =
+exception BoltzRPCException of string
+
+type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
-    jsonOpts.AddNLoopJsonConverters(network)
+    jsonOpts.AddNLoopJsonConverters(Network.RegTest)
     jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
-    if (isNull address) then raise <| ArgumentNullException(nameof(address)) else
-    if (isNull network) then raise <| ArgumentNullException(nameof(network)) else
-    httpClient.BaseAddress <- address
-  new (host: string, port, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
-    BoltzClient(Uri($"%s{host}:%i{port}"), network, cert, httpClient)
-  new (host: string, network, [<O;D(null)>] cert, [<O;D(null)>] httpClient) =
-    BoltzClient(host, 443, network, cert,  httpClient)
-  member val SwapStatusChannel: Channel<_> = Channel.CreateBounded<_>(10) with get
-  member val ListenTasks = ConcurrentDictionary<string, Task>() with get, set
+  new (uri: Uri) =
+    let h = new HttpClient()
+    h.BaseAddress <- uri
+    BoltzClient(h)
+
+  new (host: string, ?port: int) =
+    let port = port |> Option.defaultValue(if host.StartsWith("https") then 443 else 80)
+    BoltzClient(Uri($"{host}:{port}"))
+
+  member val HttpClient = httpClient with get
   with
 
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
@@ -88,8 +87,8 @@ type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
   member this.GetFeeEstimation([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<Map<string, int64>>("getfeeestimation", HttpMethod.Get, null, ct)
 
-  member this.GetTransactionAsync(currency: INetworkSet, txId: uint256, [<O;D(null)>] ct: CancellationToken) =
-    this.SendCommandAsync<GetTxResponse>("gettransaction", HttpMethod.Post, {| transactionId = txId; Currency = currency.CryptoCode.ToUpperInvariant() |}, ct)
+  member this.GetTransactionAsync(currency: SupportedCryptoCode, txId: uint256, [<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetTxResponse>("gettransaction", HttpMethod.Post, {| transactionId = txId; Currency = currency.ToString() |}, ct)
 
   member this.GetSwapTransactionAsync(id: string, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetSwapTxResponse>("getswaptransaction", HttpMethod.Post, {| Id = id |}, ct)
@@ -106,6 +105,10 @@ type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
     let reqObj = {| req with Type = "reversesubmarine" |}
     this.SendCommandAsync<CreateReverseSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
 
+  member this.CreateChannelCreation(req: CreateChannelRequest, [<O;D(null)>] ct: CancellationToken) =
+    let reqObj = {| req with Type = "submarine" |}
+    this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
+
   member this.GetSwapRatesAsync(swapId: string, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetSwapRatesResponse>("swaprates", HttpMethod.Post, {| Id = swapId |}, ct)
 
@@ -113,20 +116,11 @@ type BoltzClient(address: Uri, network, [<O;D(null)>]cert: X509Certificate2,
     this.SendCommandAsync<SetInvoiceResponse option>("setinvoice", HttpMethod.Post, {| Id = swapId; Invoice = invoice.ToString() |}, ct)
 
   member this.StartListenToSwapStatusChange(id, [<O;D(null)>] ct: CancellationToken) =
-    let t = (unitTask {
-      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}")
+    asyncSeq {
+      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}") |> Async.AwaitTask
       use streamReader = new StreamReader(x)
       while not <| streamReader.EndOfStream && not <| ct.IsCancellationRequested do
-        let! msg = streamReader.ReadLineAsync()
-        let j = JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
-        let mutable notComplete = true
-        while (notComplete && not <| ct.IsCancellationRequested) do
-          let! shouldContinue = this.SwapStatusChannel.Writer.WaitToWriteAsync(ct)
-          notComplete <- shouldContinue
-          do! this.SwapStatusChannel.Writer.WriteAsync({ NewStatus = j; Id = id }, ct)
-    })
-    this.ListenTasks.AddOrReplace(id, t)
-    ()
+        let! msg = streamReader.ReadLineAsync() |> Async.AwaitTask
+        yield JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
+    }
 
-
-type BoltzClientProvider = delegate of Network -> BoltzClient

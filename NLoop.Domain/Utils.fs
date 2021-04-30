@@ -1,3 +1,3 @@
-namespace NLoop.Server.Utils
+namespace NLoop.Domain
 
 type O = OptionalArgumentAttribute

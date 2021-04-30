@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net5.0</TargetFramework>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="Generators.fs" />
+    </ItemGroup>
+    <ItemGroup>
+      <PackageReference Include="Expecto" Version="9.*" />
+      <PackageReference Include="Expecto.FsCheck" Version="9.0.2" />
+      <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
+      <PackageReference Include="YoloDev.Expecto.TestSdk" Version="0.*" />
+      <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.*" />
+      <PackageReference Update="FSharp.Core" Version="5.*" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
+    </ItemGroup>
+
+</Project>

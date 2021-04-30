@@ -9,36 +9,42 @@ open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
+open Microsoft.AspNetCore.Http
+open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Options
+open Microsoft.IO
+open Microsoft.Extensions.Hosting
+
+open Microsoft.AspNetCore.Authentication.Certificate
 open Microsoft.AspNetCore.Authentication.Cookies
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Cors.Infrastructure
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.Server.Kestrel.Core
-open Microsoft.Extensions.Configuration
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.DependencyInjection
-open Microsoft.AspNetCore.Authentication.Certificate
+
 open Giraffe
 
-open Microsoft.Extensions.Options
-open Microsoft.IO
+open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
 open NLoop.Server.Services
 
-open Microsoft.Extensions.Hosting
-
 open FSharp.Control.Tasks.Affine
 
 module App =
-  let noCookie =
+  let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
       "Basic"
       "Access to the protected API"
       "You must authenticate with cookie or certificate"
 
-  let mustAuthenticate = requiresAuthentication noCookie
+  let mustAuthenticate =
+    // TODO: perform real authentication
+    fun (next: HttpFunc) (ctx: HttpContext) -> next ctx
+    // requiresAuthentication noCookie
 
   let webApp =
     choose [
@@ -46,14 +52,15 @@ module App =
         choose [
           POST >=>
             route "/loop/out" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut cryptoCode)
+              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut)
             route "/loop/in" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn cryptoCode)
+              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn)
       ])
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> handleGetInfo
+          route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
+          route "/events" >=> QueryHandlers.handleListenEvent
         ])
       setStatusCode 404 >=> text "Not Found"
     ]
@@ -88,12 +95,13 @@ module App =
       | false ->
           app
             .UseGiraffeErrorHandler(errorHandler))
-          .UseCors(configureCors opts)
-          .UseAuthentication()
-          .UseGiraffe(webApp)
+            .UseCors(configureCors opts) |> ignore
 
-  let configureServices (conf: IConfiguration) (env: IHostEnvironment) (services : IServiceCollection) =
-      let n = conf.GetChainName()
+      app
+        .UseAuthentication()
+        .UseGiraffe(webApp)
+
+  let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
 
       // json settings
       let jsonOptions = JsonSerializerOptions()
@@ -102,7 +110,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(conf) |> ignore
+      services.AddNLoopServices(test) |> ignore
 
       if (env.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -127,8 +135,7 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices conf env services
-
+    App.configureServices false env services
 
 module Main =
 
@@ -160,7 +167,7 @@ module Main =
             .UseStartup<Startup>()
             .UseUrls()
             .UseKestrel(fun kestrelOpts ->
-              let opts = kestrelOpts.ApplicationServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<NLoopOptions>>().Value
+              let opts = kestrelOpts.ApplicationServices.GetRequiredService<IOptions<NLoopOptions>>().Value
               let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
 
               let ipAddresses = ResizeArray<_>()

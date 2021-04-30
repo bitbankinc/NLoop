@@ -1,10 +1,16 @@
 module Generators
 
+open System
+open DotNetLightning.Payment
+open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
 open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
+open NLoop.Domain
+open NLoop.Server
 open NLoop.Server.DTOs
+open NLoop.Domain
 
 
 [<AutoOpen>]
@@ -32,8 +38,8 @@ module Helpers =
 
   let networkGen =
     Gen.oneof [
-      Gen.constant Network.Main
-      Gen.constant Network.TestNet
+      // Gen.constant Network.Main
+      // Gen.constant Network.TestNet
       Gen.constant Network.RegTest
     ]
 
@@ -66,6 +72,52 @@ module Helpers =
           Gen.constant Litecoin.Instance |> Gen.map(unbox)
         ]
 
+  let outpointGen = gen {
+    let! prevHash = uint256Gen
+    let! n = Arb.generate<uint32>
+    return OutPoint(prevHash, n)
+  }
+  let outputGen = gen {
+    let! amount = moneyGen
+    let! dest = bitcoinAddressGen
+    return TxOut(amount, dest :> IDestination)
+  }
+
+  let coinGen = gen {
+    let! outpoint = outpointGen
+    let! output = outputGen
+    return Coin(outpoint, output)
+  }
+
+  let scriptDestGen(s: Script) =
+    Gen.oneof[
+      Gen.constant(s.Hash :> IDestination)
+      Gen.constant(s.WitHash :> IDestination)
+      Gen.constant(s.WitHash.ScriptPubKey.Hash :> IDestination)
+    ]
+  let scriptOutputGen (s: Script) = gen {
+    let! amount = moneyGen
+    let! dest =  scriptDestGen s
+    return TxOut(amount, dest)
+  }
+
+  let scriptCoinGen = gen {
+    let! s = pushScriptGen
+    let! outpoint = outpointGen
+    let! output = scriptOutputGen s
+    let coin = Coin(outpoint, output)
+    return ScriptCoin(coin, s)
+  }
+  let coinsGen = gen {
+    let! coins =
+      seq [
+        coinGen |> Gen.map(fun x -> x :> ICoin)
+        scriptCoinGen |> Gen.map(fun x -> x :> ICoin)
+      ]
+      |> Gen.sequence
+    return coins
+  }
+
 type PrimitiveGenerator() =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
     bitcoinWitScriptAddressGen |> Arb.fromGen
@@ -97,9 +149,53 @@ type PrimitiveGenerator() =
     uint256Gen |> Arb.fromGen
 
   static member KeyGen() : Arbitrary<Key> =
-    bytesOfNGen(32) |> Gen.map Key |> Arb.fromGen
+    bytesOfNGen(32) |> Gen.map(fun x -> new Key(x)) |> Arb.fromGen
   static member ScriptGen(): Arbitrary<Script> =
     pushScriptGen |> Arb.fromGen
+
+  static member String() =
+    Arb.generate<char> // It seems that `Arb.generate<string>` has a bug which causes stack overflow.
+    |> Gen.arrayOf
+    |> Gen.filter(Seq.exists(Char.IsControl) >> not)
+    |> Gen.map(String)
+    |> Arb.fromGen
+
+  static member PaymentRequest(): Arbitrary<PaymentRequest> =
+    let taggedFieldGen =
+      seq [
+        PrimitiveGenerator.String().Generator |> Gen.map(TaggedField.DescriptionTaggedField)
+        Arb.generate<DateTimeOffset>
+          |> Gen.filter(fun d -> d.IsValidUnixTime())
+          |> Gen.map(TaggedField.ExpiryTaggedField)
+      ]
+      |> Gen.oneof
+    let taggedFieldsGen = gen {
+      let! f = taggedFieldGen |> Gen.listOf
+      let f =
+        if f |> List.exists(function | TaggedField.PaymentHashTaggedField _  -> true | _ -> false) then
+          f
+        else
+          PaymentHashTaggedField(PaymentHash (RandomUtils.GetUInt256())) :: f
+      return { TaggedFields.Fields = f }
+    }
+    gen {
+      let! m = moneyGen |> Gen.map(fun m -> m.ToLNMoney()) |> Gen.optionOf
+      let! t = Arb.generate<DateTimeOffset> |> Gen.filter(fun d -> d.IsValidUnixTime())
+      let! nodeSecret = keyGen
+      let nodeId = nodeSecret.PubKey |> NodeId
+      let! tags = taggedFieldsGen
+      let r = PaymentRequest.TryCreate("lnbc", m, t, nodeId, tags, nodeSecret)
+      return r
+    }
+    |> Gen.filter(ResultUtils.Result.isOk)
+    |> Gen.map(ResultUtils.Result.deref)
+    |> Arb.fromGen
+
+  static member OutPoint() : Arbitrary<OutPoint> =
+    outpointGen |> Arb.fromGen
+  static member Coins() : Arbitrary<ICoin list> =
+    coinsGen |> Arb.fromGen
+
 
 type ResponseGenerator =
   static member LoopOut() :Arbitrary<LoopOutResponse> =
@@ -127,10 +223,11 @@ type ResponseGenerator =
   static member GetInfo(): Arbitrary<GetInfoResponse> =
     gen {
       let! v = Arb.generate<NonNull<string>>
-      let! onChain = networkSetGen |> Gen.arrayOf
-      let! offChain = networkSetGen |> Gen.arrayOf
+      let! onChain = Arb.generate<SupportedCryptoCode> |> Gen.arrayOf
+      let! offChain = Arb.generate<SupportedCryptoCode> |> Gen.arrayOf
       return {
         GetInfoResponse.Version = v.Get
         SupportedCoins = { SupportedCoins.OffChain = offChain; OnChain = onChain } }
     }
     |> Arb.fromGen
+

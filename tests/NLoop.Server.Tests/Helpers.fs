@@ -2,6 +2,7 @@ module Helpers
 
 open System
 open System.Net
+open System.Net.Http
 open System.Net.Sockets
 open System.Text
 open NBitcoin.DataEncoders
@@ -15,7 +16,9 @@ open NLoop.Server.Services
 open Org.BouncyCastle.Utilities.Net
 
 let getLocalBoltzClient() =
-  let b = BoltzClient("http://localhost", 9001, Network.RegTest)
+  let httpClient =new  HttpClient()
+  httpClient.BaseAddress <- Uri("http://localhost:9001")
+  let b = BoltzClient(httpClient)
   b
 
 let private GetCertFingerPrint(filePath: string) =

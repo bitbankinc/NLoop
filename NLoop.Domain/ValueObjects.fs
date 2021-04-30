@@ -1,4 +1,4 @@
-namespace NLoop.Server
+namespace NLoop.Domain
 
 open System
 open System.Net
@@ -65,4 +65,17 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (INetworkSet * INetworkSet)
+type PairId = (SupportedCryptoCode * SupportedCryptoCode)
+
+type SwapStatusType =
+  | Created = 0uy
+  | InvoiceSet = 1uy
+  | TxMempool = 2uy
+  | TxConfirmed = 3uy
+  | InvoicePayed = 4uy
+  | InvoiceFailedToPay = 5uy
+  | TxClaimed = 6uy
+  | Unknown = 7uy
+
+
+type SwapId = SwapId of string

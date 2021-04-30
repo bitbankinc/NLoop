@@ -1,29 +1,34 @@
 namespace NLoop.Server
 
-open System.Runtime.CompilerServices
 open System.Text.Json
-open System.Text.Json.Serialization
 open Giraffe
 open Microsoft.AspNetCore.Http
-open Giraffe
-open Giraffe.Core
 open FSharp.Control.Tasks.Affine
-
-[<Extension;AbstractClass;Sealed>]
-type GiraffeExtensions() =
-  [<Extension>]
-  static member BindJsonWithCryptoCodeAsync(this: HttpContext, cryptoCode: string) = task {
-    let repo = this.GetService<RepositoryProvider>().GetRepository(cryptoCode)
-    return! JsonSerializer.DeserializeAsync(this.Request.Body, repo.JsonOpts)
-  }
-
-
+open NLoop.Domain
+open NLoop.Server.DTOs
 
 [<AutoOpen>]
 module CustomHandlers =
-  let bindJsonWithCryptoCode<'T> cryptoCode (f: 'T -> HttpHandler): HttpHandler =
+  let bindJsonWithCryptoCode<'T> cryptoCode (f: SupportedCryptoCode -> 'T -> HttpHandler): HttpHandler =
       fun (next : HttpFunc) (ctx : HttpContext) ->
           task {
-              let! model = ctx.BindJsonWithCryptoCodeAsync<'T>(cryptoCode)
-              return! f model next ctx
+              let errorResp() =
+                ctx.SetStatusCode StatusCodes.Status400BadRequest
+                ctx.WriteJsonAsync({|error = $"unsupported cryptocode {cryptoCode}" |})
+              match SupportedCryptoCode.TryParse cryptoCode with
+              | Some c ->
+                match (ctx.GetService<IRepositoryProvider>().TryGetRepository c) with
+                | Some repo ->
+                  let! model =
+                    JsonSerializer.DeserializeAsync<'T>(ctx.Request.Body, repo.JsonOpts)
+                  return! f c model next ctx
+                | None -> return! errorResp()
+              | None -> return! errorResp()
           }
+
+  type SSEEvent = {
+    Name: string
+    Data: obj
+    Id: string
+    Retry: int option
+  }

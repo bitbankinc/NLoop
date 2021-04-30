@@ -190,7 +190,11 @@
           "counter_party_pair": {
             "description": "< counterparty's cryptoCode to swap against.",
             "default": "The same cryptocurrency with the one you pay.",
-            "nullable": true
+            "nullable": true,
+            "enum": [
+              "LTC",
+              "BTC"
+            ]
           },
           "address": {
             "nullable": true,
@@ -229,6 +233,15 @@
             "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
             "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "counter_party_pair": {
+            "description": "< counterparty's cryptoCode to swap against.",
+            "default": "The same cryptocurrency with the one you pay.",
+            "nullable": true,
+            "enum": [
+              "LTC",
+              "BTC"
+            ]
           },
           "label": {
             "type": "string",

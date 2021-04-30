@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-18.04]
-        dotnet: ['5.0.x']
+        dotnet: ['5.0.202'] # global.json does not support wildcard, so we must be specific
       fail-fast: true
     steps:
       - uses: actions/checkout@v2
@@ -36,8 +36,14 @@ jobs:
         run: |
           dotnet build --configuration Debug NLoop.Server
 
+      - name: Run Domain test in ${{ matrix.os }}
+        run: dotnet test tests/NLoop.Domain.Tests
+
       - name: Run property test in ${{ matrix.os }}
         run: dotnet run --project tests/NLoop.Server.PropertyTests
+
+      - name: Run unit tests for the server
+        run: dotnet test tests/NLoop.Server.Tests --filter="Docker=Off"
 
       - name: Log in to docker hub (For docker image caching)
         run: echo ${{ secrets.REGISTRY_PASS }} | docker login -u ${{ secrets.REGISTRY_USER }} --password-stdin

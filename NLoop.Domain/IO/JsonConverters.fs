@@ -1,16 +1,14 @@
-namespace NLoop.Server
+namespace NLoop.Domain.IO
 
 open System
-open System.Collections.Generic
-open System.Reflection
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Text.Json.Serialization
-open BTCPayServer.Lightning
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
-open NBitcoin.Altcoins
+open NBitcoin.DataEncoders
+open NLoop.Domain
 
 
 type PeerConnectionStringJsonConverter() =
@@ -32,6 +30,16 @@ type HexPubKeyJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> PubKey
 
+type PrivKeyJsonConverter() =
+  inherit JsonConverter<Key>()
+  let hex = HexEncoder()
+
+  override this.Write(writer, value, _options) =
+    value.ToBytes()
+    |> hex.EncodeData
+    |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> hex.DecodeData |> fun x -> new Key(x)
 type BlockHeightJsonConverter() =
   inherit JsonConverter<BlockHeight>()
   override this.Write(writer, value, _options) =
@@ -79,7 +87,9 @@ type PaymentRequestJsonConverter() =
     value.ToString() |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
     let s = reader.GetString()
-    PaymentRequest.Parse s
+    let r = PaymentRequest.Parse s
+    r |> ResultUtils.Result.mapError(fun e -> printfn "JsonConverterError: %A" e) |> ignore
+    r
     |> ResultUtils.Result.defaultWith (fun () -> raise <| JsonException())
 
 type BitcoinAddressJsonConverter(n: Network) =
@@ -93,19 +103,14 @@ type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
   override this.Write(writer, value, _options) =
     let bid, ask = value
-    $"{bid.CryptoCode.ToUpperInvariant()}/{ask.CryptoCode.ToUpperInvariant()}"
+    $"{bid.ToString()}/{ask.ToString()}"
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
 
     let v = reader.GetString()
     let s = v.Split("/")
     if (s.Length <> 2) then raise <| JsonException() else
-    let fromString s =
-      match s with
-      | "BTC" -> Bitcoin.Instance :> INetworkSet
-      | s -> raise <| JsonException($"Unknown network {s}")
-
-    (fromString s.[0], fromString s.[1])
+    (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
 
 type ScriptJsonConverter() =
   inherit JsonConverter<Script>()
@@ -121,19 +126,12 @@ type ShortChannelIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> ShortChannelId.ParseUnsafe
 
-type NetworkSetJsonConverter() =
-  inherit JsonConverter<INetworkSet>()
-  override this.Write(writer, value, _options) =
-    value.CryptoCode.ToUpperInvariant() |> writer.WriteStringValue
-  override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString().GetNetworkFromCryptoCode()
-    |> function Ok r -> r | Error e -> raise <| JsonException(e)
-
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
   static member AddNLoopJsonConverters(this: JsonSerializerOptions, ?n: Network) =
     this.Converters.Add(HexPubKeyJsonConverter())
+    this.Converters.Add(PrivKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
@@ -145,7 +143,7 @@ type Extensions() =
       this.Converters.Add(HexTxConverter(n))
     )
 
+    this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
-    this.Converters.Add(NetworkSetJsonConverter())
     this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))

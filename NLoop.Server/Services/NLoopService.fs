@@ -1,25 +1,76 @@
 namespace NLoop.Server.Services
 
+open System
+open System.CommandLine
+open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Options
+open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
+open NLoop.Server.Actors
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, conf: IConfiguration) =
-      let n = conf.GetChainName()
-      let addr = conf.GetOrDefault("boltz-url", Constants.DefaultBoltzServer)
-      let port = conf.GetOrDefault("boltz-port", Constants.DefaultBoltzPort)
+  static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
+      let test = defaultArg test false
       this
         .AddOptions<NLoopOptions>()
-        .Configure<IConfiguration>(fun opts config -> config.Bind(opts))
+        .Configure<IServiceProvider>(fun opts serviceProvider ->
+          let config = serviceProvider.GetService<IConfiguration>()
+          config.Bind(opts)
+          let bindingContext = serviceProvider.GetService<BindingContext>()
+          for c in Enum.GetValues<SupportedCryptoCode>() do
+            let cOpts = ChainOptions()
+            cOpts.CryptoCode <- c
+            for p in typeof<ChainOptions>.GetProperties() do
+              let op =
+                let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
+                bindingContext.ParseResult.ValueForOption(optsString)
+              let tyDefault = if p.PropertyType = typeof<String> then String.Empty |> box else Activator.CreateInstance(p.PropertyType)
+              if op <> null && op <> tyDefault && op.GetType() = p.PropertyType then
+                p.SetValue(cOpts, op)
+            config.GetSection(c.ToString()).Bind(cOpts)
+            opts.ChainOptions.Add(c, cOpts)
+          )
         .BindCommandLine()
         |> ignore
+
+      if (not <| test) then
+        this
+          .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+          )
+          .AddSingleton<IRepositoryProvider, RepositoryProvider>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
+          )
+        |> ignore
+
       this
-        .AddSingleton<BoltzClientProvider>(BoltzClientProvider(fun n -> BoltzClient(addr, port, n)))
-        .AddSingleton<RepositoryProvider>()
-        .AddSingleton(Channel.CreateBounded<SwapEvent>(500))
+        .AddHttpClient<BoltzClient>()
+        .ConfigureHttpClient(fun sp client ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+          client.BaseAddress <-
+            let u = UriBuilder($"{opts.BoltzHost}:{opts.BoltzPort}")
+            u.Scheme <- if opts.BoltzHttps then "https" else "http"
+            u.Uri
+        )
+        |> ignore
+      this
+        .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
+        .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
+        .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
+        .AddSingleton<GetChangeAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
+        .AddSingleton<EventAggregator>()
+        .AddHostedService<SwapEventListener>()
+        .AddSingleton<SwapActor>()
+

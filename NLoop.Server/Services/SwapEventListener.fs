@@ -1,68 +1,61 @@
 namespace NLoop.Server.Services
 
 
+open System
+open System.Collections.Concurrent
+open System.Collections.Generic
+open System.Threading
+open System.Threading.Tasks
 open FSharp.Control
 open System.Threading.Channels
 open FSharp.Control.Tasks.Affine
+open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
+open NLoop.Domain
 open NLoop.Server
-open NLoop.Server.Swap
+open NLoop.Server.Actors
 
-type SwapEvent =
-  | Foo
 
 type SwapEventListener(boltzClient: BoltzClient,
                        logger: ILogger<SwapEventListener>,
-                       repositoryProvider: RepositoryProvider,
-                       opts: IOptions<NLoopOptions>) =
+                       actor: SwapActor
+                       ) =
   inherit BackgroundService()
 
-  let repository: Repository = failwith "" // repositoryProvider.GetRepository()
+  let tasks = ConcurrentBag()
+
   override this.ExecuteAsync(stoppingToken) =
     unitTask {
-        let mutable notComplete = true
-        while notComplete do
-          let! shouldContinue = boltzClient.SwapStatusChannel.Reader.WaitToReadAsync(stoppingToken)
-          notComplete <- shouldContinue
-          let! swapStatus = boltzClient.SwapStatusChannel.Reader.ReadAsync(stoppingToken)
-          logger.LogInformation($"Swap {swapStatus.Id} status update: {swapStatus.NewStatus.SwapStatus}")
-          do! this.HandleSwapUpdate(swapStatus)
+        try
+          let! boltzVersion = boltzClient.GetVersionAsync()
+          logger.LogInformation($"Listening to boltz version {boltzVersion.Version}")
+          ()
+        with
+        | ex ->
+          logger.LogCritical($"Connection to Boltz server {boltzClient.HttpClient.BaseAddress} failed!")
+          logger.LogError($"{ex.Message}")
+          raise <| ex
+
+        while not <| stoppingToken.IsCancellationRequested do
+          let! t = Task.WhenAny(tasks)
+          do! t
+          ()
     }
-  member private this.HandleSwapUpdate(swapStatus) = unitTask {
-    let! ourReverseSwap = repository.GetLoopOut(swapStatus.Id)
-    let! ourSwap = repository.GetLoopIn(swapStatus.Id)
-    match ourSwap, ourReverseSwap with
-    | Ok s, Error _ ->
-      return failwith "TODO: non-reverse swap"
-    | Error _, Ok s ->
-      if (swapStatus.NewStatus.SwapStatus = s.State) then
-        logger.LogDebug($"Swap Status update is not new for us.")
-        return ()
-      match swapStatus.NewStatus.SwapStatus with
-      | SwapStatusType.TxMempool
-      | SwapStatusType.TxConfirmed ->
-        let _ = swapStatus.NewStatus.Transaction
-        let! feeMap = boltzClient.GetFeeEstimation()
-        let n = opts.Value.Network
-        let fee = failwith "todo" // FeeRate(feeMap.TryGetValue(s))
-        let lockupTx = swapStatus.NewStatus.Transaction.Value.Tx // TODO: stop using Value
-        let claimTx =
-          Transactions.createClaimTx
-            (BitcoinAddress.Create(s.ClaimAddress, n)) (s.PrivateKey) (s.Preimage) (s.RedeemScript) (fee) (lockupTx) (n)
-        ()
-      | _ -> ()
-      return failwith ""
-    | Error _, Error s ->
-      return failwith "todo"
+  member private this.HandleSwapUpdate(swapStatus, id, network) = unitTask {
+    let cmd = { Swap.Data.SwapStatusUpdate.Response = swapStatus
+                Swap.Data.SwapStatusUpdate.Id = id
+                Swap.Data.SwapStatusUpdate.Network = network }
+    do! actor.Put(Swap.Command.SwapUpdate(cmd))
   }
 
-  member this.RegisterLoopOut(swapId) =
-    boltzClient.StartListenToSwapStatusChange(swapId)
-
-
-type SwapEventListenerProvider(boltzClientProvider: BoltzClientProvider) =
-  do
-    failwith "todo"
+  member this.RegisterSwap(id: string, network) =
+    let a = async {
+        let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
+        do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+        for a in boltzClient.StartListenToSwapStatusChange(id) do
+          do! this.HandleSwapUpdate(a.ToDomain, id, network) |> Async.AwaitTask
+      }
+    tasks.Add(a |> Async.StartAsTask)

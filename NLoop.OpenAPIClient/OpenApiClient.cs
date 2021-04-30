@@ -503,7 +503,7 @@ namespace NLoopClient
     
         /// <summary>&lt; counterparty's cryptoCode to swap against.</summary>
         [Newtonsoft.Json.JsonProperty("counter_party_pair", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public object Counter_party_pair { get; set; }
+        public LoopOutRequestCounter_party_pair? Counter_party_pair { get; set; }
     
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
@@ -552,6 +552,10 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
+    
+        /// <summary>&lt; counterparty's cryptoCode to swap against.</summary>
+        [Newtonsoft.Json.JsonProperty("counter_party_pair", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public LoopInRequestCounter_party_pair? Counter_party_pair { get; set; }
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
@@ -690,6 +694,28 @@ namespace NLoopClient
     
         [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
         LTC = 1,
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public enum LoopOutRequestCounter_party_pair
+    {
+        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
+        LTC = 0,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
+        BTC = 1,
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public enum LoopInRequestCounter_party_pair
+    {
+        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
+        LTC = 0,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
+        BTC = 1,
     
     }
     

@@ -10,8 +10,10 @@ open System.Threading.Tasks
 open BTCPayServer.Lightning
 open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
+open FSharp.Control
 open NBitcoin
 open NBitcoin.Crypto
+open NLoop.Domain
 open NLoop.Server.DTOs
 open NLoop.Server
 open NLoop.Server.Services
@@ -23,7 +25,7 @@ open FSharp.Control.Tasks.Affine
 open Xunit.Abstractions
 open DockerComposeFixture
 
-let pairId = (Bitcoin.Instance :> INetworkSet, Bitcoin.Instance :> INetworkSet)
+let pairId = (SupportedCryptoCode.BTC, SupportedCryptoCode.LTC)
 
 type ServerIntegrationTestsBase(msgSync: IMessageSink) =
   inherit DockerFixture(msgSync)
@@ -71,6 +73,7 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
                             Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
+      let updateSeq = b.StartListenToSwapStatusChange(resp.Id)
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
       Assert.NotNull(resp.ExpectedAmount)

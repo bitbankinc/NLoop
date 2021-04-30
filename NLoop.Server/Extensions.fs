@@ -5,6 +5,7 @@ open System
 open System.Globalization
 open System.Linq
 open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.Hosting
 open NBitcoin
 
 [<AbstractClass;Sealed;Extension>]
@@ -29,19 +30,4 @@ type ConfigExtensions() =
         Int32.Parse(str, CultureInfo.InvariantCulture) |> box :?> 'T
       else
         failwith $"Configuration value does not support type {typeof<'T>.Name}"
-
-  [<Extension>]
-  static member GetChainName(conf: IConfiguration) =
-    let network = conf.GetOrDefault<string>("network", null)
-    if (network |> isNull |> not) then
-      let n = Network.GetNetwork(network)
-      if (n |> isNull) then
-        raise <| ArgumentException($"Unknown Network {network}")
-      else
-        n.ChainName
-    else
-      if conf.GetOrDefault("regtest", false) then ChainName.Regtest else
-      if conf.GetOrDefault("testnet", false) then ChainName.Testnet else
-      ChainName.Mainnet
-
 

@@ -6,6 +6,7 @@ open BTCPayServer.Lightning
 open BTCPayServer.Lightning
 open DotNetLightning.Payment
 open DotNetLightning.Utils
+open NLoop.Domain
 open NLoop.Server
 open ResultUtils
 

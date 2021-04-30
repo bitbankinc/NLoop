@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Generators.fs" />
     <Compile Include="OpenApiCompatibilityTests.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>
@@ -24,5 +23,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
     <ProjectReference Include="..\..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
+    <ProjectReference Include="..\NLoop.Tests.Common\NLoop.Tests.Common.fsproj" />
   </ItemGroup>
 </Project>

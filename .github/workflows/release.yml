@@ -40,7 +40,7 @@ jobs:
           name: get_version
           path: version.txt
 
-  pack_and_push:
+  publish_and_push:
     needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
@@ -85,9 +85,9 @@ jobs:
           path: rust-lightning/target
           key: ${{ matrix.os }}-cargo-build-target-${{ hashFiles('rust-lightning/Cargo.lock') }}-${{ hashFiles('rust-lightning/**/src/**') }}
 
-      - name: pack
+      - name: publish
         run: |
-            dotnet pack -p:Configuration=Release src/NRustLightning
+            dotnet publish  -p:Configuration=Release NLoop.Server NLoop.CLI
           
       # get and set release url and version
       - uses: actions/download-artifact@v1
