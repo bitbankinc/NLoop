@@ -68,6 +68,8 @@ type NLoopExtensions() =
       this
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
+        .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
+        .AddSingleton<GetChangeAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<EventAggregator>()
         .AddHostedService<SwapEventListener>()
         .AddSingleton<SwapActor>()

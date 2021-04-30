@@ -49,7 +49,6 @@ let ``ReverseSwapScriptValidationTest`` () =
 
   let timeoutBlockHeight = BlockHeight(248u)
   let t = Scripts.validateReverseSwapScript preimageHash claimKey.PubKey timeoutBlockHeight redeemScript
-  Console.WriteLine($"%A{t}")
   Assert.Equal(t, Ok())
 
   let e = Scripts.validateReverseSwapScript uint256.Zero claimKey.PubKey timeoutBlockHeight redeemScript

@@ -2,6 +2,7 @@ namespace NLoop.Domain
 
 open System
 open System.IO
+open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
@@ -51,3 +52,25 @@ module Transactions =
           WitScript(Op.GetPushOp(redeemScript.ToBytes()))
       tx.Inputs.[0].WitScript <- witnessItems
       Ok tx
+
+  let createSwapPSBT
+    (inputs: ICoin seq)
+    (redeemScript: Script)
+    (outputAmount: Money)
+    (feeRate: FeeRate)
+    (change: IDestination)
+    (timeout: BlockHeight)
+    (n: Network)
+    =
+    if (outputAmount.Satoshi < 0L) then Error("Negative amount for swap output") else
+    let whatWeHave = inputs |> Seq.sumBy(fun i -> i.TxOut.Value)
+    if (whatWeHave < outputAmount) then Error($"Insufficient funds (what we have: {whatWeHave.Satoshi} satoshi, output: {outputAmount.Satoshi} satoshis)") else
+    let txb = n.CreateTransactionBuilder()
+    txb
+      .AddCoins(inputs)
+      .SendEstimatedFees(feeRate)
+      .Send(redeemScript.WitHash.ScriptPubKey, outputAmount)
+      .SetChange(change)
+      .SetLockTime(timeout.Value |> LockTime)
+      .BuildPSBT(false)
+      |> Ok

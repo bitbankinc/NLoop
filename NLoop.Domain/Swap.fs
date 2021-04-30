@@ -1,5 +1,6 @@
 namespace NLoop.Domain
 
+open System.Collections.Generic
 open System.Linq
 open System.Threading.Tasks
 open NBitcoin
@@ -67,22 +68,30 @@ module Swap =
     | NewLoopInAdded of LoopIn
     | LoopErrored of id: string * err: string
     | ClaimTxPublished of txid: uint256 * swapId: string
+    | SwapTxPublished of txid: uint256 * swapId: string
 
   // ------ error -----
   type Error =
     | BogusResponseFromBoltz
     | TransactionError of Transactions.Error
+    | CannotAffordUTXOs of UTXOProviderError
+    | FailedToGetChangeAddress of string
+    | PSBTNotCreated of string
+    | PSBTNotSigned of IList<PSBTError>
 
   // ------ deps -----
   type Deps = {
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
+    UTXOProvider: IUTXOProvider
+    GetChangeAddress: GetChangeAddress
   }
 
   // ----- aggregates ----
 
   let executeCommand
-    { Broadcaster = broadcaster; FeeEstimator = feeEstimator }
+    { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
+      GetChangeAddress = getChangeAddress }
     (s: State)
     (command: Command): Task<Result<Event list, Error>> =
     taskResult {
@@ -91,7 +100,7 @@ module Swap =
         return [KnownSwapAddedAgain loopOut.Id]
       | NewLoopOut loopOut ->
         return [NewLoopOutAdded loopOut]
-      | NewLoopIn loopIn when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
+      | NewLoopIn loopIn when s.OnGoing.In |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
         return [KnownSwapAddedAgain loopIn.Id]
       | NewLoopIn loopIn ->
         return [NewLoopInAdded loopIn]
@@ -129,8 +138,32 @@ module Swap =
       | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
         let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
         match u.Response.SwapStatus with
-        | SwapStatusType.TxMempool when not <| ourSwap ->
-          failwith ""
+        | SwapStatusType.InvoiceSet ->
+          // TODO: check confirmation?
+          let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
+          let! utxos =
+            utxoProvider.GetUTXOs(ourSwap.ExpectedAmount, ourCryptoCode) |> TaskResult.mapError(CannotAffordUTXOs)
+          let! feeRate =
+            feeEstimator.Estimate(counterPartyCryptoCode)
+          let! change = getChangeAddress.Invoke(ourCryptoCode) |> TaskResult.mapError(FailedToGetChangeAddress)
+          let! psbt =
+            Transactions.createSwapPSBT
+              (utxos)
+              ourSwap.RedeemScript
+              (ourSwap.ExpectedAmount)
+              feeRate
+              change
+              ourSwap.TimeoutBlockHeight
+              u.Network
+            |> Result.mapError(PSBTNotCreated)
+          let! psbt = utxoProvider.SignSwapTxPSBT(psbt, ourCryptoCode)
+          match psbt.TryFinalize() with
+          | false, e ->
+            return! Error(PSBTNotSigned e)
+          | true, _ ->
+            let tx = psbt.ExtractTransaction()
+            do! broadcaster.BroadcastTx(tx, ourCryptoCode)
+            return [SwapTxPublished(tx.GetWitHash(), ourSwap.Id)]
         | _ ->
         return []
       | SwapUpdate _u ->
@@ -151,6 +184,10 @@ module Swap =
       let newOuts =
         state.OnGoing.Out |> List.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
       { state with OnGoing = { state.OnGoing with Out = newOuts } }
+    | SwapTxPublished (txid, id) ->
+      let newIns =
+        state.OnGoing.In |> List.map(fun x -> if x.Id = id then { x with LockupTransactionId = Some txid } else x)
+      { state with OnGoing = { state.OnGoing with In = newIns } }
     | NewLoopOutAdded loopOut ->
       { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } }
     | NewLoopInAdded loopIn ->

@@ -6,12 +6,20 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 
-type SwapActor(logger: ILoggerFactory, broadcaster: IBroadcaster, feeEstimator: IFeeEstimator, eventAggregator: EventAggregator) =
+type SwapActor(logger: ILoggerFactory,
+               broadcaster: IBroadcaster,
+               feeEstimator: IFeeEstimator,
+               utxoProvider: IUTXOProvider,
+               getChangeAddress: GetChangeAddress,
+               eventAggregator: EventAggregator) =
   inherit Actor<Swap.State, Swap.Command, Swap.Event, Swap.Error, Swap.Deps>
     ({ Zero = Swap.State.Zero
        Apply = Swap.applyChanges
        Exec = Swap.executeCommand },
-       { Swap.Deps.Broadcaster = broadcaster; Swap.Deps.FeeEstimator = feeEstimator },
+       { Swap.Deps.Broadcaster = broadcaster
+         Swap.Deps.FeeEstimator = feeEstimator
+         Swap.Deps.UTXOProvider = utxoProvider
+         Swap.Deps.GetChangeAddress = getChangeAddress },
        logger.CreateLogger<SwapActor>())
 
   let logger = logger.CreateLogger<SwapActor>()

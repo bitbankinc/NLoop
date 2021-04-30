@@ -72,6 +72,52 @@ module Helpers =
           Gen.constant Litecoin.Instance |> Gen.map(unbox)
         ]
 
+  let outpointGen = gen {
+    let! prevHash = uint256Gen
+    let! n = Arb.generate<uint32>
+    return OutPoint(prevHash, n)
+  }
+  let outputGen = gen {
+    let! amount = moneyGen
+    let! dest = bitcoinAddressGen
+    return TxOut(amount, dest :> IDestination)
+  }
+
+  let coinGen = gen {
+    let! outpoint = outpointGen
+    let! output = outputGen
+    return Coin(outpoint, output)
+  }
+
+  let scriptDestGen(s: Script) =
+    Gen.oneof[
+      Gen.constant(s.Hash :> IDestination)
+      Gen.constant(s.WitHash :> IDestination)
+      Gen.constant(s.WitHash.ScriptPubKey.Hash :> IDestination)
+    ]
+  let scriptOutputGen (s: Script) = gen {
+    let! amount = moneyGen
+    let! dest =  scriptDestGen s
+    return TxOut(amount, dest)
+  }
+
+  let scriptCoinGen = gen {
+    let! s = pushScriptGen
+    let! outpoint = outpointGen
+    let! output = scriptOutputGen s
+    let coin = Coin(outpoint, output)
+    return ScriptCoin(coin, s)
+  }
+  let coinsGen = gen {
+    let! coins =
+      seq [
+        coinGen |> Gen.map(fun x -> x :> ICoin)
+        scriptCoinGen |> Gen.map(fun x -> x :> ICoin)
+      ]
+      |> Gen.sequence
+    return coins
+  }
+
 type PrimitiveGenerator() =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
     bitcoinWitScriptAddressGen |> Arb.fromGen
@@ -144,6 +190,11 @@ type PrimitiveGenerator() =
     |> Gen.filter(ResultUtils.Result.isOk)
     |> Gen.map(ResultUtils.Result.deref)
     |> Arb.fromGen
+
+  static member OutPoint() : Arbitrary<OutPoint> =
+    outpointGen |> Arb.fromGen
+  static member Coins() : Arbitrary<ICoin list> =
+    coinsGen |> Arb.fromGen
 
 
 type ResponseGenerator =

@@ -39,8 +39,9 @@ type SwapEventListener(boltzClient: BoltzClient,
           logger.LogError($"{ex.Message}")
           raise <| ex
 
-        while true do
-          let! _ = Task.WhenAny(tasks)
+        while not <| stoppingToken.IsCancellationRequested do
+          let! t = Task.WhenAny(tasks)
+          do! t
           ()
     }
   member private this.HandleSwapUpdate(swapStatus, id, network) = unitTask {
