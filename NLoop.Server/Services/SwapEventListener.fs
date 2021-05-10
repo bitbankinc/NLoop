@@ -18,6 +18,8 @@ open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
 
+type ISwapEventListener =
+  abstract member RegisterSwap: id: string  * network: Network -> unit
 
 type SwapEventListener(boltzClient: BoltzClient,
                        logger: ILogger<SwapEventListener>,
@@ -48,14 +50,15 @@ type SwapEventListener(boltzClient: BoltzClient,
     let cmd = { Swap.Data.SwapStatusUpdate.Response = swapStatus
                 Swap.Data.SwapStatusUpdate.Id = id
                 Swap.Data.SwapStatusUpdate.Network = network }
-    do! actor.Put(Swap.Command.SwapUpdate(cmd))
+    do! actor.Put(Swap.Msg.SwapUpdate(cmd))
   }
 
-  member this.RegisterSwap(id: string, network) =
-    let a = async {
-        let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
-        do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
-        for a in boltzClient.StartListenToSwapStatusChange(id) do
-          do! this.HandleSwapUpdate(a.ToDomain, id, network) |> Async.AwaitTask
-      }
-    tasks.Add(a |> Async.StartAsTask)
+  interface ISwapEventListener with
+    member this.RegisterSwap(id: string, network) =
+      let a = async {
+          let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
+          do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+          for a in boltzClient.StartListenToSwapStatusChange(id) do
+            do! this.HandleSwapUpdate(a.ToDomain, id, network) |> Async.AwaitTask
+        }
+      tasks.Add(a |> Async.StartAsTask)

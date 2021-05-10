@@ -10,6 +10,7 @@ open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.Routing
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
@@ -84,6 +85,10 @@ module App =
          .AllowAnyHeader()
          |> ignore
 
+  let configureSignalR(endpoints: IEndpointRouteBuilder) =
+      endpoints.MapHub<_>("/v1/events") |> ignore
+      ()
+
   let configureApp (app : IApplicationBuilder) =
       let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
       let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
@@ -99,6 +104,8 @@ module App =
 
       app
         .UseAuthentication()
+        .UseRouting()
+        .UseEndpoints(Action<_>(configureSignalR))
         .UseGiraffe(webApp)
 
   let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =

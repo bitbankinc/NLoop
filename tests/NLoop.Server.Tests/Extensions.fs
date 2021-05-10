@@ -2,27 +2,44 @@ namespace NLoop.Server.Tests.Extensions
 
 open System
 open System.Collections.Generic
+open System.CommandLine.Binding
+open System.CommandLine.Builder
+open System.CommandLine.Parsing
+
 open System.IO
 open System.Linq
 open System.Net.Http
 open BTCPayServer.Lightning
-open BTCPayServer.Lightning.CLightning
 open BTCPayServer.Lightning.LND
 open DockerComposeFixture
 open Helpers
+open Microsoft.AspNetCore.Hosting
+open Microsoft.AspNetCore.TestHost
+open Microsoft.Extensions.DependencyInjection
 open NBitcoin
 open NBitcoin.RPC
+open NLoop.Server
 open NLoop.Server.Services
+open NLoopClient
 
 type Clients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
-  User: {| Lnd: LndClient; |}
+  User: {| Lnd: LndClient; NLoop: NLoopClient; NLoopServer: TestServer |}
   Server: {| Lnd: LndClient; Boltz: BoltzClient |}
 }
 
 [<AutoOpen>]
 module DockerFixtureExtensions =
+  let private getLNDConnectionString path port =
+    let lndMacaroonPath = Path.Join(path, "chain", "bitcoin", "regtest", "admin.macaroon")
+    let lndCertThumbprint = getCertFingerPrintHex(Path.Join(path, "tls.cert"))
+    $"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{port}"
+  let private getLNDClient (path) port  =
+    getLNDConnectionString path port
+    |> fun connStr ->
+      LightningClientFactory.CreateClient(connStr, Network.RegTest) :?> LndClient
+
   type DockerFixture with
     member this.StartFixture(testName: string) =
       let ports = Array.zeroCreate 5 |> findEmptyPort
@@ -66,18 +83,62 @@ module DockerFixtureExtensions =
       let bitcoinClient = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{ports.[0]}"), Network.RegTest)
       let litecoinClient = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{ports.[1]}"), Network.RegTest)
       let userLnd =
-        let lndMacaroonPath = Path.Join(dataPath, "lnd_user", "chain", "bitcoin", "regtest", "admin.macaroon")
-        let lndCertThumbprint = getCertFingerPrintHex(Path.Join(dataPath, "lnd_user", "tls.cert"))
-        LightningClientFactory.CreateClient($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{ports.[2]}", Network.RegTest) :?> LndClient
+        getLNDClient(Path.Join(dataPath, "lnd_user")) ports.[2]
       let serverLnd =
-        let lndMacaroonPath = Path.Join(dataPath, "lnd_server", "chain", "bitcoin", "regtest", "admin.macaroon")
-        let lndCertThumbprint = getCertFingerPrintHex(Path.Join(dataPath, "lnd_server", "tls.cert"))
-        LightningClientFactory.CreateClient($"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{ports.[3]}", Network.RegTest) :?> LndClient
+        getLNDClient(Path.Join(dataPath, "lnd_server")) ports.[3]
       let serverBoltz =
         let httpClient = new HttpClient()
         httpClient.BaseAddress <- Uri($"http://localhost:{ports.[4]}")
         BoltzClient(httpClient)
+      let testHostForDocker =
+        let dataPath = Path.GetFullPath(testName)
+        WebHostBuilder()
+          .UseContentRoot(dataPath)
+          .UseStartup<TestStartup>()
+          .ConfigureAppConfiguration(fun builder ->
+            ()
+          )
+          .ConfigureLogging(Main.configureLogging)
+          .ConfigureTestServices(fun (services: IServiceCollection) ->
+            let lnClientProvider =
+              { new ILightningClientProvider with
+                member this.TryGetClient(cryptoCode) =
+                  userLnd
+                  :> ILightningClient
+                  |> Some
+             }
+            let cliOpts =
+              let p =
+                let rc = NLoopServerCommandLine.getRootCommand()
+                CommandLineBuilder(rc)
+                  .UseMiddleware(Main.useWebHostMiddleware)
+                  .Build()
+              let lndUserConStr = getLNDConnectionString (Path.Join(dataPath, "lnd_user")) ports.[2]
+              p.Parse($"""--network RegTest
+                      --datadir {dataPath}
+                      --nohttps true
+                      --btc.lightningconnectionstring {lndUserConStr}
+                      --ltc.lightningconnectionstring {lndUserConStr}
+                      --boltzhost http://localhost
+                      --boltzport {ports.[4]}
+                      --boltzhttps false
+                      """)
+            services
+              .AddSingleton<BindingContext>(BindingContext(cliOpts))
+              .AddSingleton<ILightningClientProvider>(lnClientProvider)
+              .AddSingleton<BoltzClient>(serverBoltz)
+              .AddSingleton<IRepositoryProvider>(Helpers.getTestRepositoryProvider())
+              |> ignore
+          )
+          |> fun b -> new TestServer(b)
+      let userNLoop =
+        let httpClient = testHostForDocker.CreateClient()
+        let nloopClient = httpClient |> NLoopClient
+        nloopClient.BaseUrl <- httpClient.BaseAddress.ToString()
+        nloopClient
       { Clients.Bitcoin = bitcoinClient
         Litecoin = litecoinClient
-        User = {| Lnd = userLnd |}
+        User = {| Lnd = userLnd; NLoop = userNLoop; NLoopServer = testHostForDocker |}
         Server = {| Lnd = serverLnd; Boltz = serverBoltz |} }
+
+  open Microsoft.AspNetCore.TestHost

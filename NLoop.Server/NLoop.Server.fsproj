@@ -43,6 +43,7 @@
     <Compile Include="GiraffeExtensions.fs" />
     <Compile Include="LoopHandlers.fs" />
     <Compile Include="QueryHandlers.fs" />
+    <Compile Include="Hubs.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

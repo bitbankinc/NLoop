@@ -53,7 +53,11 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
           )
+          .AddSingleton<ISwapEventListener, SwapEventListener>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ISwapEventListener>() :?> SwapEventListener :> IHostedService)
         |> ignore
+
 
       this
         .AddHttpClient<BoltzClient>()
@@ -65,12 +69,13 @@ type NLoopExtensions() =
             u.Uri
         )
         |> ignore
+      this.AddSignalR() |> ignore
+
       this
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
         .AddSingleton<GetChangeAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<EventAggregator>()
-        .AddHostedService<SwapEventListener>()
         .AddSingleton<SwapActor>()
 

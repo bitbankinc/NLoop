@@ -89,7 +89,7 @@ type SwapStatusResponse = {
   with
   member this.SwapStatus =
     match this._Status with
-    | "swap.created" -> SwapStatusType.Created
+    | "swap.created" -> SwapStatusType.SwapCreated
     | "invoice.set" -> SwapStatusType.InvoiceSet
     | "transaction.mempool" -> SwapStatusType.TxMempool
     | "transaction.confirmed" -> SwapStatusType.TxConfirmed

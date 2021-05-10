@@ -1,6 +1,7 @@
 namespace NLoop.Domain.IO
 
 open System.Threading.Tasks
+open DotNetLightning.Payment
 open NBitcoin
 open NLoop.Domain
 
@@ -24,5 +25,8 @@ type IUTXOProvider =
   abstract member GetUTXOs: amountToPay: Money * cryptoCode: SupportedCryptoCode -> Task<Result<ICoin seq, UTXOProviderError>>
   /// Sign psbt for UTXOs provided by `GetUTXOs`
   abstract member SignSwapTxPSBT: psbt: PSBT * cryptoCode: SupportedCryptoCode -> Task<PSBT>
+
+type ILightningClient =
+  abstract member Offer: invoice: PaymentRequest -> Task
 
 type GetChangeAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>

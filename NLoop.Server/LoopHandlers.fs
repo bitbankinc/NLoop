@@ -12,9 +12,6 @@ open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Services
-module private HandlerHelpers =
-  open Giraffe
-  let earlyReturn : HttpFunc = Some >> Task.FromResult
 
 module LoopHandlers =
   open Microsoft.AspNetCore.Http
@@ -45,17 +42,18 @@ module LoopHandlers =
               PreimageHash = preimageHash |> uint256 }
           boltzCli.CreateReverseSwapAsync(req)
 
-        ctx.GetService<SwapEventListener>().RegisterSwap(outResponse.Id, n)
+        ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
 
+        let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(ourCryptoCode)
         let! addr =
           match req.Address with
           | Some addr -> Task.FromResult addr
           | None ->
-            ctx.GetService<ILightningClientProvider>().GetClient(ourCryptoCode).GetDepositAddress()
+            lnClient.GetDepositAddress()
 
         let loopOut = {
           LoopOut.Id = outResponse.Id
-          Status = SwapStatusType.Created
+          Status = SwapStatusType.SwapCreated
           Error = String.Empty
           AcceptZeroConf = req.AcceptZeroConf
           PrivateKey = claimKey
@@ -73,12 +71,14 @@ module LoopHandlers =
         let actor = ctx.GetService<SwapActor>()
         match outResponse.Validate(uint256(preimageHash), claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Put(Swap.Command.SetValidationError(loopOut.Id, e))
+          do! actor.Put(Swap.Msg.SetValidationError(loopOut.Id, e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
-        | Ok _ ->
-          do! actor.Put(Swap.Command.NewLoopOut(loopOut))
+        | Ok () ->
+          do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
           let eventAggregator = ctx.GetService<EventAggregator>()
+          let! _ = eventAggregator.WaitNext<Swap.Event>(function Swap.Event.NewLoopOutAdded _ -> true | _ -> false)
+          let! _ = lnClient.Pay(outResponse.Invoice.ToString())
           let mutable txId = None
           if (req.AcceptZeroConf) then
             let! e = eventAggregator.WaitNext<Swap.Event>(function Swap.Event.ClaimTxPublished(_txid, swapId) -> swapId = loopOut.Id | _ -> false)
@@ -121,12 +121,12 @@ module LoopHandlers =
               RefundPublicKey = refundKey.PubKey }
           boltzCli.CreateSwapAsync(req)
 
-        ctx.GetService<SwapEventListener>().RegisterSwap(inResponse.Id, n)
+        ctx.GetService<ISwapEventListener>().RegisterSwap(inResponse.Id, n)
 
         let actor = ctx.GetService<SwapActor>()
         match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Put(Swap.Command.SetValidationError(inResponse.Id, e))
+          do! actor.Put(Swap.Msg.SetValidationError(inResponse.Id, e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
@@ -144,7 +144,7 @@ module LoopHandlers =
           LockupTransactionId = None
           RefundTransactionId = None
           PairId = (ourCryptoCode, counterPartyPair) }
-        do! actor.Put(Swap.Command.NewLoopIn(loopIn))
+        do! actor.Put(Swap.Msg.NewLoopIn(loopIn))
         let response = {
           LoopInResponse.Id = inResponse.Id
           Address = BitcoinAddress.Create(inResponse.Address, n)

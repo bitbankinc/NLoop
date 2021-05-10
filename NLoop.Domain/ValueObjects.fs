@@ -68,14 +68,23 @@ module SupportedCryptoCode =
 type PairId = (SupportedCryptoCode * SupportedCryptoCode)
 
 type SwapStatusType =
-  | Created = 0uy
-  | InvoiceSet = 1uy
-  | TxMempool = 2uy
-  | TxConfirmed = 3uy
-  | InvoicePayed = 4uy
-  | InvoiceFailedToPay = 5uy
-  | TxClaimed = 6uy
-  | Unknown = 7uy
+  | SwapCreated = 0uy
+  | SwapExpired = 1uy
 
+  | InvoiceSet = 10uy
+  | InvoicePayed = 11uy
+  | InvoicePending = 12uy
+  | InvoiceSettled = 13uy
+  | InvoiceFailedToPay = 14uy
+
+  | ChannelCreated = 20uy
+
+  | TxFailed = 30uy
+  | TxMempool = 31uy
+  | TxClaimed = 32uy
+  | TxRefunded = 33uy
+  | TxConfirmed = 34uy
+
+  | Unknown = 255uy
 
 type SwapId = SwapId of string

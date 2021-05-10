@@ -63,7 +63,7 @@ type SwapDomainTests() =
   member this.AddSwapWithSameIdShouldReturnError (loopOut) =
     let aggr = getAggr()
     let state = aggr.Zero
-    let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut(loopOut))
+    let t = aggr.Exec mockDeps (state) (Swap.Msg.NewLoopOut(loopOut))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     Assert.Equal(Swap.Event.NewLoopOutAdded(loopOut), r)
@@ -71,7 +71,7 @@ type SwapDomainTests() =
     let out = Assert.Single(state.OnGoing.Out)
     Assert.Equal(out, loopOut)
 
-    let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut(loopOut))
+    let t = aggr.Exec mockDeps (state) (Swap.Msg.NewLoopOut(loopOut))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     Assert.Equal(Swap.Event.KnownSwapAddedAgain(loopOut.Id), r)
@@ -100,7 +100,7 @@ type SwapDomainTests() =
 
     let mockDeps = { mockDeps with FeeEstimator = bogusFeeEstimator }
     let state =
-      let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopOut({ loopOut with Status = SwapStatusType.Created }))
+      let t = aggr.Exec mockDeps (state) (Swap.Msg.NewLoopOut({ loopOut with Status = SwapStatusType.SwapCreated }))
       let evt = t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
       aggr.Apply(state) (evt)
 
@@ -115,7 +115,7 @@ type SwapDomainTests() =
                                Eta = 1 })
           FailureReason = None }
         Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec mockDeps (state) (Swap.Command.SwapUpdate(swapUpdate)) :> Task)
+    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec mockDeps (state) (Swap.Msg.SwapUpdate(swapUpdate)) :> Task)
     Assert.Equal(e.GetAwaiter().GetResult().Message, "Failed!")
     ()
 
@@ -139,7 +139,7 @@ type SwapDomainTests() =
      }
 
     // act and assert
-    let t = aggr.Exec mockDeps (state) (Swap.Command.NewLoopIn(loopIn))
+    let t = aggr.Exec mockDeps (state) (Swap.Msg.NewLoopIn(loopIn))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     Assert.Equal(Swap.Event.NewLoopInAdded(loopIn), r)
@@ -154,7 +154,7 @@ type SwapDomainTests() =
           Transaction = None
           FailureReason = None }
         Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-    let t = aggr.Exec mockDeps (state) (Swap.Command.SwapUpdate(swapUpdate))
+    let t = aggr.Exec mockDeps (state) (Swap.Msg.SwapUpdate(swapUpdate))
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> Seq.exactlyOne
     let (_txid, swapId) = r |> function Swap.Event.SwapTxPublished(a, b) -> a, b | x -> failwithf "%A" x

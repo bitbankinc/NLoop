@@ -19,6 +19,7 @@ open NLoop.Server
 open NLoop.Server.Services
 open NLoop.Server
 open NLoop.Server.Tests.Extensions
+open NLoopClient
 open Xunit
 open FSharp.Control.Tasks.Affine
 
@@ -73,7 +74,7 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
                             Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
-      let updateSeq = b.StartListenToSwapStatusChange(resp.Id)
+
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
       Assert.NotNull(resp.ExpectedAmount)
@@ -139,3 +140,19 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
 
     }
     *)
+
+  [<Fact>]
+  [<Trait("Docker", "Docker")>]
+  member this.ServerIntegrationTests() = task {
+      let server = cli.User.NLoopServer
+      let stream = cli.User.NLoop.ListenToEventsAsync()
+      let reader = stream.GetAsyncEnumerator()
+      let! outResponse =
+        let req = LoopOutRequest()
+        cli.User.NLoop.OutAsync(CryptoCode.BTC, req)
+      let! _ = reader.MoveNextAsync()
+      let i = reader.Current
+      Assert.NotNull(i)
+      do i |> function | Swap.Event.NewLoopOutAdded _ -> () | e -> failwithf "Unexpected event %A" e
+      failwith "TODO"
+    }

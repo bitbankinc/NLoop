@@ -2,9 +2,8 @@ namespace NLoop.Domain
 
 open System.Threading.Tasks
 
-type Aggregate<'TState, 'TCommand, 'TEvent, 'TError, 'TDeps> = {
+type Aggregate<'TState, 'TMsg, 'TEvent, 'TError> = {
   Zero: 'TState
-  Apply: 'TState -> 'TEvent -> 'TState
-  Exec: 'TDeps -> 'TState -> 'TCommand -> Task<Result<'TEvent list, 'TError>>
+  Apply: 'TState -> 'TEvent -> 'TState * Task<'TMsg>
+  Exec: 'TState -> 'TMsg -> Task<Result<'TEvent list, 'TError>>
 }
-type Aggregate<'TState, 'TCommand, 'TEvent, 'TError> = Aggregate<'TState, 'TCommand, 'TEvent, 'TError, unit>

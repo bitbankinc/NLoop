@@ -23,6 +23,7 @@ type EventAggregator(logError: Action<string>) =
     this.Subscribe(Action<IEventAggregatorSubscription, 'T>(fun sub t -> subsc.Invoke(sub, t) |> ignore))
   member this.Subscribe<'T>(subsc: Action<'T>) =
     this.Subscribe(Action<IEventAggregatorSubscription, 'T>(fun _sub -> subsc.Invoke))
+
   member this.Subscribe<'T>(subsc: Func<'T, Task>) =
     let errHandler (prevTask: Task) =
       if prevTask.Status = TaskStatus.Faulted then
@@ -89,6 +90,7 @@ type EventAggregator(logError: Action<string>) =
   interface IDisposable with
     member this.Dispose() =
       lock(this._Subscriptions) <| this._Subscriptions.Clear
+
 
 and Subscription(aggregator: EventAggregator, t: Type) =
   let mutable disposed = false

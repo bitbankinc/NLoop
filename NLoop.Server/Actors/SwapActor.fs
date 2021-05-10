@@ -6,20 +6,25 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 
+[<AutoOpen>]
+module private Helpers =
+  let getSwapDeps b f u g =
+    { Swap.Deps.Broadcaster = b
+      Swap.Deps.FeeEstimator = f
+      Swap.Deps.UTXOProvider = u
+      Swap.Deps.GetChangeAddress = g
+      Swap.Deps.LightningClient = failwith "todo" }
+
 type SwapActor(logger: ILoggerFactory,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetChangeAddress,
                eventAggregator: EventAggregator) =
-  inherit Actor<Swap.State, Swap.Command, Swap.Event, Swap.Error, Swap.Deps>
+  inherit Actor<Swap.State, Swap.Msg, Swap.Event, Swap.Error>
     ({ Zero = Swap.State.Zero
-       Apply = Swap.applyChanges
-       Exec = Swap.executeCommand },
-       { Swap.Deps.Broadcaster = broadcaster
-         Swap.Deps.FeeEstimator = feeEstimator
-         Swap.Deps.UTXOProvider = utxoProvider
-         Swap.Deps.GetChangeAddress = getChangeAddress },
+       Apply = Swap.applyChanges (getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress)
+       Exec = Swap.executeCommand (getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress) },
        logger.CreateLogger<SwapActor>())
 
   let logger = logger.CreateLogger<SwapActor>()
@@ -27,6 +32,7 @@ type SwapActor(logger: ILoggerFactory,
     logger.LogError($"{error}")
     Task.CompletedTask
   override this.PublishEvent(evt) =
+    logger.LogDebug($"{evt}")
     eventAggregator.Publish(evt)
     Task.CompletedTask
 
