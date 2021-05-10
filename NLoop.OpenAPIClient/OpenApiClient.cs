@@ -29,13 +29,11 @@ namespace NLoopClient
         System.Threading.Tasks.Task<GetInfoResponse> InfoAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="cryptoCode">Symbol name for the currency.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<LoopOutResponse> OutAsync(CryptoCode cryptoCode, LoopOutRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="cryptoCode">Symbol name for the currency.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<LoopInResponse> InAsync(CryptoCode cryptoCode, LoopInRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
@@ -211,7 +209,6 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="cryptoCode">Symbol name for the currency.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
         public async System.Threading.Tasks.Task<LoopOutResponse> OutAsync(CryptoCode cryptoCode, LoopOutRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
@@ -289,7 +286,6 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="cryptoCode">Symbol name for the currency.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
         public async System.Threading.Tasks.Task<LoopInResponse> InAsync(CryptoCode cryptoCode, LoopInRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
@@ -469,6 +465,18 @@ namespace NLoopClient
         }
     }
 
+    /// <summary>Symbol name for the currency.</summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public enum CryptoCode
+    {
+        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
+        BTC = 0,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
+        LTC = 1,
+    
+    }
+    
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class BitcoinAddressNonMalleable 
     {
@@ -501,9 +509,10 @@ namespace NLoopClient
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
-        /// <summary>&lt; counterparty's cryptoCode to swap against.</summary>
+        /// <summary>&lt; counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.</summary>
         [Newtonsoft.Json.JsonProperty("counter_party_pair", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public LoopOutRequestCounter_party_pair? Counter_party_pair { get; set; }
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public CryptoCode? Counter_party_pair { get; set; }
     
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
@@ -553,9 +562,10 @@ namespace NLoopClient
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
-        /// <summary>&lt; counterparty's cryptoCode to swap against.</summary>
+        /// <summary>&lt; counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.</summary>
         [Newtonsoft.Json.JsonProperty("counter_party_pair", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public LoopInRequestCounter_party_pair? Counter_party_pair { get; set; }
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public CryptoCode? Counter_party_pair { get; set; }
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
@@ -687,46 +697,13 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum CryptoCode
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
-        BTC = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
-        LTC = 1,
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum LoopOutRequestCounter_party_pair
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
-        LTC = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
-        BTC = 1,
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum LoopInRequestCounter_party_pair
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
-        LTC = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
-        BTC = 1,
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class Supported_coins 
     {
         [Newtonsoft.Json.JsonProperty("on_chain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore, ItemConverterType = typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
-        public System.Collections.Generic.ICollection<On_chain> On_chain { get; set; }
+        public System.Collections.Generic.ICollection<CryptoCode> On_chain { get; set; }
     
         [Newtonsoft.Json.JsonProperty("off_chain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore, ItemConverterType = typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
-        public System.Collections.Generic.ICollection<Off_chain> Off_chain { get; set; }
+        public System.Collections.Generic.ICollection<CryptoCode> Off_chain { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -746,28 +723,6 @@ namespace NLoopClient
         {
             return Newtonsoft.Json.JsonConvert.DeserializeObject<Supported_coins>(data);
         }
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum On_chain
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
-        LTC = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
-        BTC = 1,
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum Off_chain
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"LTC")]
-        LTC = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BTC")]
-        BTC = 1,
     
     }
 

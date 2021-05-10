@@ -32,9 +32,9 @@
     <Compile Include="BTCPayServerExtensions.fs" />
     <Compile Include="BoltzRequestResponse.fs" />
     <Compile Include="EventAggregator.fs" />
+    <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Services\BoltzClient.fs" />
-    <Compile Include="Services\LightningClientProvider.fs" />
     <Compile Include="Services\Repository.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\SwapEventListener.fs" />

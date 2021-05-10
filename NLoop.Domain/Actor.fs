@@ -16,6 +16,8 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
         options.SingleWriter <- false
         Channel.CreateBounded<'TMsg * TaskCompletionSource<unit> option>(options)
 
+    let mutable _s = aggregate.Zero
+    let lockObj = obj()
     let startAsync() = task {
         let mutable nonFinished = true
         while nonFinished && (not disposed) do
@@ -32,20 +34,11 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
                           let msg = sprintf "Successfully executed command (%A) and got events %A" cmd events
                           log.LogTrace(msg)
                         for e in events do
-                          let nextState, cmd = aggregate.Apply this.State e
-                          let! _ =
-                            cmd.ContinueWith<_>(fun t -> task {
-                                let! x = t
-                                this.Put(x)
-                              }
-                            )
-                          for c in cmd do
-                            try
-                              do! this.Put(c)
-                            with
-                            | exn ->
-                              (sprintf "Error in command while handling: %A (%A)" msg exn) |> log.LogError
-
+                          let nextState, nextMsg = aggregate.Apply this.State e
+                          match nextMsg with
+                          | Some m ->
+                            do! this.Put(m)
+                          | None -> ()
                           this.State <- nextState
                         maybeTcs |> Option.iter(fun tcs -> tcs.SetResult())
                         for e in events do
@@ -61,7 +54,11 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
     }
     do
         startAsync() |> ignore
-    member val State = aggregate.Zero with get, set
+    member this.State
+      with get () = _s
+      and private set (s) =
+        lock lockObj <| fun () ->
+          _s <- s
     abstract member PublishEvent: evt: 'TEvent -> Task
     abstract member HandleError: error: 'TError -> Task
 

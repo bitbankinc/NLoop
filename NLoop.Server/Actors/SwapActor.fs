@@ -8,23 +8,24 @@ open NLoop.Server
 
 [<AutoOpen>]
 module private Helpers =
-  let getSwapDeps b f u g =
+  let getSwapDeps b f u g l =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
       Swap.Deps.UTXOProvider = u
       Swap.Deps.GetChangeAddress = g
-      Swap.Deps.LightningClient = failwith "todo" }
+      Swap.Deps.LightningClient = l }
 
 type SwapActor(logger: ILoggerFactory,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetChangeAddress,
+               lightningClientProvider: ILightningClientProvider,
                eventAggregator: EventAggregator) =
   inherit Actor<Swap.State, Swap.Msg, Swap.Event, Swap.Error>
     ({ Zero = Swap.State.Zero
-       Apply = Swap.applyChanges (getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress)
-       Exec = Swap.executeCommand (getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress) },
+       Apply = Swap.applyChanges
+       Exec = Swap.executeCommand (getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress (lightningClientProvider.AsDomainLNClient())) },
        logger.CreateLogger<SwapActor>())
 
   let logger = logger.CreateLogger<SwapActor>()

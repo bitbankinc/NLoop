@@ -67,10 +67,10 @@ module Swap =
 
   type Msg =
     | NewLoopOut of LoopOut
-    | PayInvoice of string
     | NewLoopIn of LoopIn
     | SwapUpdate of Data.SwapStatusUpdate
     | SetValidationError of id: string * err: string
+    | SendPaymentRequest of cryptoCode: SupportedCryptoCode * pr: PaymentRequest
 
   // ------ event -----
   type Event =
@@ -90,13 +90,14 @@ module Swap =
     | FailedToGetChangeAddress of string
     | PSBTNotCreated of string
     | PSBTNotSigned of IList<PSBTError>
+    | PaymentFailed of string
 
   // ------ deps -----
   type Deps = {
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
     UTXOProvider: IUTXOProvider
-    LightningClient: ILightningClient
+    LightningClient: INLoopLightningClient
     GetChangeAddress: GetChangeAddress
   }
 
@@ -104,7 +105,7 @@ module Swap =
 
   let executeCommand
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-      GetChangeAddress = getChangeAddress }
+      GetChangeAddress = getChangeAddress; LightningClient = lnClient  }
     (s: State)
     (msg: Msg): Task<Result<Event list, Error>> =
     taskResult {
@@ -185,32 +186,39 @@ module Swap =
           s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
           s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
         return [LoopErrored( id, err )]
+      | SendPaymentRequest(cryptoCode, invoice) ->
+        let! _ = lnClient.Offer(cryptoCode, invoice) |> TaskResult.mapError(PaymentFailed)
+        return []
       | SetValidationError(id, _err) ->
         return! Error(UnknownSwapId(id))
     }
 
-  let applyChanges { LightningClient = lightningClient } (state: State) (event: Event) =
+  let applyChanges (state: State) (event: Event) =
     match event with
     | KnownSwapAddedAgain _ ->
-      state, Cmd.none
+      state, None
     | ClaimTxPublished (txid, id) ->
       let newOuts =
         state.OnGoing.Out |> List.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with Out = newOuts } }, Cmd.none
+      { state with OnGoing = { state.OnGoing with Out = newOuts } }, None
     | SwapTxPublished (txid, id) ->
       let newIns =
         state.OnGoing.In |> List.map(fun x -> if x.Id = id then { x with LockupTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with In = newIns } }, Cmd.none
+      { state with OnGoing = { state.OnGoing with In = newIns } }, None
     | NewLoopOutAdded loopOut ->
       { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } },
-      (PaymentRequest.Parse >> ResultUtils.Result.deref >> lightningClient.Offer)
+      PaymentRequest.Parse loopOut.Invoice
+      |> ResultUtils.Result.either
+           (fun invoice -> SendPaymentRequest(loopOut.PairId |> fst, invoice))
+           (fun s -> SetValidationError(loopOut.Id, s))
+      |> Some
     | NewLoopInAdded loopIn ->
-      { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }, Cmd.none
+      { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }, None
     | LoopErrored (id, err)->
       let newLoopIns =
         state.OnGoing.In |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
       let newLoopOuts =
         state.OnGoing.Out |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
-      { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }, Cmd.none
+      { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }, None
 
   type Aggregate = Aggregate<State, Msg, Event, Error>

@@ -26,7 +26,7 @@ type IUTXOProvider =
   /// Sign psbt for UTXOs provided by `GetUTXOs`
   abstract member SignSwapTxPSBT: psbt: PSBT * cryptoCode: SupportedCryptoCode -> Task<PSBT>
 
-type ILightningClient =
-  abstract member Offer: invoice: PaymentRequest -> Task
+type INLoopLightningClient =
+  abstract member Offer: cryptoCode: SupportedCryptoCode * invoice: PaymentRequest -> Task<Result<unit, string>>
 
 type GetChangeAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>

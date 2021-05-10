@@ -83,15 +83,17 @@ components:
       in: cookie
   parameters:
     cryptoCode:
-      name: cryptoCode
       in: path
-      description: Symbol name for the currency.
+      name: cryptoCode
       required: true
-      schema:
-        enum:
-          - BTC
-          - LTC
+      $ref: '#/components/schemas/cryptoCode'
   schemas:
+    cryptoCode:
+      description: Symbol name for the currency.
+      type: string
+      enum:
+        - BTC
+        - LTC
     # ----- Primitive objects
     PubKey:
       description: Bitcoin public key in 33 bytes length
@@ -143,13 +145,10 @@ components:
             default is the one it has least.
           nullable: true
         counter_party_pair:
-          enum:
-            - LTC
-            - BTC
+          $ref: '#/components/schemas/cryptoCode'
           description: <
             counterparty's cryptoCode to swap against.
-          default:
-            The same cryptocurrency with the one you pay.
+            default is the same cryptocurrency with the one you pay.
           nullable: true
         address:
           $ref: '#/components/schemas/BitcoinAddressNonMalleable'
@@ -188,13 +187,10 @@ components:
             default is the one it has least.
           nullable: true
         counter_party_pair:
-          enum:
-            - LTC
-            - BTC
+          $ref: '#/components/schemas/cryptoCode'
           description: <
             counterparty's cryptoCode to swap against.
-          default:
-            The same cryptocurrency with the one you pay.
+            default is the same cryptocurrency with the one you pay.
           nullable: true
         label:
           type: string
@@ -218,17 +214,11 @@ components:
             on_chain:
               type: array
               items:
-                type: string
-                enum:
-                  - LTC
-                  - BTC
+                $ref: '#/components/schemas/cryptoCode'
             off_chain:
               type: array
               items:
-                type: string
-                enum:
-                  - LTC
-                  - BTC
+                $ref: '#/components/schemas/cryptoCode'
       required:
         - version
         - supported_coins

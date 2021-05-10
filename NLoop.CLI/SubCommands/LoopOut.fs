@@ -11,6 +11,7 @@ open Microsoft.Extensions.DependencyInjection
 
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
+open NLoop.Domain
 open NLoop.Server
 open NLoopClient
 
@@ -26,14 +27,18 @@ let private handle (host: IHost) =
     let pr = host.Services.GetRequiredService<ParseResult>()
     let req =
       let r = LoopOutRequest()
+      r.Channel_id <- pr.ValueForOption<string>("channel")
+      r.Counter_party_pair <- pr.ValueForOption<CryptoCode>("counterparty-cryptocode")
       r.Address <- pr.ValueForOption<string>("address")
       r.Amount <- pr.ValueForOption<int64>("amount")
-      r.Channel_id <- pr.ValueForOption<string>("channel")
+      r.Conf_target <- pr.ValueForOption<int>("conf-target")
+      r.Label <- pr.ValueForOption<string>("label")
       r
 
     let! resp = cli.OutAsync(cryptoCode, req)
     return resp
   }
+
 let command: Command =
   let command = Command("out", "Perform Reverse submarine swap and get inbound liquidity")
   command

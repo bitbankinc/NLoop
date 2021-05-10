@@ -76,12 +76,13 @@ module LoopHandlers =
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
           do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
-          let eventAggregator = ctx.GetService<EventAggregator>()
-          let! _ = eventAggregator.WaitNext<Swap.Event>(function Swap.Event.NewLoopOutAdded _ -> true | _ -> false)
-          let! _ = lnClient.Pay(outResponse.Invoice.ToString())
           let mutable txId = None
           if (req.AcceptZeroConf) then
-            let! e = eventAggregator.WaitNext<Swap.Event>(function Swap.Event.ClaimTxPublished(_txid, swapId) -> swapId = loopOut.Id | _ -> false)
+            let eventAggregator = ctx.GetService<EventAggregator>()
+            let! e = eventAggregator.WaitNext<Swap.Event>(function
+              | Swap.Event.ClaimTxPublished(_txid, swapId) -> swapId = loopOut.Id
+              | _ -> false
+              )
             txId <-
               e
               |> function Swap.Event.ClaimTxPublished (txid, _swapId) -> txid

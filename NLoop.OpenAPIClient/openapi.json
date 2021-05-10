@@ -64,7 +64,7 @@
         "operationId": "out",
         "parameters": [
           {
-            "$ref": "#/components/parameters/cryptoCode/schema"
+            "$ref": "#/components/schemas/cryptoCode"
           }
         ],
         "requestBody": {
@@ -103,7 +103,7 @@
         "operationId": "in",
         "parameters": [
           {
-            "$ref": "#/components/parameters/cryptoCode/schema"
+            "$ref": "#/components/schemas/cryptoCode"
           }
         ],
         "requestBody": {
@@ -132,6 +132,14 @@
   },
   "components": {
     "schemas": {
+      "cryptoCode": {
+        "type": "string",
+        "description": "Symbol name for the currency.",
+        "enum": [
+          "BTC",
+          "LTC"
+        ]
+      },
       "PubKey": {
         "type": "string",
         "description": "Bitcoin public key in 33 bytes length",
@@ -188,13 +196,9 @@
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "counter_party_pair": {
-            "description": "< counterparty's cryptoCode to swap against.",
-            "default": "The same cryptocurrency with the one you pay.",
+            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
             "nullable": true,
-            "enum": [
-              "LTC",
-              "BTC"
-            ]
+            "$ref": "#/components/schemas/cryptoCode"
           },
           "address": {
             "nullable": true,
@@ -235,13 +239,9 @@
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "counter_party_pair": {
-            "description": "< counterparty's cryptoCode to swap against.",
-            "default": "The same cryptocurrency with the one you pay.",
+            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
             "nullable": true,
-            "enum": [
-              "LTC",
-              "BTC"
-            ]
+            "$ref": "#/components/schemas/cryptoCode"
           },
           "label": {
             "type": "string",
@@ -266,21 +266,13 @@
               "on_chain": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "enum": [
-                    "LTC",
-                    "BTC"
-                  ]
+                  "$ref": "#/components/schemas/cryptoCode"
                 }
               },
               "off_chain": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "enum": [
-                    "LTC",
-                    "BTC"
-                  ]
+                  "$ref": "#/components/schemas/cryptoCode"
                 }
               }
             }
@@ -321,13 +313,7 @@
         "name": "cryptoCode",
         "in": "path",
         "required": true,
-        "description": "Symbol name for the currency.",
-        "schema": {
-          "enum": [
-            "BTC",
-            "LTC"
-          ]
-        }
+        "$ref": "#/components/schemas/cryptoCode"
       }
     },
     "securitySchemes": {

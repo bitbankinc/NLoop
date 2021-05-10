@@ -1,4 +1,4 @@
-namespace NLoop.Server.Services
+namespace NLoop.Server
 
 open System.IO
 open System.Runtime.CompilerServices
@@ -35,6 +35,23 @@ type ILightningClientProviderExtensions =
           return (Ok(c :> IDestination))
       }
     )
+
+  [<Extension>]
+  static member AsDomainLNClient(this: ILightningClientProvider) =
+    { new NLoop.Domain.IO.INLoopLightningClient with
+        member __.Offer(cc, invoice) =
+          match this.TryGetClient(cc) with
+          | Some cli -> task {
+              let! p = cli.Pay(invoice.ToString())
+              match p.Result with
+              | PayResult.Ok ->
+                return Ok()
+              | s ->
+                return Error(sprintf "Unexpected PayResult: %A (%s)" s p.ErrorDetail)
+            }
+          | _ -> failwithf "Unreachable! Unexpected cryptoCode %A" cc
+    }
+
 
 type LightningClientProvider(opts: IOptions<NLoopOptions>) =
   let clients = Dictionary<SupportedCryptoCode, ILightningClient>()
