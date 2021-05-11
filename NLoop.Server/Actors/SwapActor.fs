@@ -21,7 +21,7 @@ type SwapActor(logger: ILoggerFactory,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetChangeAddress,
                lightningClientProvider: ILightningClientProvider,
-               eventAggregator: EventAggregator) =
+               eventAggregator: IEventAggregator) =
   inherit Actor<Swap.State, Swap.Msg, Swap.Event, Swap.Error>
     ({ Zero = Swap.State.Zero
        Apply = Swap.applyChanges
@@ -31,6 +31,7 @@ type SwapActor(logger: ILoggerFactory,
   let logger = logger.CreateLogger<SwapActor>()
   override this.HandleError(error) =
     logger.LogError($"{error}")
+    eventAggregator.Publish(error)
     Task.CompletedTask
   override this.PublishEvent(evt) =
     logger.LogDebug($"{evt}")

@@ -28,18 +28,19 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
                 | true, (cmd, maybeTcs)->
                     let msg = sprintf "read cmd '%A from communication channel" (cmd)
                     log.LogTrace(msg)
-                    match! aggregate.Exec this.State cmd with
+                    let! r = aggregate.Exec this.State cmd
+                    match r with
                     | Ok events ->
                         let _ =
-                          let msg = sprintf "Successfully executed command (%A) and got events %A" cmd events
-                          log.LogTrace(msg)
+                            let msg = sprintf "Successfully executed command (%A) and got events %A" cmd events
+                            log.LogTrace(msg)
                         for e in events do
-                          let nextState, nextMsg = aggregate.Apply this.State e
-                          match nextMsg with
-                          | Some m ->
-                            do! this.Put(m)
-                          | None -> ()
-                          this.State <- nextState
+                            let nextState, nextMsg = aggregate.Apply this.State e
+                            match nextMsg with
+                            | Some m ->
+                              do! this.Put(m)
+                            | None -> ()
+                            this.State <- nextState
                         maybeTcs |> Option.iter(fun tcs -> tcs.SetResult())
                         for e in events do
                             do! this.PublishEvent e

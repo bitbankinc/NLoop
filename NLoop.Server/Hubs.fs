@@ -7,11 +7,12 @@ open System.Threading.Channels
 open Microsoft.AspNetCore.SignalR
 open NLoop.Domain
 open FSharp.Control.Tasks.Affine
+open FSharp.Control.Reactive
 
 type IEventClient =
   abstract member HandleSwapEvent: Swap.Event -> Task
 
-type EventHub(eventAggregator: EventAggregator) =
+type EventHub(eventAggregator: IEventAggregator) =
   inherit Hub<IEventClient>()
 
   let mutable subscription = None
@@ -21,7 +22,10 @@ type EventHub(eventAggregator: EventAggregator) =
         do! this.Clients.All.HandleSwapEvent(e)
       }
 
-    subscription <- Some(eventAggregator.Subscribe<Swap.Event>(publish))
+    subscription <-
+      eventAggregator.GetObservable<Swap.Event>()
+      |> Observable.subscribe(publish >> ignore)
+      |> Some
     Task.CompletedTask
 
   member this.ListenSwapEvents(): ChannelReader<Swap.Event> =
@@ -29,13 +33,17 @@ type EventHub(eventAggregator: EventAggregator) =
       let opts = BoundedChannelOptions(2)
       opts
       |> Channel.CreateBounded<Swap.Event>
-    let s = eventAggregator.Subscribe<Swap.Event>(fun e -> unitTask {
+    let s =
+      eventAggregator.GetObservable<Swap.Event>()
+      |> Observable.subscribe(fun e ->
+        let t = unitTask {
           let! shouldContinue = channel.Writer.WaitToWriteAsync()
           if shouldContinue then
             do! channel.Writer.WriteAsync(e)
           else
             raise <| HubException($"Channel Stopped")
-        }
+         }
+        ()
       )
     channel.Reader
 
@@ -43,5 +51,5 @@ type EventHub(eventAggregator: EventAggregator) =
     override this.Dispose() =
       subscription
       |> Option.iter(fun s ->
-        (s :> IDisposable).Dispose()
+        s.Dispose()
       )

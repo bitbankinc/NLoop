@@ -2,9 +2,17 @@ namespace NLoop.Server
 
 open System
 open System.Collections.Generic
+open System.Runtime.CompilerServices
 open System.Threading
 open System.Threading.Tasks
 
+open System.Reactive
+open FSharp.Control.Reactive
+open System.Reactive.Linq
+open System.Reactive.Subjects
+open Microsoft.Extensions.Logging
+open NLoop.Server.DTOs
+(*
 
 type IEventAggregatorSubscription =
   abstract member Unsubscribe: unit -> unit
@@ -91,7 +99,6 @@ type EventAggregator(logError: Action<string>) =
     member this.Dispose() =
       lock(this._Subscriptions) <| this._Subscriptions.Clear
 
-
 and Subscription(aggregator: EventAggregator, t: Type) =
   let mutable disposed = false
   member val Act: Action<obj> = null with get, set
@@ -110,3 +117,39 @@ and Subscription(aggregator: EventAggregator, t: Type) =
     member this.Unsubscribe() =
       (this :> IDisposable).Dispose()
 
+*)
+
+type IEventAggregator =
+  abstract member Publish: 'T -> unit
+  abstract member GetObservable: unit -> IObservable<'T>
+
+[<Sealed;AbstractClass;Extension>]
+type EventAggregatorExtensions() =
+  [<Extension>]
+  static member GetObservable<'T, 'U>(this: IEventAggregator): IObservable<Choice<'T, 'U>> =
+    Observable.merge
+      (this.GetObservable<'T>() |> Observable.map(box))
+      (this.GetObservable<'U>() |> Observable.map(box))
+    |> Observable.map(function
+        | :? 'T as t -> Choice1Of2 t
+        | :? 'U as u -> Choice2Of2 u
+        | _ -> failwith "unreachable"
+    )
+
+type ReactiveEventAggregator(logger: ILogger<ReactiveEventAggregator>) =
+  let _subject = new Subject<obj>()
+
+  let mutable disposed = false
+
+  interface IEventAggregator with
+    member this.Publish(item) =
+      logger.LogDebug(sprintf "publishing %A" item)
+      _subject.OnNext(item)
+    member this.GetObservable() =
+      _subject.OfType<'T>().AsObservable()
+
+  interface IDisposable with
+    member this.Dispose() =
+      if (disposed) then () else
+      _subject.Dispose()
+      disposed <- true

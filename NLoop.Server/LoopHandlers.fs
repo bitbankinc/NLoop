@@ -1,7 +1,10 @@
 namespace NLoop.Server
 
 open System
+open System.Linq
 open System.Threading.Tasks
+open FSharp.Control.Reactive
+
 open BTCPayServer.Lightning
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -12,6 +15,7 @@ open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Services
+open System.Reactive.Linq
 
 module LoopHandlers =
   open Microsoft.AspNetCore.Http
@@ -75,24 +79,41 @@ module LoopHandlers =
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
-          do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
-          let mutable txId = None
-          if (req.AcceptZeroConf) then
-            let eventAggregator = ctx.GetService<EventAggregator>()
-            let! e = eventAggregator.WaitNext<Swap.Event>(function
-              | Swap.Event.ClaimTxPublished(_txid, swapId) -> swapId = loopOut.Id
-              | _ -> false
-              )
-            txId <-
-              e
-              |> function Swap.Event.ClaimTxPublished (txid, _swapId) -> txid
-              |> Some
-          let response = {
-            LoopOutResponse.Id = outResponse.Id
-            Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
-            ClaimTxId = txId
-          }
-          return! json response next ctx
+          if (not req.AcceptZeroConf) then
+            do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
+            let response = {
+              LoopOutResponse.Id = outResponse.Id
+              Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
+              ClaimTxId = None
+            }
+            return! json response next ctx
+          else
+            let obs =
+              let eventAggregator = ctx.GetService<IEventAggregator>()
+              eventAggregator.GetObservable<Swap.Event, Swap.Error>()
+            do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
+            let! first =
+              obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
+            let! second =
+              obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
+            match (first, second) with
+            | Choice1Of2 _ev, Choice1Of2 ev2 ->
+              let txId =
+                match ev2 with
+                | Swap.Event.ClaimTxPublished(txid, _) -> Some txid
+                | _ -> None
+              let response = {
+                LoopOutResponse.Id = outResponse.Id
+                Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
+                ClaimTxId = txId
+              }
+              return! json response next ctx
+            | Choice2Of2 e, _  ->
+              ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
+              return! ctx.WriteJsonAsync({| error = e |})
+            | _, Choice2Of2 e ->
+              ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
+              return! ctx.WriteJsonAsync({| error = e |})
       }
 
   let handleLoopIn (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =

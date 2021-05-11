@@ -8,6 +8,7 @@ open Microsoft.Extensions.Options
 open Microsoft.Extensions.Primitives
 open NLoop.Domain
 open NLoop.Server.DTOs
+open FSharp.Control.Reactive
 
 module QueryHandlers =
 
@@ -32,15 +33,15 @@ module QueryHandlers =
         ctx.Response.Headers.Add("Content-Type", "text/event-stream" |> StringValues)
         do! ctx.Response.Body.FlushAsync()
 
-        let e = ctx.GetService<EventAggregator>()
-        use s = e.Subscribe(fun _ -> true)
-        while true do
-          let! data = e.WaitNext()
-          do! ctx.Response.WriteAsJsonAsync({ SSEEvent.Data = data
-                                              Id = Guid.NewGuid().ToString()
-                                              Name = "TODO"
-                                              Retry = None })
-          ()
+        let e = ctx.GetService<IEventAggregator>().GetObservable<Swap.Event>()
+        e
+          |> Observable.flatmapTask(fun data -> task {
+            do! ctx.Response.WriteAsJsonAsync({ SSEEvent.Data = data
+                                                Id = Guid.NewGuid().ToString()
+                                                Name = "TODO"
+                                                Retry = None })
+          })
+          |> Observable.wait
         do! ctx.Response.WriteAsync("\n")
         do! ctx.Response.Body.FlushAsync()
         return! ctx.WriteTextAsync("Event Stream Finished")
