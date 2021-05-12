@@ -1,8 +1,12 @@
 namespace NLoop.Server
 
+open System
 open System.IO
+open System.Net.Http
 open System.Runtime.CompilerServices
+open System.Threading
 open System.Threading.Tasks
+open BTCPayServer.Lightning.LND
 open FSharp.Control.Tasks
 open System.Collections.Generic
 open BTCPayServer.Lightning
@@ -58,7 +62,11 @@ type LightningClientProvider(opts: IOptions<NLoopOptions>) =
 
   member this.CheckClientConnection(c, ct) = task {
     let n  = opts.Value.GetNetwork(c)
-    let cli = LightningClientFactory.CreateClient(opts.Value.ChainOptions.[c].LightningConnectionString, n)
+    let cli =
+      let factory = LightningClientFactory(n)
+      factory.HttpClient.Timeout <- TimeSpan.MaxValue
+      let cli = factory.Create(opts.Value.ChainOptions.[c].LightningConnectionString)
+      cli
     let! _info = cli.GetInfo(ct)
     clients.Add(c, cli)
     return ()
