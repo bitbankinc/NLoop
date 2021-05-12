@@ -31,9 +31,6 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
                     let! r = aggregate.Exec this.State cmd
                     match r with
                     | Ok events ->
-                        let _ =
-                            let msg = sprintf "Successfully executed command (%A) and got events %A" cmd events
-                            log.LogTrace(msg)
                         for e in events do
                             let nextState, nextMsg = aggregate.Apply this.State e
                             match nextMsg with

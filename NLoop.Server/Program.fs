@@ -146,10 +146,11 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
 
 module Main =
 
-  let configureLogging (builder : ILoggingBuilder) =
+  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
       builder
         .AddConsole()
         .AddDebug()
+        .AddConfiguration(ctx.Configuration.GetSection("Logging"))
 #if DEBUG
         .SetMinimumLevel(LogLevel.Debug)
 #else
@@ -157,13 +158,17 @@ module Main =
 #endif
         |> ignore
 
-  let configureConfig (builder: IConfigurationBuilder) =
+  let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
     Directory.CreateDirectory(Constants.HomeDirectoryPath) |> ignore
     let iniFile = Path.Join(Constants.HomeDirectoryPath, "nloop.conf")
     if (iniFile |> File.Exists) then
       builder.AddIniFile(iniFile) |> ignore
-    builder.AddEnvironmentVariables(prefix="NLOOP_") |> ignore
+    let env = ctx.HostingEnvironment
+    builder
+      .AddJsonFile("appsettings.json", optional = true)
+      .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional=true)
+      .AddEnvironmentVariables(prefix="NLOOP_") |> ignore
     ()
 
   let configureHostBuilder (hostBuilder: IHostBuilder) =

@@ -89,23 +89,20 @@ module LoopHandlers =
             return! json response next ctx
           else
             let obs =
-              let eventAggregator = ctx.GetService<IEventAggregator>()
-              eventAggregator.GetObservable<Swap.Event, Swap.Error>()
+              ctx
+                .GetService<IEventAggregator>()
+                .GetObservable<Swap.Event, Swap.Error>()
             do! actor.Put(Swap.Msg.NewLoopOut(loopOut))
             let! first =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             let! second =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             match (first, second) with
-            | Choice1Of2 _ev, Choice1Of2 ev2 ->
-              let txId =
-                match ev2 with
-                | Swap.Event.ClaimTxPublished(txid, _) -> Some txid
-                | _ -> None
+            | Choice1Of2 _ev, Choice1Of2(Swap.Event.ClaimTxPublished(txId, _)) ->
               let response = {
                 LoopOutResponse.Id = outResponse.Id
                 Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
-                ClaimTxId = txId
+                ClaimTxId = txId |> Some
               }
               return! json response next ctx
             | Choice2Of2 e, _  ->
@@ -114,6 +111,8 @@ module LoopHandlers =
             | _, Choice2Of2 e ->
               ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
               return! ctx.WriteJsonAsync({| error = e |})
+            | a, b ->
+              return failwithf "Unreachable! (%A, %A)" a b
       }
 
   let handleLoopIn (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =

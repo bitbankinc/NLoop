@@ -143,7 +143,6 @@ type ReactiveEventAggregator(logger: ILogger<ReactiveEventAggregator>) =
 
   interface IEventAggregator with
     member this.Publish(item) =
-      logger.LogDebug(sprintf "publishing %A" item)
       _subject.OnNext(item)
     member this.GetObservable() =
       _subject.OfType<'T>().AsObservable()
