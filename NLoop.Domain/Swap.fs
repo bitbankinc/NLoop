@@ -91,6 +91,7 @@ module Swap =
     | PSBTNotCreated of string
     | PSBTNotSigned of IList<PSBTError>
     | PaymentFailed of string
+    | UnexpectedError of exn
 
   // ------ deps -----
   type Deps = {
@@ -109,88 +110,91 @@ module Swap =
     (s: State)
     (msg: Msg): Task<Result<Event list, Error>> =
     taskResult {
-      match msg with
-      | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
-        return [KnownSwapAddedAgain loopOut.Id]
-      | NewLoopOut loopOut ->
-        return [NewLoopOutAdded loopOut]
-      | NewLoopIn loopIn when s.OnGoing.In |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
-        return [KnownSwapAddedAgain loopIn.Id]
-      | NewLoopIn loopIn ->
-        return [NewLoopInAdded loopIn]
-      | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
-        if (u.Response.SwapStatus = ourSwap.Status) then
+      try
+        match msg with
+        | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
+          return [KnownSwapAddedAgain loopOut.Id]
+        | NewLoopOut loopOut ->
+          return [NewLoopOutAdded loopOut]
+        | NewLoopIn loopIn when s.OnGoing.In |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
+          return [KnownSwapAddedAgain loopIn.Id]
+        | NewLoopIn loopIn ->
+          return [NewLoopInAdded loopIn]
+        | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
+          let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
+          if (u.Response.SwapStatus = ourSwap.Status) then
+            return []
+          else
+          match u.Response.SwapStatus with
+          | SwapStatusType.TxMempool when not <| ourSwap.AcceptZeroConf ->
+            return []
+          | SwapStatusType.TxMempool
+          | SwapStatusType.TxConfirmed ->
+            let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
+            let! feeRate =
+              feeEstimator.Estimate(counterPartyCryptoCode)
+            let! lockupTx =
+              u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
+            let! claimTx =
+              Transactions.createClaimTx
+                (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
+                (ourSwap.PrivateKey)
+                (ourSwap.Preimage)
+                (ourSwap.RedeemScript)
+                (feeRate)
+                (lockupTx.Tx)
+                (u.Network)
+              |> Result.mapError(TransactionError)
+            do!
+              broadcaster.BroadcastTx(claimTx, ourCryptoCode)
+            let txid = claimTx.GetWitHash()
+            return [ClaimTxPublished(txid, ourSwap.Id)]
+          | _ ->
+            return []
+        | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
+          let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
+          match u.Response.SwapStatus with
+          | SwapStatusType.InvoiceSet ->
+            // TODO: check confirmation?
+            let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
+            let! utxos =
+              utxoProvider.GetUTXOs(ourSwap.ExpectedAmount, ourCryptoCode) |> TaskResult.mapError(CannotAffordUTXOs)
+            let! feeRate =
+              feeEstimator.Estimate(counterPartyCryptoCode)
+            let! change = getChangeAddress.Invoke(ourCryptoCode) |> TaskResult.mapError(FailedToGetChangeAddress)
+            let! psbt =
+              Transactions.createSwapPSBT
+                (utxos)
+                ourSwap.RedeemScript
+                (ourSwap.ExpectedAmount)
+                feeRate
+                change
+                ourSwap.TimeoutBlockHeight
+                u.Network
+              |> Result.mapError(PSBTNotCreated)
+            let! psbt = utxoProvider.SignSwapTxPSBT(psbt, ourCryptoCode)
+            match psbt.TryFinalize() with
+            | false, e ->
+              return! Error(PSBTNotSigned e)
+            | true, _ ->
+              let tx = psbt.ExtractTransaction()
+              do! broadcaster.BroadcastTx(tx, ourCryptoCode)
+              return [SwapTxPublished(tx.GetWitHash(), ourSwap.Id)]
+          | _ ->
           return []
-        else
-        match u.Response.SwapStatus with
-        | SwapStatusType.TxMempool when not <| ourSwap.AcceptZeroConf ->
+        | SwapUpdate u ->
+          return! Error(UnknownSwapId(u.Id))
+        | SetValidationError(id, err) when
+            s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
+            s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
+          return [LoopErrored( id, err )]
+        | SendPaymentRequest(cryptoCode, invoice) ->
+          let! _ = lnClient.Offer(cryptoCode, invoice) |> TaskResult.mapError(PaymentFailed)
           return []
-        | SwapStatusType.TxMempool
-        | SwapStatusType.TxConfirmed ->
-          let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
-          let! feeRate =
-            feeEstimator.Estimate(counterPartyCryptoCode)
-          let! lockupTx =
-            u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
-          let! claimTx =
-            Transactions.createClaimTx
-              (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
-              (ourSwap.PrivateKey)
-              (ourSwap.Preimage)
-              (ourSwap.RedeemScript)
-              (feeRate)
-              (lockupTx.Tx)
-              (u.Network)
-            |> Result.mapError(TransactionError)
-          do!
-            broadcaster.BroadcastTx(claimTx, ourCryptoCode)
-          let txid = claimTx.GetWitHash()
-          return [ClaimTxPublished(txid, ourSwap.Id)]
-        | _ ->
-          return []
-      | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
-        match u.Response.SwapStatus with
-        | SwapStatusType.InvoiceSet ->
-          // TODO: check confirmation?
-          let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
-          let! utxos =
-            utxoProvider.GetUTXOs(ourSwap.ExpectedAmount, ourCryptoCode) |> TaskResult.mapError(CannotAffordUTXOs)
-          let! feeRate =
-            feeEstimator.Estimate(counterPartyCryptoCode)
-          let! change = getChangeAddress.Invoke(ourCryptoCode) |> TaskResult.mapError(FailedToGetChangeAddress)
-          let! psbt =
-            Transactions.createSwapPSBT
-              (utxos)
-              ourSwap.RedeemScript
-              (ourSwap.ExpectedAmount)
-              feeRate
-              change
-              ourSwap.TimeoutBlockHeight
-              u.Network
-            |> Result.mapError(PSBTNotCreated)
-          let! psbt = utxoProvider.SignSwapTxPSBT(psbt, ourCryptoCode)
-          match psbt.TryFinalize() with
-          | false, e ->
-            return! Error(PSBTNotSigned e)
-          | true, _ ->
-            let tx = psbt.ExtractTransaction()
-            do! broadcaster.BroadcastTx(tx, ourCryptoCode)
-            return [SwapTxPublished(tx.GetWitHash(), ourSwap.Id)]
-        | _ ->
-        return []
-      | SwapUpdate u ->
-        return! Error(UnknownSwapId(u.Id))
-      | SetValidationError(id, err) when
-          s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
-          s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
-        return [LoopErrored( id, err )]
-      | SendPaymentRequest(cryptoCode, invoice) ->
-        let! _ = lnClient.Offer(cryptoCode, invoice) |> TaskResult.mapError(PaymentFailed)
-        return []
-      | SetValidationError(id, _err) ->
-        return! Error(UnknownSwapId(id))
+        | SetValidationError(id, _err) ->
+          return! Error(UnknownSwapId(id))
+      with
+      | ex -> return! Error(UnexpectedError ex)
     }
 
   let applyChanges (state: State) (event: Event) =
