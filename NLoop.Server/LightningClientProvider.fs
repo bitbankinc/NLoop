@@ -64,7 +64,8 @@ type LightningClientProvider(opts: IOptions<NLoopOptions>) =
     let n  = opts.Value.GetNetwork(c)
     let cli =
       let factory = LightningClientFactory(n)
-      factory.HttpClient.Timeout <- TimeSpan.MaxValue
+      if (factory.HttpClient |> isNull |> not) then
+        factory.HttpClient.Timeout <- TimeSpan.MaxValue
       let cli = factory.Create(opts.Value.ChainOptions.[c].LightningConnectionString)
       cli
     let! _info = cli.GetInfo(ct)
