@@ -58,7 +58,16 @@ type SwapEventListener(boltzClient: BoltzClient,
       let a = async {
           let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
           do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+
+          while true do
+            do! Async.Sleep 1000
+            let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
+            do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+
+
+          (*
           for a in boltzClient.StartListenToSwapStatusChange(id) do
             do! this.HandleSwapUpdate(a.ToDomain, id, network) |> Async.AwaitTask
+          *)
         }
       tasks.Add(a |> Async.StartAsTask)
