@@ -35,7 +35,7 @@ module Transactions =
     for c in coins do
       if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
         sc <- ScriptCoin(c, redeemScript)
-        txB.AddCoins() |> ignore
+        txB.AddCoins(sc) |> ignore
     if (sc |> isNull) then
       let actualOutputs = lockupTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
       Error(RedeemScriptMismatch(actualOutputs, redeemScript))
@@ -43,7 +43,7 @@ module Transactions =
       let tx =
         txB
           .SendEstimatedFees(fee)
-          .SendAll(output)
+          .SendAllRemaining(output)
           .BuildTransaction(false)
       let signature = tx.SignInput(key, sc)
       let witnessItems =
