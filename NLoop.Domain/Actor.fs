@@ -1,5 +1,7 @@
 namespace NLoop.Domain
 
+open System
+open System.Collections.Concurrent
 open System.Threading.Channels
 open System.Threading.Tasks
 open FSharp.Control.Tasks
@@ -7,7 +9,7 @@ open Microsoft.Extensions.Logging
 
 
 [<AbstractClass>]
-type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg, 'TEvent, 'TError>, log: ILogger, ?capacity: int) as this =
+type Actor<'TState, 'TMsg, 'TEvent>(aggregate: Aggregate<'TState, 'TMsg, 'TEvent>, log: ILogger, ?capacity: int) as this =
     let mutable disposed = false
     let capacity = defaultArg capacity 600
     let communicationChannel =
@@ -17,6 +19,7 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
         Channel.CreateBounded<'TMsg * TaskCompletionSource<unit> option>(options)
 
     let mutable _s = aggregate.Zero
+    let _tasks = ConcurrentBag<Task<_>>()
     let lockObj = obj()
     let startAsync() = task {
         let mutable nonFinished = true
@@ -28,23 +31,14 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
                 | true, (cmd, maybeTcs)->
                     let msg = sprintf "read cmd '%A from communication channel" (cmd)
                     log.LogTrace(msg)
-                    let! r = aggregate.Exec this.State cmd
-                    match r with
-                    | Ok events ->
-                        for e in events do
-                            let nextState, nextMsg = aggregate.Apply this.State e
-                            match nextMsg with
-                            | Some m ->
-                              do! this.Put(m)
-                            | None -> ()
-                            this.State <- nextState
-                        maybeTcs |> Option.iter(fun tcs -> tcs.SetResult())
-                        for e in events do
-                            do! this.PublishEvent e
-                    | Error ex ->
-                        log.LogTrace(sprintf "failed to execute command and got error %A" ex)
-                        ex |> this.HandleError |> ignore
-                        maybeTcs |> Option.iter(fun tcs -> tcs.SetException(exn(sprintf "%A" ex)))
+                    let! events = aggregate.Exec this.State cmd
+                    for e in events do
+                        let nextState, cmd = aggregate.Apply this.State e
+                        cmd |> Cmd.exec (this.HandleError) (this.Put >> ignore)
+                        this.State <- nextState
+                    maybeTcs |> Option.iter(fun tcs -> tcs.SetResult())
+                    for e in events do
+                        do! this.PublishEvent e
                 | false, _ ->
                     ()
         log.LogInformation "disposing actor"
@@ -58,7 +52,7 @@ type Actor<'TState, 'TMsg, 'TEvent, 'TError>(aggregate: Aggregate<'TState, 'TMsg
         lock lockObj <| fun () ->
           _s <- s
     abstract member PublishEvent: evt: 'TEvent -> Task
-    abstract member HandleError: error: 'TError -> Task
+    abstract member HandleError: error: exn -> unit
 
     member this.Put(msg: 'TMsg) =
         communicationChannel.Writer.WriteAsync((msg, None))

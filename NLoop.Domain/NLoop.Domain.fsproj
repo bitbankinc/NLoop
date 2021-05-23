@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="NBitcoinExtensions.fs" />
+    <Compile Include="Cmd.fs" />
     <Compile Include="DomainUtils.fs" />
     <Compile Include="Actor.fs" />
     <Compile Include="ValueObjects.fs" />

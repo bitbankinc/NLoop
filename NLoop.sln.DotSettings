@@ -18,5 +18,6 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=reversesubmarine/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=satoshis/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=setinvoice/@EntryIndexedValue">True</s:Boolean>
+	
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=txid/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=UTXO/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>
