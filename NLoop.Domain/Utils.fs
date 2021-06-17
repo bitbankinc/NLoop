@@ -33,3 +33,16 @@ module Helpers =
                   // NB does not flow the execution context
                   awaiter.OnCompleted(Action oncompleted)
           )
+
+  let getEnv key defaultKeyOpt =
+    let e = $"Failed to get env variable {key}" |> Error
+    try
+      match Environment.GetEnvironmentVariable key, defaultKeyOpt with
+      | null, Some k ->
+        Ok (k)
+      | null, None ->
+        e
+      | x, _ ->
+        x |> Ok
+    with
+    | _ -> e

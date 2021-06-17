@@ -60,6 +60,19 @@ type NLoopOptions() =
   member val BoltzPort = Constants.DefaultBoltzPort with get, set
   member val BoltzHttps = Constants.DefaultBoltzHttps with get, set
   // -- --
+
+  // -- eventstore db --
+  member val EventStoreUrl =
+      let protocol = "https"
+      let host = "localhost"
+      let port = 2113
+      let user = "admin"
+      let password = "unsafepassword"
+      $"%s{protocol}://%s{user}:%s{password}@%s{host}:%i{port}"
+      with get, set
+
+  // -- --
+
   member val MaxAcceptableSwapFeeSat = 10000L with get, set
   member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSat)
 

@@ -7,17 +7,20 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Threading.Tasks
 open BTCPayServer.Lightning.LND
+open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open System.Collections.Generic
 open BTCPayServer.Lightning
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.DataEncoders
 open NLoop.Domain
 open NLoop.Server
 
 type ILightningClientProvider =
   abstract member TryGetClient: crypto: SupportedCryptoCode -> ILightningClient option
+
 
 
 [<AbstractClass;Sealed;Extension>]
@@ -49,9 +52,18 @@ type ILightningClientProviderExtensions =
               let! p = cli.Pay(invoice.ToString())
               match p.Result with
               | PayResult.Ok ->
-                return Ok()
+                let hex = HexEncoder()
+                let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync()
+                let preimage =
+                  p.Payments
+                  |> Seq.filter(fun i -> i.Payment_hash = invoice.PaymentHash.Value.ToString())
+                  |> Seq.exactlyOne
+                  |> fun i -> i.Payment_preimage
+                  |> hex.DecodeData
+                  |> PaymentPreimage.Create
+                return preimage
               | s ->
-                return Error(sprintf "Unexpected PayResult: %A (%s)" s p.ErrorDetail)
+                return failwithf "Unexpected PayResult: %A (%s)" s p.ErrorDetail
             }
           | _ -> failwithf "Unreachable! Unexpected cryptoCode %A" cc
     }

@@ -78,7 +78,7 @@ let getTestRepository(n) =
   let loopInD = ConcurrentDictionary<_,_>()
   let jsonOpts =  JsonSerializerOptions()
   jsonOpts.AddNLoopJsonConverters(n)
-  { new IRepository with
+  { new ISecretRepository with
       member this.SetPrivateKey(k) =
         keyDict.TryAdd(k.PubKey.Hash, k) |> ignore
         Task.FromResult() :> Task
@@ -122,7 +122,7 @@ let getDummyLightningClientProvider() =
       member this.TryGetClient(cryptoCode) =
         failwith "" }
 let getTestRepositoryProvider() =
-  let repos = Dictionary<SupportedCryptoCode, IRepository>()
+  let repos = Dictionary<SupportedCryptoCode, ISecretRepository>()
   repos.Add(SupportedCryptoCode.BTC, getTestRepository(Bitcoin.Instance.Regtest))
   repos.Add(SupportedCryptoCode.LTC, getTestRepository(Litecoin.Instance.Regtest))
   { new IRepositoryProvider with

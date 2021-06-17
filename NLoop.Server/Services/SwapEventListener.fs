@@ -50,19 +50,19 @@ type SwapEventListener(boltzClient: BoltzClient,
     let cmd = { Swap.Data.SwapStatusUpdate.Response = swapStatus
                 Swap.Data.SwapStatusUpdate.Id = id
                 Swap.Data.SwapStatusUpdate.Network = network }
-    do! actor.Put(Swap.Msg.SwapUpdate(cmd))
+    do! actor.Execute(Swap.Msg.SwapUpdate(cmd))
   }
 
   interface ISwapEventListener with
     member this.RegisterSwap(id: string, network) =
       let a = async {
           let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
-          do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+          do! this.HandleSwapUpdate(first.ToDomain, id |> SwapId, network) |> Async.AwaitTask
 
           while true do
             do! Async.Sleep 1000
             let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
-            do! this.HandleSwapUpdate(first.ToDomain, id, network) |> Async.AwaitTask
+            do! this.HandleSwapUpdate(first.ToDomain, id |> SwapId, network) |> Async.AwaitTask
 
 
           (*

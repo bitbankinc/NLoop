@@ -26,6 +26,11 @@ module QueryHandlers =
         return r
       }
 
+  let handleSwapStatus =
+    fun (next: HttpFunc) (ctx: HttpContext) -> task {
+      return 8
+    }
+
   let handleListenEvent =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {

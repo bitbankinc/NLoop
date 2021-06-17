@@ -88,3 +88,5 @@ type SwapStatusType =
   | Unknown = 255uy
 
 type SwapId = SwapId of string
+  with
+  member this.Value = let (SwapId v) = this in v

@@ -222,6 +222,14 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
+
+      let o = Option<string>([|$"--{nameof(NLoopOptions.Instance.EventStoreUrl).ToLowerInvariant()}";|],
+                             $"Url for your eventstore db. (default: {NLoopOptions.Instance.EventStoreUrl})")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
     ]
 
 

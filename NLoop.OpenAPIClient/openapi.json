@@ -56,6 +56,58 @@
         }
       }
     },
+    "/v1/loop/history": {
+      "get": {
+        "tags": [
+          "swap"
+        ],
+        "description": "Get the full history of swaps.\n",
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSwapHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/loop/status": {
+      "get": {
+        "tags": [
+          "swap"
+        ],
+        "description": "Get the list of ongoing swaps.\n",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSwapStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/{cryptoCode}/loop/out": {
       "post": {
         "tags": [
@@ -278,6 +330,12 @@
             }
           }
         }
+      },
+      "GetSwapHistoryResponse": {
+        "type": "object"
+      },
+      "GetSwapStatusResponse": {
+        "type": "object"
       },
       "LoopOutResponse": {
         "type": "object",

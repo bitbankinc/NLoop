@@ -7,10 +7,11 @@
 
   <ItemGroup>
     <Compile Include="Utils.fs" />
-    <Compile Include="NBitcoinExtensions.fs" />
+    <Compile Include="Extensions.fs" />
     <Compile Include="Cmd.fs" />
-    <Compile Include="DomainUtils.fs" />
-    <Compile Include="Actor.fs" />
+    <Compile Include="DomainUtils\DomainUtils.fs" />
+    <Compile Include="DomainUtils\DomainUtils.EventStore.fs" />
+    <Compile Include="DomainUtils\DomainUtils.EventStore.Subscription.fs" />
     <Compile Include="ValueObjects.fs" />
     <Compile Include="HTLC.fs" />
     <Compile Include="Transactions.fs" />
@@ -22,6 +23,7 @@
 
   <ItemGroup>
     <PackageReference Include="DotNetLightning" Version="1.1.2-date20210425-1044-git-40e7e2c" />
+    <PackageReference Include="EventStore.Client" Version="21.2.0" />
     <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
     <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
     <PackageReference Include="NBitcoin.Altcoins" Version="2.0.31" />

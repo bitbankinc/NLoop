@@ -6,9 +6,10 @@ open DotNetLightning.Utils
 open NBitcoin
 open Newtonsoft.Json
 open NLoop.Domain
+open NLoop.Domain.Utils
 
 type LoopOut = {
-  Id: string
+  Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
   Error: string
@@ -32,7 +33,7 @@ type LoopOut = {
 }
 
 type LoopIn = {
-  Id: string
+  Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
   Error: string

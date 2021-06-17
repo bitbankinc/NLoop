@@ -36,6 +36,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetInfoResponse'
 
+  /v1/loop/history:
+    get:
+      description: >
+        Get the full history of swaps.
+      tags:
+        - swap
+      parameters:
+        - in: query
+          name: since
+          schema:
+            type: string
+            format: date
+          required: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSwapHistoryResponse"
+  /v1/loop/status:
+    get:
+      description: >
+        Get the list of ongoing swaps.
+      tags:
+        - swap
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSwapStatusResponse"
   /v1/{cryptoCode}/loop/out:
     post:
       tags:
@@ -222,6 +255,13 @@ components:
       required:
         - version
         - supported_coins
+
+    GetSwapHistoryResponse:
+      type: object
+
+    GetSwapStatusResponse:
+      type: object
+
     LoopOutResponse:
       type: object
       properties:

@@ -36,7 +36,7 @@
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Services\BoltzClient.fs" />
-    <Compile Include="Services\Repository.fs" />
+    <Compile Include="Services\FlatFileSecretRepository.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\SwapEventListener.fs" />
     <Compile Include="Services\NLoopService.fs" />
