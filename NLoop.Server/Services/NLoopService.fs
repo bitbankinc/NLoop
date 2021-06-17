@@ -58,7 +58,6 @@ type NLoopExtensions() =
             p.GetRequiredService<ISwapEventListener>() :?> SwapEventListener :> IHostedService)
         |> ignore
 
-
       this
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->

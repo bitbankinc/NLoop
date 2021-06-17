@@ -48,9 +48,8 @@ type SwapEventListener(boltzClient: BoltzClient,
     }
   member private this.HandleSwapUpdate(swapStatus, id, network) = unitTask {
     let cmd = { Swap.Data.SwapStatusUpdate.Response = swapStatus
-                Swap.Data.SwapStatusUpdate.Id = id
                 Swap.Data.SwapStatusUpdate.Network = network }
-    do! actor.Execute(Swap.Msg.SwapUpdate(cmd))
+    do! actor.Execute(id, Swap.Msg.SwapUpdate(cmd))
   }
 
   interface ISwapEventListener with

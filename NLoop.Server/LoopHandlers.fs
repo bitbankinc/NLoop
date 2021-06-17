@@ -75,12 +75,12 @@ module LoopHandlers =
         let actor = ctx.GetService<SwapActor>()
         match outResponse.Validate(uint256(preimageHash), claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Execute(Swap.Msg.SetValidationError(loopOut.Id, e), "handleLoopOut")
+          do! actor.Execute(loopOut.Id, Swap.Msg.SetValidationError(e), "handleLoopOut")
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok () ->
           if (not req.AcceptZeroConf) then
-            do! actor.Execute(Swap.Msg.NewLoopOut(loopOut))
+            do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
             let response = {
               LoopOutResponse.Id = outResponse.Id
               Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
@@ -92,13 +92,13 @@ module LoopHandlers =
               ctx
                 .GetService<IEventAggregator>()
                 .GetObservable<Swap.Event, Swap.Error>()
-            do! actor.Execute(Swap.Msg.NewLoopOut(loopOut))
+            do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
             let! first =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             let! second =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             match (first, second) with
-            | Choice1Of2 _ev, Choice1Of2(Swap.Event.ClaimTxPublished(txId, _)) ->
+            | Choice1Of2 _ev, Choice1Of2(Swap.Event.ClaimTxPublished(txId)) ->
               let response = {
                 LoopOutResponse.Id = outResponse.Id
                 Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
@@ -148,7 +148,7 @@ module LoopHandlers =
         let id = inResponse.Id |> SwapId
         match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Execute(Swap.Msg.SetValidationError(id, e))
+          do! actor.Execute(id, Swap.Msg.SetValidationError(e))
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
           return! ctx.WriteJsonAsync({| error = e |})
         | Ok _events ->
@@ -166,7 +166,7 @@ module LoopHandlers =
             LockupTransactionId = None
             RefundTransactionId = None
             PairId = (ourCryptoCode, counterPartyPair) }
-          do! actor.Execute(Swap.Msg.NewLoopIn(loopIn))
+          do! actor.Execute(id, Swap.Msg.NewLoopIn(loopIn))
           let response = {
             LoopInResponse.Id = inResponse.Id
             Address = BitcoinAddress.Create(inResponse.Address, n)

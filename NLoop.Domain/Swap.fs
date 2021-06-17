@@ -24,13 +24,12 @@ module Swap =
     In: LoopIn list
   }
 
-  type State = {
-    OnGoing: SwapList
-  }
+  type State =
+    | Out of LoopOut
+    | In of LoopIn
+    | Initialized
     with
-    static member Zero = {
-      State.OnGoing = { Out = []; In = [] }
-    }
+    static member Zero = Initialized
 
   // ------ command -----
 
@@ -67,7 +66,6 @@ module Swap =
         | _ -> SwapStatusType.Unknown
 
     and SwapStatusUpdate = {
-      Id: SwapId
       Response: SwapStatusResponseData
       Network: Network
     }
@@ -76,30 +74,21 @@ module Swap =
     | NewLoopOut of LoopOut
     | NewLoopIn of LoopIn
     | SwapUpdate of Data.SwapStatusUpdate
-    | SetValidationError of id: SwapId * err: string
-    member this.SwapId =
-      match this with
-      | NewLoopOut o -> o.Id
-      | NewLoopIn i -> i.Id
-      | SwapUpdate s -> s.Id
-      | SetValidationError(id, _) -> id
-
+    | SetValidationError of err: string
 
   let streamId = StreamId("swap")
 
   // ------ event -----
   type Event =
-    | KnownSwapAddedAgain of id: SwapId
     | NewLoopOutAdded of LoopOut
     | NewLoopInAdded of LoopIn
-    | LoopErrored of id: SwapId * err: string
-    | ClaimTxPublished of txid: uint256 * swapId: SwapId
-    | SwapTxPublished of txid: uint256 * swapId: SwapId
-    | ReceivedOffChainPayment of swapId: SwapId * paymentPreimage: PaymentPreimage
+    | LoopErrored of err: string
+    | ClaimTxPublished of txid: uint256
+    | SwapTxPublished of txid: uint256
+    | ReceivedOffChainPayment of paymentPreimage: PaymentPreimage
     with
     member this.Version =
       match this with
-      | KnownSwapAddedAgain _
       | NewLoopOutAdded _
       | NewLoopInAdded _
       | LoopErrored _
@@ -108,19 +97,8 @@ module Swap =
       | ReceivedOffChainPayment _
        -> 0
 
-    member this.SwapId =
-      match this with
-      | KnownSwapAddedAgain swapId -> swapId
-      | NewLoopOutAdded loopOut -> loopOut.Id
-      | NewLoopInAdded loopIn -> loopIn.Id
-      | LoopErrored (swapId, _) -> swapId
-      | ClaimTxPublished(_txid, swapId) -> swapId
-      | SwapTxPublished(_txId, swapId) -> swapId
-      | ReceivedOffChainPayment(swapId, _) -> swapId
-
     member this.Type =
       match this with
-      | KnownSwapAddedAgain _ -> "known_swap_added_again"
       | NewLoopOutAdded _ -> "new_loop_out_added"
       | NewLoopInAdded _ -> "new_loop_in_added"
       | LoopErrored _ -> "loop_errored"
@@ -167,13 +145,13 @@ module Swap =
       let onSuccess =
         fun invoice ->
           let onSuccess (preimage) =
-            (ReceivedOffChainPayment(loopOut.Id, preimage))
+            (ReceivedOffChainPayment(preimage))
           Cmd.OfTask.perform
             (fun invoice -> lnClient.Offer(loopOut.PairId |> fst, invoice))
             (invoice)
             (onSuccess)
       let onError =
-        (fun e -> LoopErrored(loopOut.Id, e) |> Cmd.ofMsg)
+        (LoopErrored >> Cmd.ofMsg)
       PaymentRequest.Parse loopOut.Invoice
       |> ResultUtils.Result.either onSuccess onError
 
@@ -192,17 +170,12 @@ module Swap =
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
-        match cmd.Data with
-        | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
-          return ([KnownSwapAddedAgain loopOut.Id], Cmd.none) |> enhance
-        | NewLoopOut loopOut ->
+        match cmd.Data, s with
+        | NewLoopOut loopOut, Initialized ->
           return ([NewLoopOutAdded loopOut], Cmd.none) |> enhance
-        | NewLoopIn loopIn when s.OnGoing.In |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
-          return ([KnownSwapAddedAgain loopIn.Id], Cmd.none) |> enhance
-        | NewLoopIn loopIn ->
+        | NewLoopIn loopIn, Initialized ->
           return ([NewLoopInAdded loopIn], Cmd.none) |> enhance
-        | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
-          let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
+        | SwapUpdate u, Out ourSwap ->
           if (u.Response.SwapStatus = ourSwap.Status) then
             return ([], Cmd.none)
           else
@@ -230,11 +203,10 @@ module Swap =
               broadcaster.BroadcastTx(claimTx, ourCryptoCode)
             let txid = claimTx.GetWitHash()
             let cmd = AsyncHelpers.startPaymentRequest lnClient ourSwap
-            return ([ClaimTxPublished(txid, ourSwap.Id)], cmd) |> enhance
+            return ([ClaimTxPublished(txid)], cmd) |> enhance
           | _ ->
             return ([], Cmd.none)
-        | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
-          let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
+        | SwapUpdate u, In ourSwap ->
           match u.Response.SwapStatus with
           | SwapStatusType.InvoiceSet ->
             // TODO: check confirmation?
@@ -264,17 +236,14 @@ module Swap =
             | true, _ ->
               let tx = psbt.ExtractTransaction()
               do! broadcaster.BroadcastTx(tx, ourCryptoCode)
-              return ([SwapTxPublished(tx.GetWitHash(), ourSwap.Id)], Cmd.none) |> enhance
+              return ([SwapTxPublished(tx.GetWitHash())], Cmd.none) |> enhance
           | _ ->
           return ([], Cmd.none)
-        | SwapUpdate u ->
-          return raise <| Exception(sprintf "UnknownSwapId: %A"(u.Id))
-        | SetValidationError(id, err) when
-            s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
-            s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
-          return ([LoopErrored( id, err )], Cmd.none) |> enhance
-        | SetValidationError(id, _err) ->
-          return raise <| Exception(sprintf "UnknownSwapId: %A"id)
+        | SetValidationError(err), Out _
+        | SetValidationError(err), In _ ->
+          return ([LoopErrored( err )], Cmd.none) |> enhance
+        | x, s ->
+          return raise <| Exception($"Unexpected Command {x} in state {s}")
       with
       | ex ->
         return! UnExpectedError ex |> Error
@@ -283,34 +252,22 @@ module Swap =
 
   let applyChanges
     (state: State) (event: Event) =
-    match event with
-    | KnownSwapAddedAgain _ ->
-      state
-    | ClaimTxPublished (txid, id) ->
-      let newOuts =
-        state.OnGoing.Out |> List.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with Out = newOuts } }
-    | SwapTxPublished (txid, id) ->
-      let newIns =
-        state.OnGoing.In |> List.map(fun x -> if x.Id = id then { x with LockupTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with In = newIns } }
-    | NewLoopOutAdded loopOut ->
-      { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } }
-    | NewLoopInAdded loopIn ->
-      { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }
-    | LoopErrored (id, err)->
-      let newLoopIns =
-        state.OnGoing.In |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
-      let newLoopOuts =
-        state.OnGoing.Out |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
-      { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }
-    | ReceivedOffChainPayment(swapId, preimage) ->
-      let newLoopOuts =
-        state.OnGoing.Out
-        |> List.map(fun s ->
-          if s.Id = swapId then { s with Preimage = preimage.ToByteArray() |> fun x -> uint256(x, false) } else
-          s)
-      { state with OnGoing = { state.OnGoing with Out = newLoopOuts } }
+    match event, state with
+    | ClaimTxPublished (txid), Out x ->
+      Out { x with ClaimTransactionId = Some txid }
+    | SwapTxPublished (txid), In x ->
+      In { x with LockupTransactionId = Some txid }
+    | NewLoopOutAdded loopOut, Initialized ->
+      Out loopOut
+    | NewLoopInAdded loopIn, Initialized ->
+      In loopIn
+    | LoopErrored (err), In x ->
+      In { x with Error = err }
+    | LoopErrored (err), Out x ->
+      Out { x with Error = err }
+    | ReceivedOffChainPayment(preimage), Out x ->
+      Out { x with Preimage = preimage.ToByteArray() |> fun x -> uint256(x, false) }
+    | _, x -> x
 
   type Aggregate = Aggregate<State, Msg, Event, Error, DateTime>
   type Handler = Handler<State, Msg, Event, Error, SwapId>
@@ -336,24 +293,3 @@ module Swap =
     getRepository eventStoreUri
     |> Handler.Create aggr
 
-  [<RequireQualifiedAccess>]
-  module Projection =
-    let swapProjection (handler: Handler) =
-      fun (swapId: SwapId) (observationDate: ObservationDate) -> taskResult {
-        let! events = handler.Replay swapId observationDate
-        let _currentState =
-          handler.Reconstitute events
-
-        let _filter (e: Event<Event>) =
-          e.Data.SwapId = swapId
-        let swapOpt =
-          events
-          |> List.filter(fun e -> e.Data.SwapId = swapId)
-          |> List.tryHead
-        return
-          match swapOpt with
-          | Some _swap ->
-            ()
-          | None ->
-            ()
-      }
