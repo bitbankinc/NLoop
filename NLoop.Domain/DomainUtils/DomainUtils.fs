@@ -177,7 +177,7 @@ type CommandMeta =
     { EffectiveDate: DateTime
       Source: string }
 
-type Command<'DomainCommand> =
+type ESCommand<'DomainCommand> =
     { Data: 'DomainCommand
       Meta: CommandMeta }
 
@@ -191,7 +191,7 @@ type Aggregate<'TState, 'TCommand, 'TEvent, 'TError,'T when 'T : comparison> = {
   Enrich: Event<'TEvent> list -> Event<'TEvent> list
   SortBy: Event<'TEvent> -> 'T
   Apply: 'TState -> 'TEvent -> 'TState
-  Exec: 'TState -> Command<'TCommand> -> Task<Result<Event<'TEvent> list * Cmd<Event<'TEvent>>, 'TError>>
+  Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list * Cmd<Event<'TEvent>>, 'TError>>
 }
 
 type ExpectedVersionUnion =
@@ -260,7 +260,7 @@ type Repository<'TEvent, 'TEntityId> = {
 type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
   Replay: 'TEntityId -> ObservationDate -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
   Reconstitute: Event<'TEvent> list -> 'TState
-  Execute: 'TEntityId -> Command<'TCommand> -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
+  Execute: 'TEntityId -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
 }
   with
   static member Create
@@ -297,8 +297,8 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
 
     let rec execute
       (entityId: 'TEntityId)
-      (command: Command<'TCommand>) = taskResult {
-        let { Command.Meta = { EffectiveDate = date } } = command
+      (command: ESCommand<'TCommand>) = taskResult {
+        let { ESCommand.Meta = { EffectiveDate = date } } = command
         let! expectedVersion =
           repo.Version entityId
           |> TaskResult.mapError EventSourcingError.Store

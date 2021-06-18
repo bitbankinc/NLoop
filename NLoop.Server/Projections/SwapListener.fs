@@ -13,7 +13,7 @@ open NLoop.Server
 type SwapListener(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
                   eventAggregator: IEventAggregator) =
-
+  inherit BackgroundService()
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun (event) -> unitTask {
       event.ToRecordedEvent(Swap.serializer)
@@ -28,11 +28,7 @@ type SwapListener(loggerFactory: ILoggerFactory,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator)
 
-  interface IHostedService with
-    member this.StartAsync(stoppingToken) = unitTask {
-      return failwith "todo"
-    }
-
-    member this.StopAsync(cancellationToken) = unitTask {
-      return failwith "todo"
-    }
+  override this.ExecuteAsync(stoppingToken) = unitTask {
+    let checkpoint = failwith "Todo"
+    do! subscription.SubscribeAsync(checkpoint, stoppingToken)
+  }

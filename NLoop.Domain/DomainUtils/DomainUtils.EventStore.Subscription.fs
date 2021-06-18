@@ -57,7 +57,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
   let subscribe (state: SubscriptionState) (mailbox: SubscriptionMailbox) =
     let eventAppeared =
       Func<EventStoreCatchUpSubscription, ResolvedEvent, Task>(fun _ resolvedEvent ->
-        let t = unitTask {
+        unitTask {
           state.CancellationToken.ThrowIfCancellationRequested()
           let checkpoint = Checkpoint.StreamPosition resolvedEvent.Event.EventNumber
           match SerializedRecordedEvent.FromEventStoreResolvedEvent(resolvedEvent) with
@@ -66,8 +66,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
           | Ok encodedEvent ->
             do! eventHandler encodedEvent
             mailbox.Post(EventAppeared checkpoint)
-        }
-        t)
+        })
 
     let subscriptionDropped =
       Action<EventStoreCatchUpSubscription, SubscriptionDropReason, exn>(fun _ reason err ->

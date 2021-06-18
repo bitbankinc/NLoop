@@ -37,7 +37,7 @@ type SwapActor(broadcaster: IBroadcaster,
   member this.Execute(swapId, msg: Swap.Msg, ?source) = task {
     let source = source |> Option.defaultValue "SwapActor"
     let cmd =
-      { Command.Data = msg
+      { ESCommand.Data = msg
         Meta = { CommandMeta.Source = source
                  EffectiveDate = DateTime.Now } }
     match! handler.Execute swapId cmd with

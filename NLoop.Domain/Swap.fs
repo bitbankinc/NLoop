@@ -165,7 +165,7 @@ module Swap =
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
       GetChangeAddress = getChangeAddress; LightningClient = lnClient  }
     (s: State)
-    (cmd: Command<Msg>): Task<Result<Event<Event> list * Cmd<Event<Event>>, _>> =
+    (cmd: ESCommand<Msg>): Task<Result<Event<Event> list * Cmd<Event<Event>>, _>> =
     taskResult {
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
