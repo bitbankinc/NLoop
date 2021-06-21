@@ -181,3 +181,36 @@ services:
     links:
       - "bitcoind"
       - "lnd_server"
+
+  esdb:
+    image: nloop/eventstore
+    container_name: esdb
+    build:
+      context: ./Dockerfiles
+      dockerfile: esdb
+      cache_from:
+        - nloop/esdb:latest
+    restart: unless-stopped
+    environment:
+      - EVENTSTORE_INSECURE=true
+      - EVNETSTORE_CLUSTER_SIZE=1
+      - EVENTSTORE_RUN_PROJECTIONS=All
+      - EVENTSTORE_START_STANDARD_PROJECTIONS=true
+      - EVENTSTORE_DB=/etc/eventstore/db
+      - EVENTSTORE_LOG=/etc/eventstore/log
+      - EVENTSTORE_INDEX=/etc/eventstore/index
+      - EVENTSTORE_EXT_TCP_PORT=1113
+      - EVENTSTORE_ENABLE_EXTERNAL_TCP=true
+      - EVENTSTORE_INT_HTTP_PORT=2113
+      - EVENTSTORE_EXT_HTTP_PORT=2113
+      - EVENTSTORE_HTTP_PORT=2113
+    ports:
+      - "1113:1113"
+      - "2113:2113"
+    command: --enable-external-tcp --ext-ip=0.0.0.0 --int-ip=0.0.0.0 --ext-host-advertise-as=esdb --advertise-host-to-client-as=localhost
+      #- --enable-external-tcp
+      #- --enable-external-http
+    volumes:
+      - "${DATA_PATH}/esdb:/etc/eventstore"
+
+
