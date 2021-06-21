@@ -74,8 +74,6 @@ let findEmptyPort(ports: int[]) =
 let getTestRepository(n) =
   let keyDict = ConcurrentDictionary<_,_>()
   let preimageDict = ConcurrentDictionary<_,_>()
-  let loopOutD = ConcurrentDictionary<_,_>()
-  let loopInD = ConcurrentDictionary<_,_>()
   let jsonOpts =  JsonSerializerOptions()
   jsonOpts.AddNLoopJsonConverters(n)
   { new ISecretRepository with
@@ -92,25 +90,6 @@ let getTestRepository(n) =
         Task.FromResult() :> Task
       member this.GetPreimage(hash) =
         match preimageDict.TryGetValue(hash) with
-        | true, key -> Some(key)
-        | false, _ -> None
-        |> Task.FromResult
-      member this.SetLoopOut(loopOut) =
-        loopOutD.TryAdd (loopOut.Id, loopOut) |> ignore
-        Task.FromResult() :> Task
-
-      member this.GetLoopOut(id) =
-        match loopOutD.TryGetValue(id) with
-        | true, key -> Some(key)
-        | false, _ -> None
-        |> Task.FromResult
-
-      member this.SetLoopIn(loopIn) =
-        loopInD.TryAdd (loopIn.Id, loopIn) |> ignore
-        Task.FromResult() :> Task
-
-      member this.GetLoopIn(id) =
-        match loopInD.TryGetValue(id) with
         | true, key -> Some(key)
         | false, _ -> None
         |> Task.FromResult
