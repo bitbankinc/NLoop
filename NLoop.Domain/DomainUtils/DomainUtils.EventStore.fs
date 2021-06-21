@@ -100,7 +100,9 @@ module EventStore =
   let eventStore
     (uri: Uri)
     : Store =
-      let conn = EventStoreConnection.Create uri
+      let conn =
+        let connSettings = ConnectionSettings.Create().DisableTls().Build()
+        EventStoreConnection.Create(connSettings, uri)
       conn.ConnectAsync().Wait()
       {
         ReadLast =  readLast conn

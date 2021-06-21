@@ -63,7 +63,7 @@ type NLoopOptions() =
 
   // -- eventstore db --
   member val EventStoreUrl =
-      let protocol = "https"
+      let protocol = "tcp"
       let host = "localhost"
       let port = 2113
       let user = "admin"

@@ -12,6 +12,7 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open FSharp.Control.Tasks
+open FsToolkit.ErrorHandling
 
 type SwapDomainTests() =
   let mockBroadcaster =
@@ -75,7 +76,34 @@ type SwapDomainTests() =
   let getCommand effectiveDate msg =
     { ESCommand.Data = msg; Meta = { CommandMeta.Source = "Test"; EffectiveDate = effectiveDate } }
 
+  let executeCommand deps swapId =
+    fun cmd -> taskResult {
+      let aggr = Swap.getAggregate deps
+      let handler = Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
+      let! events = handler.Execute swapId cmd
+      do! Async.Sleep 300
+      return events
+    }
 
+  [<Property(MaxTest=10)>]
+  member this.TestLoopOut(loopOut: LoopOut) =
+    let commands =
+      [
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+    let deps = mockDeps(None)
+    let events =
+      commands
+      |> List.map(executeCommand deps loopOut.Id)
+      |> List.sequenceTaskResultM
+      |> TaskResult.map(List.concat)
+      |> fun t -> t.GetAwaiter().GetResult()
+    Assert.isOk events
+    ()
+
+
+  (*
   [<Property(MaxTest=10)>]
   member this.AddSwapWithSameIdShouldReturnError (loopOut) =
     let aggr = getAggr(None)
@@ -173,4 +201,5 @@ type SwapDomainTests() =
     let r =
       t.GetAwaiter().GetResult() |> Result.deref |> fst |> Seq.exactlyOne
     ()
+    *)
 
