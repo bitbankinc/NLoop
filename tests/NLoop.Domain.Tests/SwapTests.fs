@@ -66,24 +66,76 @@ type SwapDomainTests() =
     Swap.Deps.LightningClient = mockLightningClient pp
   }
 
-  let getAggr(maybePaymentPreimage) =
-    let deps = mockDeps (maybePaymentPreimage)
-    Swap.getAggregate deps
-
   do
     Arb.register<PrimitiveGenerator>() |> ignore
+    Arb.register<DomainTypeGenerator>() |> ignore
 
-  let getCommand effectiveDate msg =
-    { ESCommand.Data = msg; Meta = { CommandMeta.Source = "Test"; EffectiveDate = effectiveDate } }
+  let getCommand (effectiveDate: DateTime) msg =
+    { ESCommand.Data = msg
+      Meta = {
+        CommandMeta.Source = "Test"
+        EffectiveDate = effectiveDate |> UnixDateTime.Create |> Result.deref
+      }
+    }
 
-  let executeCommand deps swapId =
+  let getTestRepository() =
+    let store = InMemoryStore.eventStore()
+    Repository.Create
+      store
+      Swap.serializer
+      "swap in-memory repo"
+
+  let executeCommand deps repo swapId =
     fun cmd -> taskResult {
       let aggr = Swap.getAggregate deps
-      let handler = Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
+      // let handler = Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
+      let handler = Handler.Create<_> (aggr) (repo)
       let! events = handler.Execute swapId cmd
       do! Async.Sleep 300
       return events
     }
+
+  [<Fact>]
+  member this.JsonSerializerTest() =
+    let events = [
+      Swap.Event.LoopErrored("Error msg")
+      Swap.Event.ClaimTxPublished(uint256.Zero)
+      Swap.Event.SwapTxPublished(uint256.One)
+      Swap.Event.ReceivedOffChainPayment(PaymentPreimage.Create(Array.zeroCreate(32)))
+    ]
+
+    for e in events do
+      let ser = Swap.serializer
+      let e2 = ser.EventToBytes(e) |> ser.BytesToEvents
+      Assertion.isOk(e2)
+
+  [<Property(MaxTest=10)>]
+  member this.JsonSerializerTest_LoopIn(loopIn: LoopIn) =
+    let e = Swap.Event.NewLoopInAdded(loopIn)
+    let ser = Swap.serializer
+    let e2 = ser.EventToBytes(e) |> ser.BytesToEvents
+    Assertion.isOk(e2)
+
+  [<Property(MaxTest=10)>]
+  member this.JsonSerializerTest_LoopOut(loopOut: LoopOut) =
+    let e = Swap.Event.NewLoopOutAdded(loopOut)
+    let ser = Swap.serializer
+    let e2 = ser.EventToBytes(e) |> ser.BytesToEvents
+    Assertion.isOk(e2)
+
+  [<Property(MaxTest=10)>]
+  member this.EventMetaSerialize(em: EventMeta) =
+    let emr = em.ToBytes() |> EventMeta.FromBytes
+    Assertion.isOk(emr)
+    let em2 = emr |> Result.deref
+    Assert.Equal(em, em2)
+
+  [<Property(MaxTest=10)>]
+  member this.SerializedEventSerialize(se: SerializedEvent) =
+    let ser = se.ToBytes() |> SerializedEvent.FromBytes
+    Assertion.isOk(ser)
+    let se2 = ser |> Result.deref
+    Assert.Equal(se, se2)
 
   [<Property(MaxTest=10)>]
   member this.TestLoopOut(loopOut: LoopOut) =
@@ -94,12 +146,13 @@ type SwapDomainTests() =
       |> List.map(fun x -> x ||> getCommand)
     let deps = mockDeps(None)
     let events =
+      let repo = getTestRepository()
       commands
-      |> List.map(executeCommand deps loopOut.Id)
+      |> List.map(executeCommand deps repo loopOut.Id)
       |> List.sequenceTaskResultM
       |> TaskResult.map(List.concat)
       |> fun t -> t.GetAwaiter().GetResult()
-    Assert.isOk events
+    Assertion.isOk events
     ()
 
 

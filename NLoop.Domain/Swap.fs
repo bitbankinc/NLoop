@@ -118,12 +118,16 @@ module Swap =
     | FailedToGetChangeAddress of string
     | UTXOProviderError of UTXOProviderError
 
-  let serializer: Serializer<Event> = {
-    Serializer.EventToBytes = JsonSerializer.SerializeToUtf8Bytes
+  let private jsonConverterOpts =
+    let o = JsonSerializerOptions()
+    o.AddNLoopJsonConverters()
+    o
+  let serializer : Serializer<Event> = {
+    Serializer.EventToBytes = fun e -> JsonSerializer.SerializeToUtf8Bytes(e, jsonConverterOpts)
     BytesToEvents =
       fun b ->
         try
-          JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b)
+          JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b, jsonConverterOpts)
           |> Ok
         with
         | ex ->
@@ -243,7 +247,7 @@ module Swap =
         | SetValidationError(err), In _ ->
           return ([LoopErrored( err )], Cmd.none) |> enhance
         | x, s ->
-          return raise <| Exception($"Unexpected Command {x} in state {s}")
+          return raise <| Exception($"Unexpected Command \n{x} \n\nWhile in the state\n{s}")
       with
       | ex ->
         return! UnExpectedError ex |> Error
@@ -279,7 +283,7 @@ module Swap =
     Filter = id
     Enrich = id
     SortBy = fun event ->
-      event.Meta.EffectiveDate
+      event.Meta.EffectiveDate.Value
   }
 
   let getRepository eventStoreUri =

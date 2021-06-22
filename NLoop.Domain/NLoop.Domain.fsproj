@@ -10,6 +10,7 @@
     <Compile Include="Extensions.fs" />
     <Compile Include="Cmd.fs" />
     <Compile Include="DomainUtils\DomainUtils.fs" />
+    <Compile Include="DomainUtils\DomainUtils.InMemoryStore.fs" />
     <Compile Include="DomainUtils\DomainUtils.EventStore.fs" />
     <Compile Include="DomainUtils\DomainUtils.EventStore.Subscription.fs" />
     <Compile Include="ValueObjects.fs" />

@@ -9,7 +9,7 @@ module Result =
       | Error e -> failwithf "%A" e
 
 
-module Assert =
+module Assertion =
   let inline isOk (r: Result<_, _>) =
     match r with
     | Ok _ -> ()

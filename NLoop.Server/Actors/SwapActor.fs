@@ -39,7 +39,7 @@ type SwapActor(broadcaster: IBroadcaster,
     let cmd =
       { ESCommand.Data = msg
         Meta = { CommandMeta.Source = source
-                 EffectiveDate = DateTime.Now } }
+                 EffectiveDate = UnixDateTime.Now } }
     match! handler.Execute swapId cmd with
     | Ok events ->
       events

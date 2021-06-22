@@ -18,6 +18,10 @@ module EventStore =
         resolvedEvent.Event.EventNumber
         |> EventNumber.Create
         |> Result.mapError (StoreError)
+      let! createdDate =
+        resolvedEvent.Event.Created
+        |> UnixDateTime.Create
+        |> Result.mapError (StoreError)
       return
         {
           SerializedRecordedEvent.Id =
@@ -26,8 +30,7 @@ module EventStore =
             resolvedEvent.Event.EventType
             |> EventType.EventType
           EventNumber = eventNumber
-          CreatedDate =
-            resolvedEvent.Event.Created
+          CreatedDate = createdDate
           Data =
             resolvedEvent.Event.Data
           Meta =

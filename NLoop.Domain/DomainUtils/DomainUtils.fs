@@ -1,6 +1,8 @@
 namespace NLoop.Domain.Utils
 
+open System.IO
 open System.Text.Unicode
+open DotNetLightning.Serialization
 open DotNetLightning.Utils
 open System
 open NLoop.Domain
@@ -39,13 +41,35 @@ type EventNumber = private EventNumber of uint64
     EventNumber(uint64 i)
     |> Ok
 
+type UnixDateTime = private UnixDateTime of DateTime
+  with
+  member this.Value = let (UnixDateTime d) = this in d
+  static member Now = DateTime.Now |> UnixDateTime
+  static member Create(unixTime: uint64) =
+    try
+      NBitcoin.Utils.UnixTimeToDateTime(unixTime).UtcDateTime
+      |> UnixDateTime
+      |> Ok
+    with
+    | ex ->
+      Error($"UnixDateTime Creation error %A{ex.Message}")
+  static member Create(dateTime: DateTime) =
+    try
+      DateTimeOffset(dateTime, TimeSpan.Zero)
+      |> NBitcoin.Utils.DateTimeToUnixTime
+      |> uint64
+      |> UnixDateTime.Create
+    with
+    | ex ->
+      Error($"UnixDateTime Creation error %A{ex.Message}")
+
 /// `AsOf` means as it was or will be on and after that date.
 /// `AsAt` means as it is at that particular time only. It implies there may be changes.
 /// `Latest` means as it currently is. Specifically, include all events in the stream.
 type ObservationDate =
   | Latest
-  | AsOf of DateTime
-  | AsAt of DateTime
+  | AsOf of UnixDateTime
+  | AsAt of UnixDateTime
 
 type StoreError = StoreError of string
 type EventSourcingError<'T> =
@@ -54,14 +78,14 @@ type EventSourcingError<'T> =
 
 type EventMeta = {
   /// Date at which event is effective in the domain
-  EffectiveDate: DateTime
+  EffectiveDate: UnixDateTime
   /// Origin of this event.
   SourceName: string
 }
   with
   member this.ToBytes() =
     let d =
-      this.EffectiveDate
+      this.EffectiveDate.Value
       |> fun x -> DateTimeOffset(x, TimeSpan.Zero)
       |> NBitcoin.Utils.DateTimeToUnixTime
       |> fun u ->  NBitcoin.Utils.ToBytes(u, false).BytesWithLength()
@@ -72,23 +96,27 @@ type EventMeta = {
     Array.concat [d; source]
 
   static member FromBytes(b: byte[]) =
-    try
-      let effectiveDate, b = b.PopWithLen()
-      let sourceName, _b = b.PopWithLen()
-      {
-        EffectiveDate =
-          effectiveDate
+    result {
+      try
+        let effectiveDateB, b = b.PopWithLen()
+        let sourceName, _b = b.PopWithLen()
+        let effectiveDate =
+          effectiveDateB
           |> fun b -> NBitcoin.Utils.ToUInt32(b, false)
           |>  NBitcoin.Utils.UnixTimeToDateTime
           |> fun dateTimeOffset -> dateTimeOffset.UtcDateTime
-        SourceName =
-          sourceName
-          |> System.Text.Encoding.UTF8.GetString
-      }
-      |> Ok
-    with
-    | ex ->
-      Error (sprintf "Failed to Deserialize EventMeta %A" ex)
+        let! d = UnixDateTime.Create(effectiveDate)
+        return
+          {
+            EffectiveDate = d
+            SourceName =
+              sourceName
+              |> System.Text.Encoding.UTF8.GetString
+          }
+      with
+      | ex ->
+        return! Error (sprintf "Failed to Deserialize EventMeta %A" ex)
+    }
 
 type Serializer<'TEvent> = {
   EventToBytes: 'TEvent -> byte[]
@@ -114,29 +142,39 @@ and SerializedEvent = {
   Meta: byte[]
 }
   with
+  member this.Serialize(ls: LightningWriterStream) =
+    ls.WriteWithLen(this.Type.ToBytes())
+    ls.WriteWithLen(this.Data)
+    ls.WriteWithLen(this.Meta)
+
+  static member Deserialize(ls: LightningReaderStream) =
+    try
+      {
+        Type = ls.ReadWithLen() |> EventType.FromBytes
+        Data = ls.ReadWithLen()
+        Meta = ls.ReadWithLen()
+      }
+      |> Ok
+    with
+    | ex ->
+      Error($"Failed to Deserialize SerializedEvent %A{ex}")
+
   member this.ToBytes() =
-    Array.concat (seq [
-      this.Type.ToBytes().BytesWithLength()
-      this.Data.BytesWithLength()
-      this.Meta.BytesWithLength()
-    ])
+    use ms = new MemoryStream()
+    use ls = new LightningWriterStream(ms)
+    this.Serialize(ls)
+    ms.ToArray()
 
   static member FromBytes(b: byte[]) =
-    let ty, b = b.PopWithLen()
-    let data, b = b.PopWithLen()
-    let meta, _b = b.PopWithLen()
-    {
-      Type = EventType.FromBytes(ty)
-      Data = data
-      Meta = meta
-    }
-
+    use ms = new MemoryStream(b)
+    use ls = new LightningReaderStream(ms)
+    SerializedEvent.Deserialize(ls)
 
 type RecordedEvent<'TEvent> = {
   Id: EventId
   Type: EventType
   EventNumber: EventNumber
-  CreatedDate: DateTime
+  CreatedDate: UnixDateTime
   Data: 'TEvent
   Meta: EventMeta
 }
@@ -153,7 +191,7 @@ type SerializedRecordedEvent = {
   Id: EventId
   Type: EventType
   EventNumber: EventNumber
-  CreatedDate: DateTime
+  CreatedDate: UnixDateTime
   Data: byte[]
   Meta: byte[]
 }
@@ -174,7 +212,7 @@ type SerializedRecordedEvent = {
 
 
 type CommandMeta =
-    { EffectiveDate: DateTime
+    { EffectiveDate: UnixDateTime
       Source: string }
 
 type ESCommand<'DomainCommand> =
