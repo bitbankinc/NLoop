@@ -26,7 +26,7 @@ open FSharp.Control.Tasks.Affine
 open Xunit.Abstractions
 open DockerComposeFixture
 
-let pairId = (SupportedCryptoCode.BTC, SupportedCryptoCode.LTC)
+let pairId = struct (SupportedCryptoCode.BTC, SupportedCryptoCode.LTC)
 
 type ServerIntegrationTestsBase(msgSync: IMessageSink) =
   inherit DockerFixture(msgSync)

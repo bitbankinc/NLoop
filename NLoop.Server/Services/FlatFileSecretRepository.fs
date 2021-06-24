@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Threading.Tasks
+open DotNetLightning.Utils.Primitives
 open Microsoft.Extensions.Logging
 open NBitcoin
 
@@ -53,7 +54,7 @@ type ISecretRepositoryExtensions() =
   static member NewPreimage(this: ISecretRepository) = task {
     let preimage = RandomUtils.GetBytes(32)
     do! this.SetPreimage(preimage)
-    return preimage
+    return preimage |> PaymentPreimage.Create
   }
 
 

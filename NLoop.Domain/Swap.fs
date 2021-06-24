@@ -113,10 +113,13 @@ module Swap =
       }
 
   type Error =
-    | TransactionError of Transactions.Error
+    | TransactionError of string
     | UnExpectedError of exn
     | FailedToGetChangeAddress of string
     | UTXOProviderError of UTXOProviderError
+
+  let inline private expectTxError (r: Result<_, Transactions.Error>) =
+    r |> Result.mapError(fun e -> e.Message |> TransactionError)
 
   let private jsonConverterOpts =
     let o = JsonSerializerOptions()
@@ -151,7 +154,9 @@ module Swap =
           let onSuccess (preimage) =
             (ReceivedOffChainPayment(preimage))
           Cmd.OfTask.perform
-            (fun invoice -> lnClient.Offer(loopOut.PairId |> fst, invoice))
+            (fun invoice ->
+              let (struct (ourCrypto, _)) = loopOut.PairId
+              lnClient.Offer(ourCrypto, invoice))
             (invoice)
             (onSuccess)
       let onError =
@@ -188,7 +193,7 @@ module Swap =
             return ([], Cmd.none)
           | SwapStatusType.TxMempool
           | SwapStatusType.TxConfirmed ->
-            let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
+            let (struct (ourCryptoCode, counterPartyCryptoCode)) = ourSwap.PairId
             let! feeRate =
               feeEstimator.Estimate(counterPartyCryptoCode)
             let lockupTx =
@@ -196,13 +201,13 @@ module Swap =
             let! claimTx =
               Transactions.createClaimTx
                 (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
-                (ourSwap.PrivateKey)
+                (ourSwap.ClaimKey)
                 (ourSwap.Preimage)
                 (ourSwap.RedeemScript)
                 (feeRate)
                 (lockupTx.Tx)
                 (u.Network)
-              |> Result.mapError(TransactionError)
+              |> expectTxError
             do!
               broadcaster.BroadcastTx(claimTx, ourCryptoCode)
             let txid = claimTx.GetWitHash()
@@ -214,7 +219,7 @@ module Swap =
           match u.Response.SwapStatus with
           | SwapStatusType.InvoiceSet ->
             // TODO: check confirmation?
-            let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
+            let (struct (ourCryptoCode, counterPartyCryptoCode)) = ourSwap.PairId
             let! utxos =
               utxoProvider.GetUTXOs(ourSwap.ExpectedAmount, ourCryptoCode)
               |> TaskResult.mapError(UTXOProviderError)
@@ -270,10 +275,10 @@ module Swap =
     | LoopErrored (err), Out x ->
       Out { x with Error = err }
     | ReceivedOffChainPayment(preimage), Out x ->
-      Out { x with Preimage = preimage.ToByteArray() |> fun x -> uint256(x, false) }
+      Out { x with Preimage = preimage }
     | _, x -> x
 
-  type Aggregate = Aggregate<State, Msg, Event, Error, DateTime>
+  type Aggregate = Aggregate<State, Msg, Event, Error, DateTime * string>
   type Handler = Handler<State, Msg, Event, Error, SwapId>
 
   let getAggregate deps: Aggregate = {
@@ -283,7 +288,7 @@ module Swap =
     Filter = id
     Enrich = id
     SortBy = fun event ->
-      event.Meta.EffectiveDate.Value
+      event.Meta.EffectiveDate.Value, event.Data.Type
   }
 
   let getRepository eventStoreUri =

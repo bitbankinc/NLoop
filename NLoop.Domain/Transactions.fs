@@ -16,15 +16,17 @@ module Transactions =
       match this with
       | RedeemScriptMismatch(actualSpks, expectedRedeem) ->
         $"""Transaction did not contain expected redeem script.
-        (actual scriptPubKeys: {String.Join('\n', actualSpks)})
-        (redeemScript: {expectedRedeem.ToHex()})
+        (actual scriptPubKeys in lockup TX: "{String.Join('\n', actualSpks |> Seq.map(fun s -> s.ToHex()))}")
+        (expected redeem script: "{expectedRedeem.ToHex()}")
         (expected ScriptPubKey (p2wsh): {expectedRedeem.WitHash.ScriptPubKey.ToHex()})
         (expected ScriptPubKey (p2sh-p2wsh): {expectedRedeem.WitHash.ScriptPubKey.Hash.ScriptPubKey.ToHex()})
         """
+    override this.ToString() = this.Message
+
   let createClaimTx
     (output: BitcoinAddress)
     (key: Key)
-    (preimage: uint256)
+    (preimage: PaymentPreimage)
     (redeemScript: Script)
     (fee:  FeeRate)
     (lockupTx: Transaction)
@@ -48,7 +50,7 @@ module Transactions =
       let signature = tx.SignInput(key, sc)
       let witnessItems =
         WitScript(Op.GetPushOp(signature.ToBytes())) +
-          WitScript(Op.GetPushOp(preimage.ToBytes())) +
+          WitScript(Op.GetPushOp(preimage.ToByteArray())) +
           WitScript(Op.GetPushOp(redeemScript.ToBytes()))
       tx.Inputs.[0].WitScript <- witnessItems
       Ok tx

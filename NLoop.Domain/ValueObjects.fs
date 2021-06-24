@@ -65,7 +65,7 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (SupportedCryptoCode * SupportedCryptoCode)
+type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
 
 type SwapStatusType =
   | SwapCreated = 0uy

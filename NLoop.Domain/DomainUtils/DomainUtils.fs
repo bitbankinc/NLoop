@@ -30,6 +30,7 @@ type StreamId = StreamId of string
 
 type EventId = EventId of Guid
 
+[<Struct>]
 type EventNumber = private EventNumber of uint64
   with
   member this.Value = let (EventNumber v) = this in v
@@ -41,10 +42,12 @@ type EventNumber = private EventNumber of uint64
     EventNumber(uint64 i)
     |> Ok
 
+
+[<Struct>]
 type UnixDateTime = private UnixDateTime of DateTime
   with
   member this.Value = let (UnixDateTime d) = this in d
-  static member Now = DateTime.Now |> UnixDateTime
+  static member UtcNow = DateTime.UtcNow |> UnixDateTime
   static member Create(unixTime: uint64) =
     try
       NBitcoin.Utils.UnixTimeToDateTime(unixTime).UtcDateTime
@@ -52,7 +55,7 @@ type UnixDateTime = private UnixDateTime of DateTime
       |> Ok
     with
     | ex ->
-      Error($"UnixDateTime Creation error %A{ex.Message}")
+      Error($"UnixDateTime Creation error %A{ex}")
   static member Create(dateTime: DateTime) =
     try
       DateTimeOffset(dateTime, TimeSpan.Zero)
@@ -61,15 +64,16 @@ type UnixDateTime = private UnixDateTime of DateTime
       |> UnixDateTime.Create
     with
     | ex ->
-      Error($"UnixDateTime Creation error %A{ex.Message}")
+      Error($"UnixDateTime Creation error %A{ex}")
 
 /// `AsOf` means as it was or will be on and after that date.
 /// `AsAt` means as it is at that particular time only. It implies there may be changes.
 /// `Latest` means as it currently is. Specifically, include all events in the stream.
+[<Struct>]
 type ObservationDate =
   | Latest
-  | AsOf of UnixDateTime
-  | AsAt of UnixDateTime
+  | AsOf of asof: UnixDateTime
+  | AsAt of asat: UnixDateTime
 
 type StoreError = StoreError of string
 type EventSourcingError<'T> =
@@ -310,11 +314,11 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
         |> TaskResult.mapError(EventSourcingError.Store)
 
       let onOrBeforeObservationDate
-        ({ RecordedEvent.CreatedDate = cDate; Meta = { EffectiveDate  = eDate } }) =
+        ({ RecordedEvent.CreatedDate = createdDate; Meta = { EffectiveDate  = effectiveDate } }) =
         match observationDate with
         | Latest -> true
-        | AsOf d -> cDate <= d
-        | AsAt d -> eDate <= d
+        | AsOf d -> createdDate <= d
+        | AsAt d -> effectiveDate <= d
       return
         recordedEvents
         |> aggregate.Filter

@@ -180,6 +180,12 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
+      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MinimumSwapAmountSatoshis).ToLowerInvariant()}", $"Minimum Swap amount we can perform. (default: {NLoopOptions.Instance.MinimumSwapAmountSatoshis})")
+      o.Argument <-
+        let a = Argument<int64>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
       let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
       o.Argument <-
         let a = Argument<bool>()

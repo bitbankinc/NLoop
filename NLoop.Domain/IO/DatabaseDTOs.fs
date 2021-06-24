@@ -15,9 +15,9 @@ type LoopOut = {
   Error: string
   AcceptZeroConf: bool
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
-  PrivateKey: Key
-  [<JsonConverter(typeof<UInt256JsonConverter>)>]
-  Preimage: uint256
+  ClaimKey: Key
+  [<JsonConverter(typeof<PaymentPreimageJsonConverter>)>]
+  Preimage: PaymentPreimage
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   Invoice: string
@@ -39,7 +39,7 @@ type LoopIn = {
   Error: string
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   PrivateKey: Key
-  Preimage: uint256 option
+  Preimage: PaymentPreimage option
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   Invoice: string

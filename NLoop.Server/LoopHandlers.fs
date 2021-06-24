@@ -32,18 +32,24 @@ module LoopHandlers =
 
         use! claimKey = repo.NewPrivateKey()
         let! preimage = repo.NewPreimage()
-        let preimageHash = preimage |> Hashes.SHA256
+        let preimageHash = preimage.Hash
 
+        match req.Validate(opts.Value) with
+        | Error errors ->
+          ctx.SetStatusCode StatusCodes.Status400BadRequest
+          return! ctx.WriteJsonAsync({| errors = errors |})
+        | Ok _ ->
         let counterPartyPair =
           req.CounterPartyPair
           |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
+
         let! outResponse =
           let req =
             { CreateReverseSwapRequest.InvoiceAmount = req.Amount
               PairId = (ourCryptoCode, counterPartyPair)
               OrderSide = OrderType.buy
               ClaimPublicKey = claimKey.PubKey
-              PreimageHash = preimageHash |> uint256 }
+              PreimageHash = preimageHash.Value }
           boltzCli.CreateReverseSwapAsync(req)
 
         ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
@@ -60,8 +66,8 @@ module LoopHandlers =
           Status = SwapStatusType.SwapCreated
           Error = String.Empty
           AcceptZeroConf = req.AcceptZeroConf
-          PrivateKey = claimKey
-          Preimage = preimage |> uint256
+          ClaimKey = claimKey
+          Preimage = preimage
           RedeemScript = outResponse.RedeemScript
           Invoice = outResponse.Invoice.ToString()
           ClaimAddress = addr.ToString()
@@ -73,7 +79,7 @@ module LoopHandlers =
         }
 
         let actor = ctx.GetService<SwapActor>()
-        match outResponse.Validate(uint256(preimageHash), claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
+        match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
           do! actor.Execute(loopOut.Id, Swap.Msg.SetValidationError(e), "handleLoopOut")
           ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable

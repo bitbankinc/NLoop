@@ -42,6 +42,12 @@ type LoopOutRequest = {
     | Some(0) -> true
     | _ -> false
 
+  member this.Validate(opts: NLoopOptions): Result<unit, string list> =
+    if (this.Amount.Satoshi < opts.MinimumSwapAmountSatoshis) then
+      Error([$"Swap amount must be larger than {opts.MinimumSwapAmountSatoshis} satoshis. It was {this.Amount.Satoshi} satoshi"])
+    else
+      Ok()
+
 type LoopInResponse = {
   /// Unique id for the swap.
   [<JsonPropertyName "id">]

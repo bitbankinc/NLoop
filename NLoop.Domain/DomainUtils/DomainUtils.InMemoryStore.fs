@@ -15,7 +15,8 @@ module InMemoryStore =
     let readLast: StreamId -> Task<Result<_,_>>  =
       fun (streamId: StreamId)-> task {
         match streams.TryGetValue streamId with
-        | false, _ -> return None |> Ok
+        | false, _ ->
+          return None |> Ok
         | true, stack ->
           match stack.TryPeek() with
           | true, last ->
@@ -51,24 +52,25 @@ module InMemoryStore =
           | Specific _ when not doesStreamExists ->
             "Expected Stream but there was none"
             |> StoreError |> Error
-          | Specific i when doesStreamExists && (stack.Count + 1 |> int64 <> i) ->
-            $"Next event version is {stack.Count + 1}. But It did not match to {i}"
+          | Specific i when doesStreamExists && (stack.Count |> int64 <> i) ->
+            $"Next event version is {stack.Count + 1}. But It did not match to the one specified ({i})"
             |> StoreError |> Error
           | _ ->
             try
-              streams.AddOrUpdate(streamId, Stack(), fun _streamId (v: Stack<_>) ->
+              let updateStack = fun (v: Stack<_>) ->
                 events
-                |> List.mapi(fun i e -> {
+                |> List.mapi(fun i e ->
+                  {
                     SerializedRecordedEvent.Data = e.Data
                     Id = Guid.NewGuid() |> EventId
                     Type = e.Type
                     EventNumber = (v.Count + 1 + i) |> uint64 |> EventNumber.Create
-                    CreatedDate = DateTime.Now |> UnixDateTime.Create |> function Ok e -> e | Error e -> failwith $"Unreachable! {e}"
+                    CreatedDate = DateTime.UtcNow |> UnixDateTime.Create |> function Ok e -> e | Error e -> failwith $"Unreachable! {e}"
                     Meta = e.Meta
                   })
                 |> List.iter(v.Push)
                 v
-                )
+              streams.AddOrUpdate(streamId, (fun _ -> Stack() |> updateStack), fun _streamId -> updateStack)
               |> ignore
               Ok ()
             with

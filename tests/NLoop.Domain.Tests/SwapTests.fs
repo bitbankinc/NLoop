@@ -1,5 +1,6 @@
 module SwapTests
 
+open RandomUtils
 open System
 open System.Threading.Tasks
 open DotNetLightning.Utils.Primitives
@@ -11,7 +12,6 @@ open Generators
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
-open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
 
 type SwapDomainTests() =
@@ -59,12 +59,12 @@ type SwapDomainTests() =
   let mockDeps maybePaymentPreimage =
     let pp = maybePaymentPreimage |> Option.defaultValue (PaymentPreimage.Create(Array.zeroCreate(32)))
     {
-    Swap.Deps.Broadcaster = mockBroadcaster
-    Swap.Deps.FeeEstimator = mockFeeEstimator
-    Swap.Deps.UTXOProvider = mockUtxoProvider ([||])
-    Swap.Deps.GetChangeAddress = getChangeAddress
-    Swap.Deps.LightningClient = mockLightningClient pp
-  }
+      Swap.Deps.Broadcaster = mockBroadcaster
+      Swap.Deps.FeeEstimator = mockFeeEstimator
+      Swap.Deps.UTXOProvider = mockUtxoProvider ([||])
+      Swap.Deps.GetChangeAddress = getChangeAddress
+      Swap.Deps.LightningClient = mockLightningClient pp
+    }
 
   do
     Arb.register<PrimitiveGenerator>() |> ignore
@@ -138,14 +138,14 @@ type SwapDomainTests() =
     Assert.Equal(se, se2)
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopOut(loopOut: LoopOut) =
+  member this.TestNewLoopOut(loopOut: LoopOut) =
     let commands =
       [
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
       ]
       |> List.map(fun x -> x ||> getCommand)
-    let deps = mockDeps(None)
     let events =
+      let deps = mockDeps(None)
       let repo = getTestRepository()
       commands
       |> List.map(executeCommand deps repo loopOut.Id)
@@ -153,106 +153,92 @@ type SwapDomainTests() =
       |> TaskResult.map(List.concat)
       |> fun t -> t.GetAwaiter().GetResult()
     Assertion.isOk events
-    ()
-
-
-  (*
-  [<Property(MaxTest=10)>]
-  member this.AddSwapWithSameIdShouldReturnError (loopOut) =
-    let aggr = getAggr(None)
-    let state = aggr.Zero
-    let t = aggr.Exec (state) ((Swap.Msg.NewLoopOut(loopOut)) |> getCommand (DateTime(2001, 01, 30, 0, 0, 0)))
-    let r =
-      t.GetAwaiter().GetResult() |> Result.deref |> fst |> Seq.exactlyOne
-    Assert.Equal(Swap.Event.NewLoopOutAdded(loopOut), r.Data)
-    let state = aggr.Apply(state) (r.Data)
-    let _ =
-      let s = state |> function | Swap.State.Out x -> x | x -> failwithf "%A" x
-      Assert.Equal(s, loopOut)
-
-    let t = aggr.Exec (state) (Swap.Msg.NewLoopOut(loopOut) |> getCommand(DateTime(2001, 01, 30, 1, 0, 0)))
-
-    Assert.ThrowsAny(Action(fun () ->  t.GetAwaiter().GetResult() |> Result.deref |> ignore))
-
 
   [<Property(MaxTest=10)>]
-  member this.``SwapUpdate (BogusDepsWillRaiseException)`` (loopOut) =
-    // prepare
-    let aggr = getAggr(None)
-    let bogusFeeEstimator = {
-      new IFeeEstimator with
-        member this.Estimate(cryptoCode) = task {
-          return raise <| Exception("Failed!")
-        }
-    }
-    let state = aggr.Zero
-    let loopOut =
-      let addr =
-        use key = new Key()
-        key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network.RegTest)
-      { loopOut with LoopOut.ClaimAddress = addr.ToString() }
+  member this.TestLoopOut(loopOut: LoopOut) =
+    let commands =
+      [
+        let loopOut =
+          let claimKey = new Key()
+          let claimAddr =
+            claimKey.PubKey.WitHash.GetAddress(Network.RegTest)
+          let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+          let paymentHash = paymentPreimage.Hash
+          let refundKey = new Key()
+          let redeemScript =
+            Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey (loopOut.TimeoutBlockHeight)
+          { loopOut with
+              Preimage = paymentPreimage
+              ClaimKey = claimKey
+              OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
+              RedeemScript = redeemScript
+              ClaimAddress = claimAddr.ToString(); }
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
+        let update =
+          let swapTx =
+            let fee = Money.Satoshis(30m)
+            let txb = Network.RegTest.CreateTransactionBuilder()
+            txb
+              .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
+              .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
+              .SendFees(fee)
+              .SetChange((new Key()).PubKey.WitHash)
+              .BuildTransaction(true)
+          { Swap.Data.SwapStatusUpdate.Network = Network.RegTest
+            Swap.Data.Response = {
+              Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
+              Transaction = Some({ Tx = swapTx
+                                   TxId = swapTx.GetWitHash()
+                                   Eta = 1 })
+              FailureReason = None
+            }
+          }
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Msg.SwapUpdate(update))
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+    let events =
+      let fundsKey = new Key()
+      let deps = { mockDeps(None) with UTXOProvider = mockUtxoProvider([|fundsKey|]) }
+      let repo = getTestRepository()
 
-    let aggr =
-      let mockDeps = { mockDeps(None) with FeeEstimator = bogusFeeEstimator }
-      Swap.getAggregate mockDeps
-    let state =
-      let cmd = Swap.Msg.NewLoopOut({ loopOut with Status = SwapStatusType.SwapCreated }) |> getCommand(DateTime(2001, 01, 30, 0, 0, 0))
-      let t = aggr.Exec (state) cmd
-      let evt = t.GetAwaiter().GetResult() |> Result.deref |> fst |> Seq.exactlyOne
-      aggr.Apply(state) (evt.Data)
-
-    // (Check exception)
-    let swapUpdate =
-      let tx = Network.RegTest.CreateTransaction()
-      { Swap.Data.SwapStatusUpdate.Response = {
-        Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
-        Transaction = Some({ Tx = tx
-                             TxId = tx.GetWitHash()
-                             Eta = 1 })
-        FailureReason = None }
-        Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-    let e = Assert.ThrowsAsync<Exception>(fun () -> aggr.Exec (state) (Swap.Msg.SwapUpdate(swapUpdate) |> getCommand(DateTime(2001, 01, 30, 0, 0, 0))) :> Task)
-    Assert.Equal(e.GetAwaiter().GetResult().Message, "Failed!")
-    ()
+      commands
+      |> List.map(executeCommand deps repo loopOut.Id)
+      |> List.sequenceTaskResultM
+      |> TaskResult.map(List.concat)
+      |> fun t -> t.GetAwaiter().GetResult()
+    Assertion.isOk events
 
   [<Property(MaxTest=10)>]
-  member this.``SwapUpdate(LoopIn)``(loopIn: LoopIn, prevTxo: OutPoint) =
-    // setup
-    let aggr = getAggr(None)
-    let state = aggr.Zero
-    let addr =
-      use key = new Key()
-      key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network.RegTest)
-    let loopIn = {
-      loopIn with
-        LoopIn.Address = addr.ToString()
-        ExpectedAmount = if loopIn.ExpectedAmount.Satoshi < 0L then Money.Coins(0.5m) else loopIn.ExpectedAmount
-    }
+  member this.TestLoopIn(loopIn: LoopIn) =
+    let commands =
+      [
+        let addr =
+          use key = new Key()
+          key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network.RegTest)
+        let loopIn = {
+          loopIn with
+            LoopIn.Address = addr.ToString()
+            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi < 0L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+          }
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopIn(loopIn))
 
-    // act and assert
-    let aggr =
-      let key = new Key()
-      { mockDeps(None) with
-          UTXOProvider = mockUtxoProvider [|key|]
-      }
-      |> Swap.getAggregate
-    let t =
-      aggr.Exec (state) (Swap.Msg.NewLoopIn(loopIn) |> getCommand(DateTime(2001, 01, 30, 0, 0, 0)))
-    let r =
-      t.GetAwaiter().GetResult() |> Result.deref |> fst |> Seq.exactlyOne
-    Assert.Equal(Swap.Event.NewLoopInAdded(loopIn), r.Data)
-    let state = aggr.Apply(state) (r.Data)
-    Assert.Equal(state, Swap.State.In loopIn)
-
-    let swapUpdate =
-      { Swap.Data.SwapStatusUpdate.Response = {
-        Swap.Data.SwapStatusResponseData._Status = "invoice.set"
-        Transaction = None
-        FailureReason = None }
-        Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-    let t = aggr.Exec (state) (Swap.Msg.SwapUpdate(swapUpdate) |> getCommand(DateTime(2001, 01, 30, 1, 0, 0)))
-    let r =
-      t.GetAwaiter().GetResult() |> Result.deref |> fst |> Seq.exactlyOne
-    ()
-    *)
+        let swapUpdate =
+          { Swap.Data.SwapStatusUpdate.Response = {
+              Swap.Data.SwapStatusResponseData._Status = "invoice.set"
+              Transaction = None
+              FailureReason = None }
+            Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Msg.SwapUpdate(swapUpdate))
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+    let events =
+      use fundsKey = new Key()
+      let deps = { mockDeps(None) with UTXOProvider = mockUtxoProvider([|fundsKey|]) }
+      let repo = getTestRepository()
+      commands
+      |> List.map(executeCommand deps repo loopIn.Id)
+      |> List.sequenceTaskResultM
+      |> TaskResult.map(List.concat)
+      |> fun t -> t.GetAwaiter().GetResult()
+    Assertion.isOk events
 

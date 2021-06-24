@@ -76,6 +76,8 @@ type NLoopOptions() =
   member val MaxAcceptableSwapFeeSat = 10000L with get, set
   member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSat)
 
+  member val MinimumSwapAmountSatoshis = 1000L with get, set
+
   member val AcceptZeroConf = false with get, set
 
   member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set

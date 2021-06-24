@@ -197,6 +197,11 @@ type PrimitiveGenerator() =
   static member Coins() : Arbitrary<ICoin list> =
     coinsGen |> Arb.fromGen
 
+  static member PaymentPreimage : Arbitrary<PaymentPreimage> =
+    bytesOfNGen 32
+    |> Gen.map(PaymentPreimage.Create)
+    |> Arb.fromGen
+
 type DomainTypeGenerator =
   static member UnixDateTime(): Arbitrary<UnixDateTime> =
       Arb.generate<uint64>
