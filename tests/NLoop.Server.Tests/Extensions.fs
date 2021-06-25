@@ -42,13 +42,15 @@ module DockerFixtureExtensions =
 
   type DockerFixture with
     member this.StartFixture(testName: string) =
-      let ports = Array.zeroCreate 5 |> findEmptyPort
+      let ports = Array.zeroCreate 7 |> findEmptyPort
       let env = Dictionary<string, obj>()
       env.Add("BITCOIND_RPC_PORT", ports.[0])
       env.Add("LITECOIND_RPC_PORT", ports.[1])
       env.Add("LND_USER_REST_PORT", ports.[2])
       env.Add("LND_SERVER_REST_PORT", ports.[3])
       env.Add("BOLTZ_PORT", ports.[4])
+      env.Add("ESDB_TCP_PORT", ports.[5])
+      env.Add("ESDB_HTTP_PORT", ports.[6])
       let dataPath = Path.GetFullPath(testName)
       if (Directory.Exists(dataPath)) then
         Directory.Delete(dataPath, true)
@@ -63,7 +65,6 @@ module DockerFixtureExtensions =
       let oldFile = Path.Join(dataPath, "..", "data", "boltz", "bitcoind.cookie")
       let newFile = Path.Join(dataPath, "boltz", "bitcoind.cookie")
       File.Copy(oldFile, newFile)
-
 
       this.InitAsync(fun () ->
         let opts = DockerFixtureOptions() :> IDockerFixtureOptions
