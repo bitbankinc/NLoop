@@ -36,7 +36,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetInfoResponse'
 
-  /v1/loop/history:
+  /v1/swap/history:
     get:
       description: >
         Get the full history of swaps.
@@ -56,7 +56,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetSwapHistoryResponse"
-  /v1/loop/status:
+  /v1/swap/status:
     get:
       description: >
         Get the list of ongoing swaps.
@@ -69,6 +69,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetSwapStatusResponse"
+  /v1/swap/{id}:
+    get:
+      tags:
+        - swap
+      description: >
+        Get the list of ongoing swaps.
+      parameters:
+        - $ref: '#/components/parameters/swapId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+
   /v1/{cryptoCode}/loop/out:
     post:
       tags:
