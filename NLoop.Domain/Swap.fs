@@ -76,8 +76,6 @@ module Swap =
     | SwapUpdate of Data.SwapStatusUpdate
     | SetValidationError of err: string
 
-  let streamId = StreamId("swap")
-
   // ------ event -----
   type Event =
     | NewLoopOutAdded of LoopOut
@@ -108,7 +106,7 @@ module Swap =
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
-        Type = (streamId.Value + "-" + this.Type) |> EventType.EventType
+        Type = ("swap-" + this.Type) |> EventType.EventType
         Data = this
       }
 
