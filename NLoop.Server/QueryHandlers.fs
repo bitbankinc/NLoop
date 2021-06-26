@@ -1,12 +1,15 @@
 namespace NLoop.Server
 
 open System
+open System.Net
 open Microsoft.AspNetCore.Http
 open Giraffe
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Primitives
 open NLoop.Domain
+open NLoop.Domain.Utils
+open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open FSharp.Control.Reactive
 
@@ -25,10 +28,26 @@ module QueryHandlers =
         let! r = json response next ctx
         return r
       }
+  let handleGetSwap (swapId: SwapId) =
+    fun(next: HttpFunc) (ctx: HttpContext) -> task {
+      let handler = ctx.GetService<SwapActor>().Handler
+      let! eventsR = handler.Replay(swapId) (ObservationDate.Latest)
+      let stateR = eventsR |> Result.map handler.Reconstitute
+      match stateR with
+      | Error e ->
+        ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
+        return! ctx.WriteJsonAsync({| error = e |})
+      | Ok s ->
+        return! json (s) next ctx
+    }
 
-  let handleSwapStatus =
+  let handleGetSwapHistory =
+    fun(next: HttpFunc) (ctx: HttpContext) -> task {
+      return failwith "Todo"
+    }
+  let handleGetSwapStatus =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
-      return 8
+      return failwith "Todo"
     }
 
   let handleListenEvent =

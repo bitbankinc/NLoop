@@ -27,6 +27,7 @@ open Microsoft.AspNetCore.Server.Kestrel.Core
 
 open Giraffe
 
+open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
@@ -62,6 +63,12 @@ module App =
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
           route "/events" >=> QueryHandlers.handleListenEvent
+          subRoute "/swap" (choose [
+            GET >=>
+              route "/history" >=> QueryHandlers.handleGetSwapHistory
+              route "/status" >=> QueryHandlers.handleGetSwapStatus
+              routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+          ])
         ])
       setStatusCode 404 >=> text "Not Found"
     ]
