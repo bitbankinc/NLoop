@@ -15,6 +15,8 @@ open NLoop.Domain.IO
 open FsToolkit.ErrorHandling
 
 type SwapDomainTests() =
+  let useRealDB = false
+  let assureRunSynchronously = useRealDB
   let mockBroadcaster =
     { new IBroadcaster
         with
@@ -85,15 +87,31 @@ type SwapDomainTests() =
       Swap.serializer
       "swap in-memory repo"
 
-  let executeCommand deps repo swapId =
+  let executeCommand deps repo swapId useRealDB =
     fun cmd -> taskResult {
       let aggr = Swap.getAggregate deps
-      // let handler = Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
-      let handler = Handler.Create<_> (aggr) (repo)
+      let handler =
+        if useRealDB then
+          Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
+        else
+          Handler.Create<_> (aggr) (repo)
       let! events = handler.Execute swapId cmd
-      do! Async.Sleep 300
+      do! Async.Sleep 10
       return events
     }
+
+  let commandsToEvents(assureRunSequentially) deps repo swapId useRealDB commands =
+    if (assureRunSequentially) then
+      commands
+      |> List.map(fun cmd -> (executeCommand deps repo swapId useRealDB cmd) |> fun t -> t.GetAwaiter().GetResult())
+      |> List.sequenceResultM
+      |> Result.map(List.concat)
+    else
+      commands
+      |> List.map(executeCommand deps repo swapId useRealDB)
+      |> List.sequenceTaskResultM
+      |> TaskResult.map(List.concat)
+      |> fun t -> t.GetAwaiter().GetResult()
 
   [<Fact>]
   member this.JsonSerializerTest() =
@@ -139,6 +157,7 @@ type SwapDomainTests() =
 
   [<Property(MaxTest=10)>]
   member this.TestNewLoopOut(loopOut: LoopOut) =
+    let loopOut = { loopOut with Id = SwapId(Guid.NewGuid().ToString()) }
     let commands =
       [
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
@@ -147,15 +166,12 @@ type SwapDomainTests() =
     let events =
       let deps = mockDeps(None)
       let repo = getTestRepository()
-      commands
-      |> List.map(executeCommand deps repo loopOut.Id)
-      |> List.sequenceTaskResultM
-      |> TaskResult.map(List.concat)
-      |> fun t -> t.GetAwaiter().GetResult()
+      commandsToEvents (assureRunSynchronously) deps repo loopOut.Id useRealDB commands
     Assertion.isOk events
 
   [<Property(MaxTest=10)>]
   member this.TestLoopOut(loopOut: LoopOut) =
+    let loopOut = { loopOut with Id = SwapId(Guid.NewGuid().ToString()) }
     let commands =
       [
         let loopOut =
@@ -200,16 +216,12 @@ type SwapDomainTests() =
       let fundsKey = new Key()
       let deps = { mockDeps(None) with UTXOProvider = mockUtxoProvider([|fundsKey|]) }
       let repo = getTestRepository()
-
-      commands
-      |> List.map(executeCommand deps repo loopOut.Id)
-      |> List.sequenceTaskResultM
-      |> TaskResult.map(List.concat)
-      |> fun t -> t.GetAwaiter().GetResult()
+      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
     Assertion.isOk events
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn(loopIn: LoopIn) =
+    let loopIn = { loopIn with Id = SwapId(Guid.NewGuid().ToString()) }
     let commands =
       [
         let addr =
@@ -235,10 +247,6 @@ type SwapDomainTests() =
       use fundsKey = new Key()
       let deps = { mockDeps(None) with UTXOProvider = mockUtxoProvider([|fundsKey|]) }
       let repo = getTestRepository()
-      commands
-      |> List.map(executeCommand deps repo loopIn.Id)
-      |> List.sequenceTaskResultM
-      |> TaskResult.map(List.concat)
-      |> fun t -> t.GetAwaiter().GetResult()
+      commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands
     Assertion.isOk events
 
