@@ -177,6 +177,7 @@ and SerializedEvent = {
 type RecordedEvent<'TEvent> = {
   Id: EventId
   Type: EventType
+  StreamId: StreamId
   EventNumber: EventNumber
   CreatedDate: UnixDateTime
   Data: 'TEvent
@@ -194,6 +195,7 @@ type RecordedEvent<'TEvent> = {
 type SerializedRecordedEvent = {
   Id: EventId
   Type: EventType
+  StreamId: StreamId
   EventNumber: EventNumber
   CreatedDate: UnixDateTime
   Data: byte[]
@@ -207,6 +209,7 @@ type SerializedRecordedEvent = {
       {
         RecordedEvent.Id = this.Id
         Type = this.Type
+        StreamId = this.StreamId
         EventNumber = this.EventNumber
         CreatedDate = this.CreatedDate
         Data = e

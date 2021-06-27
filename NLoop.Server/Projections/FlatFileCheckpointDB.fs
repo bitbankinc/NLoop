@@ -25,7 +25,7 @@ type ICheckpointDB =
   abstract member GetSwapStateCheckpoint: ct: CancellationToken -> ValueTask<int64 voption>
   abstract member SetSwapStateCheckpoint: checkpoint: int64 * ct:CancellationToken -> ValueTask
 
-type CheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<CheckpointDB>) =
+type FlatFileCheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<FlatFileCheckpointDB>) =
   let openEngine(dbPath) = task {
     return! DBTrieEngine.OpenFromFolder(dbPath)
   }
@@ -34,7 +34,7 @@ type CheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<CheckpointDB>) =
   let pageSize = 8192
   let startAsync(_stoppingToken) = unitTask {
     logger.LogDebug($"Starting RepositoryProvider")
-    let dbPath = opts.Value.DBPath
+    let dbPath = Path.Join(opts.Value.DBPath, "checkpoints")
     if (not <| Directory.Exists(dbPath)) then
       Directory.CreateDirectory(dbPath) |> ignore
     let! e = openEngine(dbPath)
@@ -62,8 +62,7 @@ type CheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<CheckpointDB>) =
       return()
     }
 
-  interface IAsyncDisposable with
-    member this.DisposeAsync() = unitVtask {
+  interface IDisposable with
+    member this.Dispose() =
       if (engine |> isNull |> not) then
-        do! engine.DisposeAsync()
-    }
+        engine.DisposeAsync().GetAwaiter().GetResult()

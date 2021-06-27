@@ -28,11 +28,14 @@ type SwapActor(broadcaster: IBroadcaster,
                eventAggregator: IEventAggregator
   ) =
 
+  let aggr =
+    getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress (lightningClientProvider.AsDomainLNClient())
+    |> Swap.getAggregate
   let handler =
-    let aggr =
-      getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress (lightningClientProvider.AsDomainLNClient())
-      |> Swap.getAggregate
     Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
+
+  member val Handler = handler with get
+  member val Aggregate = aggr with get
 
   member this.Execute(swapId, msg: Swap.Msg, ?source) = task {
     let source = source |> Option.defaultValue "SwapActor"

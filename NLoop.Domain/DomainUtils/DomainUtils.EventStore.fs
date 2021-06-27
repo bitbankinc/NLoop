@@ -1,6 +1,8 @@
 namespace NLoop.Domain.Utils
 
 open System
+open System.Threading
+open System.Threading.Tasks
 open EventStore.ClientAPI
 open NLoop.Domain
 open FsToolkit.ErrorHandling
@@ -30,6 +32,7 @@ module EventStore =
             resolvedEvent.Event.EventType
             |> EventType.EventType
           EventNumber = eventNumber
+          StreamId = resolvedEvent.OriginalStreamId |> StreamId
           CreatedDate = createdDate
           Data =
             resolvedEvent.Event.Data
@@ -42,15 +45,24 @@ module EventStore =
     fun (streamId: StreamId) -> task {
       let endOfStream = StreamPosition.End |> int64
       try
-        let! r = conn.ReadEventAsync(streamId.Value, endOfStream, false)
+        let timeout() = task {
+          do! Task.Delay 3000
+          return raise <| TimeoutException("Timeout")
+        }
+        let! r =
+            [conn.ReadEventAsync(streamId.Value, endOfStream, false); timeout()]
+            |> Task.WhenAny
+        let! r = r
         return
           match r.Event |> Option.ofNullable with
           | Some resolvedEvent ->
             resolvedEvent
             |> SerializedRecordedEvent.FromEventStoreResolvedEvent
             |> Result.map Some
-          | None -> None |> Ok
-      with ex ->
+          | None ->
+            None |> Ok
+      with
+      | ex ->
         return
           $"Error reading events from EventStoreDB\n%A{ex}"
           |> StoreError
@@ -112,4 +124,3 @@ module EventStore =
         ReadStream = readStream conn
         WriteStream = writeStream conn
       }
-

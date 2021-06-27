@@ -4,7 +4,6 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open EventStore.ClientAPI
-open EventStore.ClientAPI
 open NLoop.Domain.Utils.EventStore
 open Microsoft.Extensions.Logging
 open FSharp.Control.Tasks
@@ -26,10 +25,13 @@ type SubscriptionState = {
   CancellationToken: CancellationToken
   SubscriptionStatus: SubscriptionStatus
 }
-
+[<RequireQualifiedAccess>]
+type SubscriptionTarget =
+  | All
+  | SpecificStream of streamId: StreamId
 type SubscriptionMessage =
   | Subscribe
-  | Subscribed of EventStoreStreamCatchUpSubscription
+  | Subscribed of EventStoreCatchUpSubscription
   | Dropped of SubscriptionDropReason * exn
   | EventAppeared of Checkpoint
   | GetState of AsyncReplyChannel<SubscriptionState>
@@ -39,7 +41,7 @@ type SubscriptionMailbox = MailboxProcessor<SubscriptionMessage>
 /// Based on https://github.com/ameier38/fsharp-eventstore-subscription
 type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
                               name: string,
-                              streamId: StreamId,
+                              streamId: SubscriptionTarget,
                               log: ILogger<EventStoreDBSubscription>,
                               eventHandler: EventHandler) =
 
@@ -74,18 +76,32 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
       )
 
     log.LogDebug($"Subscribing to {streamId} from checkpoint {state.Checkpoint}")
-    let lastCheckpoint =
-      match state.Checkpoint with
-      | Checkpoint.StreamStart -> StreamCheckpoint.StreamStart
-      | Checkpoint.StreamPosition pos -> Nullable(pos)
     let subscription =
-      conn.SubscribeToStreamFrom(
-        settings = settings,
-        stream = streamId.Value,
-        lastCheckpoint = lastCheckpoint,
-        eventAppeared = eventAppeared,
-        subscriptionDropped = subscriptionDropped
-        )
+      match streamId with
+      | SubscriptionTarget.SpecificStream streamId ->
+        let lastCheckpoint =
+          match state.Checkpoint with
+          | Checkpoint.StreamStart -> StreamCheckpoint.StreamStart
+          | Checkpoint.StreamPosition pos -> Nullable(pos)
+        conn.SubscribeToStreamFrom(
+          settings = settings,
+          stream = streamId.Value,
+          lastCheckpoint = lastCheckpoint,
+          eventAppeared = eventAppeared,
+          subscriptionDropped = subscriptionDropped
+          )
+        :> EventStoreCatchUpSubscription
+      | SubscriptionTarget.All ->
+        let lastCheckpoint: Position =
+          match state.Checkpoint with
+          | Checkpoint.StreamStart -> Position.Start
+          | Checkpoint.StreamPosition pos -> Position(commitPosition = pos, preparePosition = pos)
+        conn.SubscribeToAllFrom(
+          lastCheckpoint = lastCheckpoint,
+          settings = settings,
+          eventAppeared = eventAppeared
+          )
+        :> EventStoreCatchUpSubscription
     mailbox.Post(Subscribed subscription)
 
   let evolve (mailbox: SubscriptionMailbox): SubscriptionState -> SubscriptionMessage -> SubscriptionState =
@@ -132,7 +148,6 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
     do! Async.Sleep 10000
     return! watch mailbox
   }
-
 
   member this.SubscribeAsync(checkpoint: Checkpoint, ct: CancellationToken) = async {
     let initState = {

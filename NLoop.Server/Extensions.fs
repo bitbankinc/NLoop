@@ -31,3 +31,17 @@ type ConfigExtensions() =
       else
         failwith $"Configuration value does not support type {typeof<'T>.Name}"
 
+
+[<AbstractClass;Sealed;Extension>]
+type LoggerExtensions() =
+  [<Extension>]
+  static member AsEventStoreLogger(this: Microsoft.Extensions.Logging.ILogger) =
+    { new EventStore.ClientAPI.ILogger
+        with
+        member this.Info(ex, str, args) = failwith "todo"
+        member this.Debug(ex, str, args) = failwith "todo"
+        member this.Error(ex, str, args) = failwith "todo"
+        member this.Info(str, args) = failwith "todo"
+        member this.Debug(str, args) = failwith "todo"
+        member this.Error(str, args) = failwith "todo"
+    }

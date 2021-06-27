@@ -218,7 +218,7 @@ type ResponseGenerator =
       let! txid = uint256Gen |> Gen.optionOf
       return {
         LoopOutResponse.Id = id.Get
-        Address = addr
+        Address = addr.ToString()
         ClaimTxId = txid }
     }
     |> Arb.fromGen
@@ -229,7 +229,7 @@ type ResponseGenerator =
       let! addr = bitcoinAddressGen
       return {
         LoopInResponse.Id = id.Get
-        Address = addr }
+        Address = addr.ToString() }
     }
     |> Arb.fromGen
 

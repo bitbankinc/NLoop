@@ -64,6 +64,7 @@ module InMemoryStore =
                     SerializedRecordedEvent.Data = e.Data
                     Id = Guid.NewGuid() |> EventId
                     Type = e.Type
+                    StreamId = streamId
                     EventNumber = (v.Count + 1 + i) |> uint64 |> EventNumber.Create
                     CreatedDate = DateTime.UtcNow |> UnixDateTime.Create |> function Ok e -> e | Error e -> failwith $"Unreachable! {e}"
                     Meta = e.Meta

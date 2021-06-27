@@ -16,13 +16,13 @@ open NLoop.Server.Actors
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
-type SwapListener(loggerFactory: ILoggerFactory,
+type SwapStateProjection(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
                   checkpointDB: ICheckpointDB,
                   actor: SwapActor,
                   eventAggregator: IEventAggregator) as this =
   inherit BackgroundService()
-  let log = loggerFactory.CreateLogger<SwapListener>()
+  let log = loggerFactory.CreateLogger<SwapStateProjection>()
 
   let mutable _state: Map<StreamId, Swap.State> = Map.empty
   let lockObj = obj()

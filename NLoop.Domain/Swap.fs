@@ -19,15 +19,10 @@ open NLoop.Domain.Utils.EventStore
 [<RequireQualifiedAccess>]
 module Swap =
   // ------ state -----
-  type SwapList = {
-    Out: LoopOut list
-    In: LoopIn list
-  }
-
   type State =
+    | Initialized
     | Out of LoopOut
     | In of LoopIn
-    | Initialized
     with
     static member Zero = Initialized
 
@@ -70,6 +65,9 @@ module Swap =
       Network: Network
     }
 
+  [<Literal>]
+  let entityType = "swap"
+
   type Msg =
     | NewLoopOut of LoopOut
     | NewLoopIn of LoopIn
@@ -106,7 +104,7 @@ module Swap =
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
-        Type = ("swap-" + this.Type) |> EventType.EventType
+        Type = (entityType + "-" + this.Type) |> EventType.EventType
         Data = this
       }
 
@@ -294,7 +292,7 @@ module Swap =
     Repository.Create
       store
       serializer
-      "swap"
+      entityType
 
   let getHandler aggr eventStoreUri =
     getRepository eventStoreUri

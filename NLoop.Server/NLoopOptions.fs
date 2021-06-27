@@ -67,7 +67,7 @@ type NLoopOptions() =
       let host = "localhost"
       let port = 2113
       let user = "admin"
-      let password = "unsafepassword"
+      let password = "changeit"
       $"%s{protocol}://%s{user}:%s{password}@%s{host}:%i{port}"
       with get, set
 

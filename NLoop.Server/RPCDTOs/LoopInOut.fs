@@ -54,7 +54,7 @@ type LoopInResponse = {
   Id: string
   /// An address to which we have paid.
   [<JsonPropertyName "address">]
-  Address: BitcoinAddress
+  Address: string
 }
 
 type LoopOutResponse = {
@@ -63,7 +63,7 @@ type LoopOutResponse = {
   Id: string
   /// An address to which counterparty paid.
   [<JsonPropertyName "address">]
-  Address: BitcoinAddress
+  Address: string
   /// txid by which they have paid to us. It might be null when it is not 0-conf.
   [<JsonPropertyName "claim_tx_id">]
   ClaimTxId: uint256 option

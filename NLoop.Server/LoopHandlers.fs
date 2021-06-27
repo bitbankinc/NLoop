@@ -6,6 +6,7 @@ open System.Threading.Tasks
 open FSharp.Control.Reactive
 
 open BTCPayServer.Lightning
+open FsToolkit.ErrorHandling
 open Microsoft.Extensions.Options
 open NBitcoin
 open NBitcoin.Crypto
@@ -52,8 +53,6 @@ module LoopHandlers =
               PreimageHash = preimageHash.Value }
           boltzCli.CreateReverseSwapAsync(req)
 
-        ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
-
         let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(ourCryptoCode)
         let! addr =
           match req.Address with
@@ -87,9 +86,10 @@ module LoopHandlers =
         | Ok () ->
           if (not req.AcceptZeroConf) then
             do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
+            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
             let response = {
               LoopOutResponse.Id = outResponse.Id
-              Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
+              Address = outResponse.LockupAddress
               ClaimTxId = None
             }
             return! json response next ctx
@@ -99,6 +99,7 @@ module LoopHandlers =
                 .GetService<IEventAggregator>()
                 .GetObservable<Swap.Event, Swap.Error>()
             do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
+            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
             let! first =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             let! second =
@@ -107,7 +108,7 @@ module LoopHandlers =
             | Choice1Of2 _ev, Choice1Of2(Swap.Event.ClaimTxPublished(txId)) ->
               let response = {
                 LoopOutResponse.Id = outResponse.Id
-                Address = BitcoinAddress.Create(outResponse.LockupAddress, n)
+                Address =outResponse.LockupAddress
                 ClaimTxId = txId |> Some
               }
               return! json response next ctx
@@ -175,7 +176,7 @@ module LoopHandlers =
           do! actor.Execute(id, Swap.Msg.NewLoopIn(loopIn))
           let response = {
             LoopInResponse.Id = inResponse.Id
-            Address = BitcoinAddress.Create(inResponse.Address, n)
+            Address = inResponse.Address
           }
           return! json response next ctx
       }

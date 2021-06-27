@@ -97,23 +97,24 @@ module App =
       ()
 
   let configureApp (app : IApplicationBuilder) =
-      let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
-      let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
+    let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
+    let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
+    do
       (match env.IsDevelopment() with
       | true  ->
-          app
-            .UseDeveloperExceptionPage()
-            .UseMiddleware<RequestResponseLoggingMiddleware>()
-      | false ->
-          app
-            .UseGiraffeErrorHandler(errorHandler))
-            .UseCors(configureCors opts) |> ignore
-
-      app
-        .UseAuthentication()
-        .UseRouting()
-        .UseEndpoints(Action<_>(configureSignalR))
-        .UseGiraffe(webApp)
+        app
+          .UseDeveloperExceptionPage()
+          .UseMiddleware<RequestResponseLoggingMiddleware>()
+          |> ignore
+      | false -> ())
+    app
+      .UseGiraffeErrorHandler(errorHandler)
+      .UseCors(configureCors opts) |> ignore
+    app
+      .UseAuthentication()
+      .UseRouting()
+      .UseEndpoints(Action<_>(configureSignalR))
+      .UseGiraffe(webApp)
 
   let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
 

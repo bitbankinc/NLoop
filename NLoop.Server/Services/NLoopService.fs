@@ -15,6 +15,7 @@ open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open NLoop.Server.Actors
+open NLoop.Server.Projections
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
@@ -55,7 +56,12 @@ type NLoopExtensions() =
           )
           .AddSingleton<ISwapEventListener, SwapEventListener>()
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ISwapEventListener>() :?> SwapEventListener :> IHostedService)
+            p.GetRequiredService<ISwapEventListener>() :?> SwapEventListener :> IHostedService
+          )
+          .AddSingleton<SwapStateProjection>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<SwapStateProjection>() :> IHostedService
+          )
         |> ignore
 
       this
@@ -71,6 +77,7 @@ type NLoopExtensions() =
       this.AddSignalR() |> ignore
 
       this
+        .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()

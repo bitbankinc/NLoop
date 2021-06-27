@@ -35,7 +35,8 @@
     <Compile Include="EventAggregator.fs" />
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
-    <Compile Include="Projections\SwapListener.fs" />
+    <Compile Include="Projections\FlatFileCheckpointDB.fs" />
+    <Compile Include="Projections\SwapStateProjection.fs" />
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\FlatFileSecretRepository.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />

@@ -12,6 +12,8 @@ open NLoop.Domain.Utils
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open FSharp.Control.Reactive
+open NLoop.Server.Projections
+open NLoop.Server.Services
 
 module QueryHandlers =
 
@@ -43,11 +45,14 @@ module QueryHandlers =
 
   let handleGetSwapHistory =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
-      return failwith "Todo"
+      let state = ctx.GetService<SwapStateProjection>().State
+      return! json state next ctx
     }
+
   let handleGetSwapStatus =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
-      return failwith "Todo"
+      let state = ctx.GetService<SwapStateProjection>().State
+      return! json state next ctx
     }
 
   let handleListenEvent =
