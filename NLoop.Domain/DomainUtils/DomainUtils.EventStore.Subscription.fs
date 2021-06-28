@@ -150,7 +150,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
   let rec watch (mailbox: SubscriptionMailbox) = async {
     let! state = mailbox.PostAndAsyncReply(GetState)
     log.LogDebug($"Stream {streamId} is at checkpoint {state.Checkpoint}")
-    do! Async.Sleep 10000
+    do! Async.Sleep (TimeSpan.FromMinutes(5.))
     return! watch mailbox
   }
 

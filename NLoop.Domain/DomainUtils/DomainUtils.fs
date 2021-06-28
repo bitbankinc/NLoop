@@ -23,7 +23,7 @@ type EventType = EventType of string
 
 type StreamId = StreamId of string
   with
-  member internal this.Value = let (StreamId v) = this in v
+  member this.Value = let (StreamId v) = this in v
   static member Create<'TEntityId> (entityType: string) (entityId: 'TEntityId) =
     entityType + "-" + entityId.ToString().ToLower()
     |> StreamId

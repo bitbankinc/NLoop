@@ -3,8 +3,8 @@ namespace NLoop.Server.Projections
 open System
 open System.Net
 open System.Threading
-open EventStore.ClientAPI.Projections
 open FSharp.Control.Tasks
+open FsToolkit.ErrorHandling
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
@@ -29,27 +29,23 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
 
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun (event) -> unitTask {
-      let eventR =
-        event.ToRecordedEvent(Swap.serializer)
-        |> Result.map(fun r ->
-          this.State <-
-            (
-              if this.State |> Map.containsKey r.StreamId |> not then
-                this.State |> Map.add r.StreamId actor.Aggregate.Zero
-              else
-                this.State
-            )
-            |> Map.change
-              (r.StreamId)
-              (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
-          eventAggregator.Publish<RecordedEvent<Swap.Event>> r
-          r
-        )
-      match eventR with
-      | Error _err -> () // Not the event we are concerned.
-      | Ok e ->
+      match event.ToRecordedEvent(Swap.serializer) with
+      | Error _ -> ()
+      | Ok r when not <| r.StreamId.Value.StartsWith(Swap.entityType) -> ()
+      | Ok r ->
+        this.State <-
+          (
+            if this.State |> Map.containsKey r.StreamId |> not then
+              this.State |> Map.add r.StreamId actor.Aggregate.Zero
+            else
+              this.State
+          )
+          |> Map.change
+            (r.StreamId)
+            (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
+        eventAggregator.Publish<RecordedEvent<Swap.Event>> r
         do!
-          e.EventNumber.Value
+          r.EventNumber.Value
           |> int64
           |> fun n -> checkpointDB.SetSwapStateCheckpoint(n, CancellationToken.None)
     }
