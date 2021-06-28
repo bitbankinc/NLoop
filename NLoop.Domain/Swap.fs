@@ -19,10 +19,15 @@ open NLoop.Domain.Utils.EventStore
 [<RequireQualifiedAccess>]
 module Swap =
   // ------ state -----
+  [<RequireQualifiedAccess>]
+  type Direction =
+    | In
+    | Out
   type State =
     | Initialized
     | Out of LoopOut
     | In of LoopIn
+    | Finished of Result<Direction, string>
     with
     static member Zero = Initialized
 
@@ -73,6 +78,7 @@ module Swap =
     | NewLoopIn of LoopIn
     | SwapUpdate of Data.SwapStatusUpdate
     | SetValidationError of err: string
+    | OffChainPaymentReception of paymentPreimage: PaymentPreimage
 
   // ------ event -----
   type Event =
@@ -80,8 +86,11 @@ module Swap =
     | NewLoopInAdded of LoopIn
     | LoopErrored of err: string
     | ClaimTxPublished of txid: uint256
+    | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest
+    | OffChainPaymentReceived of paymentPreimage: PaymentPreimage
+
     | SwapTxPublished of txid: uint256
-    | ReceivedOffChainPayment of paymentPreimage: PaymentPreimage
+    | SuccessfullyFinished
     with
     member this.Version =
       match this with
@@ -89,8 +98,10 @@ module Swap =
       | NewLoopInAdded _
       | LoopErrored _
       | ClaimTxPublished _
+      | OffChainOfferStarted _
       | SwapTxPublished _
-      | ReceivedOffChainPayment _
+      | SuccessfullyFinished
+      | OffChainPaymentReceived _
        -> 0
 
     member this.Type =
@@ -99,8 +110,11 @@ module Swap =
       | NewLoopInAdded _ -> "new_loop_in_added"
       | LoopErrored _ -> "loop_errored"
       | ClaimTxPublished _ -> "claim_tx_published"
+      | OffChainOfferStarted _ -> "offchain_offer_started"
+      | OffChainPaymentReceived _ -> "offchain_payment_received"
+
       | SwapTxPublished _ -> "swap_tx_published"
-      | ReceivedOffChainPayment _ -> "received_offchain_payment"
+      | SuccessfullyFinished _ -> "successfully_finished"
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
@@ -139,54 +153,35 @@ module Swap =
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
     UTXOProvider: IUTXOProvider
-    LightningClient: INLoopLightningClient
     GetChangeAddress: GetChangeAddress
   }
 
-  module private AsyncHelpers =
-    let startPaymentRequest (lnClient: INLoopLightningClient) (loopOut: LoopOut) =
-      let onSuccess =
-        fun invoice ->
-          let onSuccess (preimage) =
-            (ReceivedOffChainPayment(preimage))
-          Cmd.OfTask.perform
-            (fun invoice ->
-              let (struct (ourCrypto, _)) = loopOut.PairId
-              lnClient.Offer(ourCrypto, invoice))
-            (invoice)
-            (onSuccess)
-      let onError =
-        (LoopErrored >> Cmd.ofMsg)
-      PaymentRequest.Parse loopOut.Invoice
-      |> ResultUtils.Result.either onSuccess onError
-
   // ----- aggregates ----
 
-  let private enhanceEvents date source ((events, cmd) : Event list * Cmd<Event>) =
-    events |> List.map(fun e -> e.ToEventSourcingEvent date source),
-    cmd |> Cmd.map(fun e -> e.ToEventSourcingEvent date source)
+  let private enhanceEvents date source (events: Event list) =
+    events |> List.map(fun e -> e.ToEventSourcingEvent date source)
 
   let executeCommand
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-      GetChangeAddress = getChangeAddress; LightningClient = lnClient  }
+      GetChangeAddress = getChangeAddress }
     (s: State)
-    (cmd: ESCommand<Msg>): Task<Result<Event<Event> list * Cmd<Event<Event>>, _>> =
+    (cmd: ESCommand<Msg>): Task<Result<Event<Event> list, _>> =
     taskResult {
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
         match cmd.Data, s with
         | NewLoopOut loopOut, Initialized ->
-          return ([NewLoopOutAdded loopOut], Cmd.none) |> enhance
+          return [NewLoopOutAdded loopOut] |> enhance
         | NewLoopIn loopIn, Initialized ->
-          return ([NewLoopInAdded loopIn], Cmd.none) |> enhance
+          return [NewLoopInAdded loopIn] |> enhance
         | SwapUpdate u, Out ourSwap ->
           if (u.Response.SwapStatus = ourSwap.Status) then
-            return ([], Cmd.none)
+            return []
           else
           match u.Response.SwapStatus with
           | SwapStatusType.TxMempool when not <| ourSwap.AcceptZeroConf ->
-            return ([], Cmd.none)
+            return []
           | SwapStatusType.TxMempool
           | SwapStatusType.TxConfirmed ->
             let (struct (ourCryptoCode, counterPartyCryptoCode)) = ourSwap.PairId
@@ -207,10 +202,15 @@ module Swap =
             do!
               broadcaster.BroadcastTx(claimTx, ourCryptoCode)
             let txid = claimTx.GetWitHash()
-            let cmd = AsyncHelpers.startPaymentRequest lnClient ourSwap
-            return ([ClaimTxPublished(txid)], cmd) |> enhance
+            let invoice =
+              ourSwap.Invoice
+              |> PaymentRequest.Parse
+              |> ResultUtils.Result.deref
+            return [ClaimTxPublished(txid); OffChainOfferStarted(ourSwap.Id, ourSwap.PairId, invoice)] |> enhance
           | _ ->
-            return ([], Cmd.none)
+            return []
+        | OffChainPaymentReception pp, Out _ ->
+          return [OffChainPaymentReceived(pp); SuccessfullyFinished] |> enhance
         | SwapUpdate u, In ourSwap ->
           match u.Response.SwapStatus with
           | SwapStatusType.InvoiceSet ->
@@ -241,18 +241,19 @@ module Swap =
             | true, _ ->
               let tx = psbt.ExtractTransaction()
               do! broadcaster.BroadcastTx(tx, ourCryptoCode)
-              return ([SwapTxPublished(tx.GetWitHash())], Cmd.none) |> enhance
+              return [SwapTxPublished(tx.GetWitHash())] |> enhance
           | _ ->
-          return ([], Cmd.none)
+          return []
         | SetValidationError(err), Out _
         | SetValidationError(err), In _ ->
-          return ([LoopErrored( err )], Cmd.none) |> enhance
+          return [LoopErrored( err )] |> enhance
+        | _, Finished _ ->
+          return []
         | x, s ->
           return raise <| Exception($"Unexpected Command \n{x} \n\nWhile in the state\n{s}")
       with
       | ex ->
         return! UnExpectedError ex |> Error
-
     }
 
   let applyChanges
@@ -266,12 +267,16 @@ module Swap =
       Out loopOut
     | NewLoopInAdded loopIn, Initialized ->
       In loopIn
-    | LoopErrored (err), In x ->
-      In { x with Error = err }
-    | LoopErrored (err), Out x ->
-      Out { x with Error = err }
-    | ReceivedOffChainPayment(preimage), Out x ->
+    | OffChainPaymentReceived(preimage), Out x ->
       Out { x with Preimage = preimage }
+    | LoopErrored (err), In _ ->
+      Finished(Error(err))
+    | LoopErrored (err), Out _ ->
+      Finished(Error(err))
+    | SuccessfullyFinished, Out _ ->
+      Finished(Ok(Direction.Out))
+    | SuccessfullyFinished, In _ ->
+      Finished(Ok(Direction.In))
     | _, x -> x
 
   type Aggregate = Aggregate<State, Msg, Event, Error, DateTime * string>

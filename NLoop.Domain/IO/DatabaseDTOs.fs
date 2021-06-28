@@ -13,7 +13,6 @@ type LoopOut = {
   Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
-  Error: string
   AcceptZeroConf: bool
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   ClaimKey: Key
@@ -38,7 +37,6 @@ type LoopIn = {
   Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
-  Error: string
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   PrivateKey: Key
   Preimage: PaymentPreimage option

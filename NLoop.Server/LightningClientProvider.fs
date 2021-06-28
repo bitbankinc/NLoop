@@ -7,6 +7,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Threading.Tasks
 open BTCPayServer.Lightning.LND
+open DotNetLightning.Payment
 open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open System.Collections.Generic
@@ -42,29 +43,24 @@ type ILightningClientProviderExtensions =
     )
 
   [<Extension>]
-  static member AsDomainLNClient(this: ILightningClientProvider) =
-    { new NLoop.Domain.IO.INLoopLightningClient with
-        member __.Offer(cc, invoice) =
-          match this.TryGetClient(cc) with
-          | Some cli -> task {
-              let! p = cli.Pay(invoice.ToString())
-              match p.Result with
-              | PayResult.Ok ->
-                let hex = HexEncoder()
-                let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync()
-                let preimage =
-                  p.Payments
-                  |> Seq.filter(fun i -> i.Payment_hash = invoice.PaymentHash.Value.ToString())
-                  |> Seq.exactlyOne
-                  |> fun i -> i.Payment_preimage
-                  |> hex.DecodeData
-                  |> PaymentPreimage.Create
-                return preimage
-              | s ->
-                return failwithf "Unexpected PayResult: %A (%s)" s p.ErrorDetail
-            }
-          | _ -> failwithf "Unreachable! Unexpected cryptoCode %A" cc
-    }
+  static member Offer(cli: ILightningClient, invoice: PaymentRequest) =
+    task {
+      let! p = cli.Pay(invoice.ToString())
+      match p.Result with
+      | PayResult.Ok ->
+        let hex = HexEncoder()
+        let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync()
+        let preimage =
+          p.Payments
+          |> Seq.filter(fun i -> i.Payment_hash = invoice.PaymentHash.Value.ToString())
+          |> Seq.exactlyOne
+          |> fun i -> i.Payment_preimage
+          |> hex.DecodeData
+          |> PaymentPreimage.Create
+        return preimage
+      | s ->
+        return failwithf "Unexpected PayResult: %A (%s)" s p.ErrorDetail
+      }
 
 
 type LightningClientProvider(opts: IOptions<NLoopOptions>) =

@@ -1,5 +1,6 @@
 module SwapTests
 
+open DotNetLightning.Payment
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -65,7 +66,6 @@ type SwapDomainTests() =
       Swap.Deps.FeeEstimator = mockFeeEstimator
       Swap.Deps.UTXOProvider = mockUtxoProvider ([||])
       Swap.Deps.GetChangeAddress = getChangeAddress
-      Swap.Deps.LightningClient = mockLightningClient pp
     }
 
   do
@@ -119,7 +119,6 @@ type SwapDomainTests() =
       Swap.Event.LoopErrored("Error msg")
       Swap.Event.ClaimTxPublished(uint256.Zero)
       Swap.Event.SwapTxPublished(uint256.One)
-      Swap.Event.ReceivedOffChainPayment(PaymentPreimage.Create(Array.zeroCreate(32)))
     ]
 
     for e in events do
@@ -174,17 +173,22 @@ type SwapDomainTests() =
     let loopOut = { loopOut with Id = SwapId(Guid.NewGuid().ToString()) }
     let commands =
       [
+        let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
         let loopOut =
           let claimKey = new Key()
           let claimAddr =
             claimKey.PubKey.WitHash.GetAddress(Network.RegTest)
-          let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
           let paymentHash = paymentPreimage.Hash
           let refundKey = new Key()
           let redeemScript =
             Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey (loopOut.TimeoutBlockHeight)
+          let invoice =
+            let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
+            PaymentRequest.TryCreate(Network.RegTest, None, DateTimeOffset.UtcNow, fields, new Key())
+            |> ResultUtils.Result.deref
           { loopOut with
               Preimage = paymentPreimage
+              Invoice = invoice.ToString()
               ClaimKey = claimKey
               OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
               RedeemScript = redeemScript
@@ -209,7 +213,9 @@ type SwapDomainTests() =
               FailureReason = None
             }
           }
+
         (DateTime(2001, 01, 30, 1, 0, 0), Swap.Msg.SwapUpdate(update))
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Msg.OffChainPaymentReception(paymentPreimage))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
@@ -218,6 +224,11 @@ type SwapDomainTests() =
       let repo = getTestRepository()
       commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
     Assertion.isOk events
+    let lastEvent =
+      events
+      |> Result.deref
+      |> List.last
+    Assert.Equal(Swap.Event.SuccessfullyFinished.Type, lastEvent.Data.Type)
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn(loopIn: LoopIn) =

@@ -22,10 +22,11 @@ type EventType = EventType of string
     |> EventType
 
 type StreamId = StreamId of string
+
   with
   member this.Value = let (StreamId v) = this in v
   static member Create<'TEntityId> (entityType: string) (entityId: 'TEntityId) =
-    entityType + "-" + entityId.ToString().ToLower()
+    $"{entityType}-{entityId.ToString().ToLower()}"
     |> StreamId
 
 type EventId = EventId of Guid
@@ -226,17 +227,13 @@ type ESCommand<'DomainCommand> =
     { Data: 'DomainCommand
       Meta: CommandMeta }
 
-type ExecResult<'TEvent> =  {
-  EventFinishedImmediately: Event<'TEvent> list
-  EventFinishesInFuture: Cmd<Event<'TEvent>>
-}
 type Aggregate<'TState, 'TCommand, 'TEvent, 'TError,'T when 'T : comparison> = {
   Zero: 'TState
   Filter: RecordedEvent<'TEvent> list -> RecordedEvent<'TEvent> list
   Enrich: Event<'TEvent> list -> Event<'TEvent> list
   SortBy: Event<'TEvent> -> 'T
   Apply: 'TState -> 'TEvent -> 'TState
-  Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list * Cmd<Event<'TEvent>>, 'TError>>
+  Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list, 'TError>>
 }
 
 type ExpectedVersionUnion =
@@ -302,6 +299,7 @@ type Repository<'TEvent, 'TEntityId> = {
       Commit = commit
     }
 
+/// a.k.a. "aggregate root"
 type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
   Replay: 'TEntityId -> ObservationDate -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
   Reconstitute: Event<'TEvent> list -> 'TState
@@ -344,19 +342,17 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
       (entityId: 'TEntityId)
       (command: ESCommand<'TCommand>) = taskResult {
         let { ESCommand.Meta = { EffectiveDate = date } } = command
+        let! recordedEvents = replay entityId (AsAt date)
+        let state = recordedEvents |> reconstitute
+        let! newEvents =
+          aggregate.Exec state command
+          |> TaskResult.mapError(DomainError)
         let! expectedVersion =
           repo.Version entityId
           |> TaskResult.mapError EventSourcingError.Store
-        let! recordedEvents = replay entityId (AsAt date)
-        let state = recordedEvents |> reconstitute
-        let! newEvents, cmd =
-          aggregate.Exec state command
-          |> TaskResult.mapError(DomainError)
-        let commit events =
-          repo.Commit entityId expectedVersion events
+        do!
+          repo.Commit entityId expectedVersion newEvents
           |> TaskResult.mapError(EventSourcingError.Store)
-        do! commit newEvents
-        cmd |> Cmd.exec (printfn "Cmd failed %A") (List.singleton >> commit >> ignore)
         return newEvents
       }
     {

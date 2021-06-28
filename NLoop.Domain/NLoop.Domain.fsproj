@@ -8,7 +8,6 @@
   <ItemGroup>
     <Compile Include="Utils.fs" />
     <Compile Include="Extensions.fs" />
-    <Compile Include="Cmd.fs" />
     <Compile Include="DomainUtils\DomainUtils.fs" />
     <Compile Include="DomainUtils\DomainUtils.InMemoryStore.fs" />
     <Compile Include="DomainUtils\DomainUtils.EventStore.fs" />
