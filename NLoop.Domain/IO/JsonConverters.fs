@@ -140,6 +140,13 @@ type ShortChannelIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> ShortChannelId.ParseUnsafe
 
+type SwapIdJsonConverter() =
+  inherit JsonConverter<SwapId>()
+  override this.Write(writer, value, _options) =
+    value.Value |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> SwapId.SwapId
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -151,6 +158,7 @@ type Extensions() =
     this.Converters.Add(MoneyJsonConverter())
     this.Converters.Add(PaymentRequestJsonConverter())
     this.Converters.Add(PairIdJsonConverter())
+    this.Converters.Add(PaymentPreimageJsonConverter())
 
     n |> Option.iter(fun n ->
       this.Converters.Add(BitcoinAddressJsonConverter(n))

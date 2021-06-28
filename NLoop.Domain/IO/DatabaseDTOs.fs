@@ -9,6 +9,7 @@ open NLoop.Domain
 open NLoop.Domain.Utils
 
 type LoopOut = {
+  [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
@@ -33,6 +34,7 @@ type LoopOut = {
 }
 
 type LoopIn = {
+  [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType

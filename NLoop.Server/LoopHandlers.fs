@@ -38,7 +38,7 @@ module LoopHandlers =
         match req.Validate(opts.Value) with
         | Error errors ->
           ctx.SetStatusCode StatusCodes.Status400BadRequest
-          return! ctx.WriteJsonAsync({| errors = errors |})
+          return! json {| errors = errors.ToArray() |} next ctx
         | Ok _ ->
         let counterPartyPair =
           req.CounterPartyPair
@@ -81,8 +81,7 @@ module LoopHandlers =
         match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
           do! actor.Execute(loopOut.Id, Swap.Msg.SetValidationError(e), "handleLoopOut")
-          ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-          return! ctx.WriteJsonAsync({| error = e |})
+          return! (error503 e) next ctx
         | Ok () ->
           if (not req.AcceptZeroConf) then
             do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
@@ -112,12 +111,9 @@ module LoopHandlers =
                 ClaimTxId = txId |> Some
               }
               return! json response next ctx
-            | Choice2Of2 e, _  ->
-              ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-              return! ctx.WriteJsonAsync({| error = e |})
+            | Choice2Of2 e, _
             | _, Choice2Of2 e ->
-              ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-              return! ctx.WriteJsonAsync({| error = e |})
+              return! (error503 e) next ctx
             | a, b ->
               return failwithf "Unreachable! (%A, %A)" a b
       }
@@ -156,8 +152,7 @@ module LoopHandlers =
         match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
           do! actor.Execute(id, Swap.Msg.SetValidationError(e))
-          ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-          return! ctx.WriteJsonAsync({| error = e |})
+          return! (error503 e) next ctx
         | Ok _events ->
           let loopIn = {
             LoopIn.Id = id

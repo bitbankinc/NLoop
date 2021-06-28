@@ -37,8 +37,7 @@ module QueryHandlers =
       let stateR = eventsR |> Result.map handler.Reconstitute
       match stateR with
       | Error e ->
-        ctx.SetStatusCode StatusCodes.Status503ServiceUnavailable
-        return! ctx.WriteJsonAsync({| error = e |})
+        return! error503 e next ctx
       | Ok s ->
         return! json (s) next ctx
     }

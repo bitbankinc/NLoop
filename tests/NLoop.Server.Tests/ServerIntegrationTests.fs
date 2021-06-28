@@ -149,6 +149,8 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
       let reader = stream.GetAsyncEnumerator()
       let! outResponse =
         let req = LoopOutRequest()
+        //req.Amount <- 10000L
+        //req.Conf_target <- 1
         cli.User.NLoop.OutAsync(CryptoCode.BTC, req)
       let! _ = reader.MoveNextAsync()
       let i = reader.Current

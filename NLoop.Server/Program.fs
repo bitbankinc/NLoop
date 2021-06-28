@@ -63,10 +63,10 @@ module App =
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
           route "/events" >=> QueryHandlers.handleListenEvent
-          subRoute "/swap" (choose [
+          subRoute "/swaps" (choose [
             GET >=>
               route "/history" >=> QueryHandlers.handleGetSwapHistory
-              route "/status" >=> QueryHandlers.handleGetSwapStatus
+              route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
               routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
           ])
         ])

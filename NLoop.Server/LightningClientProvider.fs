@@ -21,8 +21,6 @@ open NLoop.Server
 type ILightningClientProvider =
   abstract member TryGetClient: crypto: SupportedCryptoCode -> ILightningClient option
 
-
-
 [<AbstractClass;Sealed;Extension>]
 type ILightningClientProviderExtensions =
   [<Extension>]

@@ -33,7 +33,6 @@ type FlatFileCheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<FlatFile
   let mutable engine = null
   let pageSize = 8192
   let startAsync(_stoppingToken) = unitTask {
-    logger.LogDebug($"Starting RepositoryProvider")
     let dbPath = Path.Join(opts.Value.DBPath, "checkpoints")
     if (not <| Directory.Exists(dbPath)) then
       Directory.CreateDirectory(dbPath) |> ignore
@@ -48,6 +47,7 @@ type FlatFileCheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<FlatFile
     member this.GetSwapStateCheckpoint(ct) = vtask {
       use! tx = engine.OpenTransaction(ct)
       let! row = tx.GetTable(DBKeys.Checkpoints).Get(DBKeys.SwapState)
+      if (row |> isNull) then return ValueNone else
       let! s = row.ReadValueString()
       match Int64.TryParse s with
       | true, v -> return ValueSome v

@@ -45,7 +45,9 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
                               log: ILogger<EventStoreDBSubscription>,
                               eventHandler: EventHandler) =
 
-  let conn: IEventStoreConnection = EventStoreConnection.Create(eventStoreConfig.Uri)
+  let conn: IEventStoreConnection =
+      let connSettings = ConnectionSettings.Create().DisableTls().Build()
+      EventStoreConnection.Create(connSettings, eventStoreConfig.Uri)
   do conn.ConnectAsync().GetAwaiter().GetResult()
 
   let settings: CatchUpSubscriptionSettings =
@@ -141,7 +143,10 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
           return! loop (evolve inbox state item)
         }
         loop initialState
-    SubscriptionMailbox.Start(agentBody, initialState.CancellationToken)
+    let mailbox = SubscriptionMailbox.Start(agentBody, initialState.CancellationToken)
+    mailbox.Post(Subscribe)
+    mailbox
+
   let rec watch (mailbox: SubscriptionMailbox) = async {
     let! state = mailbox.PostAndAsyncReply(GetState)
     log.LogDebug($"Stream {streamId} is at checkpoint {state.Checkpoint}")

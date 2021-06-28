@@ -82,6 +82,7 @@ type FlatFileSecretRepository(engine: DBTrieEngine, chainName: string, settings:
         use! tx = engine.OpenTransaction(ct)
         let k = pubKeyHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
+        if (row |> isNull) then return None else
         let! b = row.ReadValue()
         return new Key(b.ToArray()) |> Some
       with
@@ -105,6 +106,7 @@ type FlatFileSecretRepository(engine: DBTrieEngine, chainName: string, settings:
         use! tx = engine.OpenTransaction(ct)
         let k = preimageHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
+        if (row |> isNull) then return None else
         let! x = row.ReadValue()
         return x.ToArray() |> Some
       with

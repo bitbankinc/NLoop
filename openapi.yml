@@ -36,7 +36,23 @@ paths:
               schema:
                 $ref: '#/components/schemas/GetInfoResponse'
 
-  /v1/swap/history:
+  /v1/swaps/{id}:
+    get:
+      tags:
+        - swap
+      description: >
+        Get the list of ongoing swaps.
+      parameters:
+        - $ref: '#/components/schemas/swapId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSwapResponse'
+
+  /v1/swaps/history:
     get:
       description: >
         Get the full history of swaps.
@@ -56,7 +72,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetSwapHistoryResponse"
-  /v1/swap/status:
+  /v1/swaps/ongoing:
     get:
       description: >
         Get the list of ongoing swaps.
@@ -69,20 +85,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetSwapStatusResponse"
-  /v1/swap/{id}:
-    get:
-      tags:
-        - swap
-      description: >
-        Get the list of ongoing swaps.
-      parameters:
-        - $ref: '#/components/parameters/swapId'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
 
   /v1/{cryptoCode}/loop/out:
     post:
@@ -109,11 +111,14 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                description: error message
-                minItems: 1
-                items:
-                  type: string
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    description: error message
+                    minItems: 1
+                    items:
+                      type: string
 
   /v1/{cryptoCode}/loop/in:
     post:
@@ -133,6 +138,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoopInResponse'
+        '400':
+          description: invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    description: error message
+                    minItems: 1
+                    items:
+                      type: string
 
 components:
   securitySchemes:
@@ -191,6 +209,8 @@ components:
       pattern: (\d{3})x(\d{3})x(\d{2})
       description: See bolt 07
       example: 140x10x1
+    swapId:
+      type: string
 
     # -----
     # ----- requests
@@ -281,6 +301,9 @@ components:
       required:
         - version
         - supported_coins
+        -
+    GetSwapResponse:
+      type: object
 
     GetSwapHistoryResponse:
       type: object

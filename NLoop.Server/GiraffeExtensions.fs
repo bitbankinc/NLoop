@@ -32,3 +32,8 @@ module CustomHandlers =
     Id: string
     Retry: int option
   }
+
+  let inline internal error503 e =
+    setStatusCode StatusCodes.Status503ServiceUnavailable
+      >=> json {| error = e.ToString() |}
+

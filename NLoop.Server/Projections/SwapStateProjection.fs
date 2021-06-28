@@ -33,7 +33,12 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
         event.ToRecordedEvent(Swap.serializer)
         |> Result.map(fun r ->
           this.State <-
-            this.State
+            (
+              if this.State |> Map.containsKey r.StreamId |> not then
+                this.State |> Map.add r.StreamId actor.Aggregate.Zero
+              else
+                this.State
+            )
             |> Map.change
               (r.StreamId)
               (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
@@ -57,10 +62,11 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator)
   member this.State
-    with get () = _state
+    with get(): Map<_,_> = _state
     and set v =
       lock (lockObj) <| fun () ->
         _state <- v
+        ()
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let! maybeCheckpoint = checkpointDB.GetSwapStateCheckpoint(stoppingToken)
@@ -68,5 +74,6 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
       maybeCheckpoint
       |> ValueOption.map(Checkpoint.StreamPosition)
       |> ValueOption.defaultValue Checkpoint.StreamStart
+    log.LogDebug($"Start projecting from checkpoint {checkpoint}")
     do! subscription.SubscribeAsync(checkpoint, stoppingToken)
   }

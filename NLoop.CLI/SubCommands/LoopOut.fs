@@ -1,6 +1,7 @@
 module NLoop.CLI.SubCommands.LoopOut
 
 open System
+open System.Collections.Generic
 open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Invocation
@@ -35,8 +36,14 @@ let private handle (host: IHost) =
       r.Label <- pr.ValueForOption<string>("label")
       r
 
-    let! resp = cli.OutAsync(cryptoCode, req)
-    return resp
+    try
+      return! cli.OutAsync(cryptoCode, req)
+    with
+    | :? ApiException<Response> as ex ->
+      let str =
+        let errors = ex.Result.Errors |> List.ofSeq
+        $"\n{ex.Message}.\nStatusCode: {ex.StatusCode}.\nerrors: {errors}"
+      return failwith str
   }
 
 let command: Command =
