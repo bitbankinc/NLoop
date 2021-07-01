@@ -305,7 +305,7 @@ module Swap =
             return! (height, oldHeight) ||> checkHeight
         | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, theirCC) = loopIn.PairId in theirCC = cc ->
           let! events = (height, oldHeight) ||> checkHeight
-          if loopIn.TimeoutBlockHeight >= height then
+          if loopIn.TimeoutBlockHeight <= height then
             let struct(_ourCC, theirCC) = loopIn.PairId
             let! refundAddress =
               getRefundAddress.Invoke(theirCC)

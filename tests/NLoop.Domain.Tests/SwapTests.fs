@@ -1,5 +1,6 @@
 module SwapTests
 
+open System.Threading
 open DotNetLightning.Payment
 open NBitcoin.Altcoins
 open RandomUtils
@@ -243,7 +244,7 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.SuccessfullyFinished(loopOut.Id).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.Event.SuccessfullyFinished(loopOut.Id), lastEvent.Data)
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn_Timeout(loopIn: LoopIn, testAltcoin: bool) =
@@ -263,14 +264,14 @@ type SwapDomainTests() =
           key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.TheirNetwork)
         let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
         let initialBlockHeight = BlockHeight.One
+        let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
         let loopIn = {
           loopIn with
             LoopIn.Address = addr.ToString()
             ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
-            TimeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
+            TimeoutBlockHeight = timeoutBlockHeight
             RedeemScript =
               let remoteClaimKey = new Key()
-              let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
               Scripts.swapScriptV1
                 preimage.Hash
                 (remoteClaimKey.PubKey)
@@ -293,18 +294,21 @@ type SwapDomainTests() =
         let nextHeight = initialBlockHeight + BlockHeightOffset16(2us)
         (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
         let nextHeight = initialBlockHeight + BlockHeightOffset16(3us)
+        assert(nextHeight = timeoutBlockHeight)
         (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
       ]
       |> List.map(fun x -> x ||> getCommand)
 
     let mutable txBroadcasted = 0
+    let lockObj = obj()
     let events =
       use fundsKey = new Key()
       let deps =
         let mockBroadcaster = {
           new IBroadcaster with
             member this.BroadcastTx(tx, cc) =
-              txBroadcasted <- txBroadcasted + 1
+              lock lockObj <| fun () ->
+                txBroadcasted <- txBroadcasted + 1
               Task.CompletedTask
         }
         { mockDeps(None) with
@@ -319,9 +323,9 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.FinishedByRefund(loopIn.Id).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.Event.FinishedByRefund(loopIn.Id), lastEvent.Data)
 
-  [<Property(MaxTest=10)>]
+  [<Property(MaxTest=40)>]
   member this.TestLoopIn(loopIn: LoopIn, testAltcoin: bool) =
     let theirCryptoCode =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
@@ -363,5 +367,5 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.SuccessfullyFinished(loopIn.Id).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.Event.SuccessfullyFinished(loopIn.Id), lastEvent.Data)
     ()
