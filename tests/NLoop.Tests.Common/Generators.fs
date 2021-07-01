@@ -8,6 +8,7 @@ open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.DTOs

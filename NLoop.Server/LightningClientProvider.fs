@@ -32,7 +32,7 @@ type ILightningClientProviderExtensions =
 
   [<Extension>]
   static member AsChangeAddressGetter(this: ILightningClientProvider) =
-    NLoop.Domain.IO.GetChangeAddress(fun c ->
+    NLoop.Domain.IO.GetAddress(fun c ->
       task {
         match this.TryGetClient(c) with
         | None -> return Error("Unsupported Cryptocode")

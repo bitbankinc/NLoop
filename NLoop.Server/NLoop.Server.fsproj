@@ -34,13 +34,16 @@
     <Compile Include="BoltzRequestResponse.fs" />
     <Compile Include="EventAggregator.fs" />
     <Compile Include="LightningClientProvider.fs" />
+    <Compile Include="SwapEventListener.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />
     <Compile Include="Projections\SwapStateProjection.fs" />
+    <Compile Include="ProcessManagers\SwapProcessManager.fs" />
     <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\FlatFileSecretRepository.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
-    <Compile Include="Services\SwapEventListener.fs" />
+    <Compile Include="Services\BoltzListener.fs" />
+    <Compile Include="Services\BlockchainListener.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
     <Compile Include="GiraffeExtensions.fs" />

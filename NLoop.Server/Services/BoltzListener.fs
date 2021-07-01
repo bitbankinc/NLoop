@@ -1,33 +1,25 @@
 namespace NLoop.Server.Services
 
 
-open System
 open System.Collections.Concurrent
-open System.Collections.Generic
-open System.Threading
 open System.Threading.Tasks
+open DotNetLightning.Utils
 open FSharp.Control
-open System.Threading.Channels
 open FSharp.Control.Tasks.Affine
-open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
-open Microsoft.Extensions.Options
-open NBitcoin
+
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
 
-type ISwapEventListener =
-  abstract member RegisterSwap: id: string  * network: Network -> unit
-
-type SwapEventListener(boltzClient: BoltzClient,
-                       logger: ILogger<SwapEventListener>,
+type BoltzListener(boltzClient: BoltzClient,
+                       logger: ILogger<BoltzListener>,
                        actor: SwapActor
                        ) =
   inherit BackgroundService()
 
-  let tasks = ConcurrentBag()
+  let tasks = ConcurrentDictionary<SwapId, Task>()
 
   override this.ExecuteAsync(stoppingToken) =
     unitTask {
@@ -42,22 +34,29 @@ type SwapEventListener(boltzClient: BoltzClient,
           raise <| ex
 
         while not <| stoppingToken.IsCancellationRequested do
-          let! t = Task.WhenAny(tasks)
+          let! t = Task.WhenAny(tasks.Values)
           do! t
           ()
     }
-  member private this.HandleSwapUpdate(swapStatus, id, network) = unitTask {
-    let cmd = { Swap.Data.SwapStatusUpdate.Response = swapStatus
-                Swap.Data.SwapStatusUpdate.Network = network }
-    do! actor.Execute(id, Swap.Msg.SwapUpdate(cmd))
+  member private this.HandleSwapUpdate(swapStatus, id) = unitTask {
+    do! actor.Execute(id, Swap.Command.SwapUpdate(swapStatus))
   }
 
   interface ISwapEventListener with
-    member this.RegisterSwap(id: string, network) =
-      let a = async {
+    member this.RegisterSwap(swapId: SwapId, _network) =
+      let t = task {
           while true do
-            do! Async.Sleep 1000
-            let! first = boltzClient.GetSwapStatusAsync(id) |> Async.AwaitTask
-            do! this.HandleSwapUpdate(first.ToDomain, id |> SwapId, network) |> Async.AwaitTask
+            do! Async.Sleep 5000
+            let! first = boltzClient.GetSwapStatusAsync(swapId.Value)
+            do! this.HandleSwapUpdate(first.ToDomain, swapId)
         }
-      tasks.Add(a |> Async.StartAsTask)
+      tasks.TryAdd(swapId, t)
+      |> ignore
+
+    member this.RemoveSwap(swapId) =
+      match tasks.TryRemove(swapId) with
+      | true, t ->
+        t.Dispose()
+      | _ ->
+        logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
+

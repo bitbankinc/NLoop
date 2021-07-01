@@ -1,11 +1,15 @@
 namespace NLoop.Server
 
 open System.Text.Json
+open DotNetLightning.Utils
 open Giraffe
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
+open Microsoft.Extensions.Options
+open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
+open NLoop.Server.Services
 
 [<AutoOpen>]
 module CustomHandlers =
@@ -33,7 +37,49 @@ module CustomHandlers =
     Retry: int option
   }
 
+  type HttpContext with
+    member this.SetBlockHeight(cc, height: uint64) =
+      this.Items.Add($"{cc}-BlockHeight", BlockHeight(uint32 height))
+    member this.GetBlockHeight(cc) =
+      match this.Items.TryGetValue($"{cc}-BlockHeight") with
+      | false, _ -> failwithf "Unreachable! could not get block height for %A" cc
+      | true, v -> v :?> BlockHeight
+
   let inline internal error503 e =
     setStatusCode StatusCodes.Status503ServiceUnavailable
       >=> json {| error = e.ToString() |}
 
+  let inline internal validationError400 (errors: #seq<string>) =
+    setStatusCode StatusCodes.Status400BadRequest
+      >=> json {| errors = errors |}
+
+  let internal checkBlockchainIsSyncedAndSetTipHeight(cryptoCodePair: PairId) =
+    fun (next : HttpFunc) (ctx : HttpContext) -> task {
+
+      let opts = ctx.GetService<IOptions<NLoopOptions>>()
+      let ccs =
+        let struct(ourCryptoCode, theirCryptoCode) = cryptoCodePair
+        [ourCryptoCode; theirCryptoCode] |> Seq.distinct
+      let mutable errorMsg = null
+      for cc in ccs do
+        let rpcClient = opts.Value.GetRPCClient(cc)
+        let! info = rpcClient.GetBlockchainInfoAsync()
+        ctx.SetBlockHeight(cc, info.Blocks)
+        if info.InitialBlockDownload then
+          errorMsg <- $"cryptoCode {cc}'s blockchain is not synced. VerificationProgress: %f{info.VerificationProgress}"
+        else
+          ()
+
+      if (errorMsg |> isNull) then
+        return! next ctx
+      else
+        return! error503 errorMsg next ctx
+    }
+
+  let internal registerSwap (swapId: SwapId) (network: Network) =
+    fun (next : HttpFunc) (ctx : HttpContext) -> task {
+      let listeners = ctx.GetService<ISwapEventListener seq>()
+      for l in listeners do
+        l.RegisterSwap(swapId, network)
+      return! next ctx
+    }

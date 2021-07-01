@@ -13,7 +13,7 @@
     <Compile Include="DomainUtils\DomainUtils.EventStore.fs" />
     <Compile Include="DomainUtils\DomainUtils.EventStore.Subscription.fs" />
     <Compile Include="ValueObjects.fs" />
-    <Compile Include="HTLC.fs" />
+    <Compile Include="Scripts.fs" />
     <Compile Include="Transactions.fs" />
     <Compile Include="IO\Interfaces.fs" />
     <Compile Include="IO\JsonConverters.fs" />

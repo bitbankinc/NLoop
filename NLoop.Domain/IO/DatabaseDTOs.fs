@@ -30,15 +30,28 @@ type LoopOut = {
   ClaimTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  ChainName: string
 }
+  with
+  member this.OurNetwork =
+    let struct (cryptoCode, _) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+  member this.TheirNetwork =
+    let struct (_, cryptoCode) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.Validate() =
+    if this.OnChainAmount <= Money.Zero then Error ("LoopOut has non-positive on chain amount") else
+    Ok()
 
 type LoopIn = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
   [<JsonConverter(typeof<JsonStringEnumConverter>)>]
   Status: SwapStatusType
+
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
-  PrivateKey: Key
+  RefundPrivateKey: Key
   Preimage: PaymentPreimage option
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
@@ -48,8 +61,21 @@ type LoopIn = {
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
-  LockupTransactionId: uint256 option
+
+  LockupTransactionHex: string option
   RefundTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  ChainName: string
 }
+  with
+  member this.OurNetwork =
+    let struct (cryptoCode, _) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+  member this.TheirNetwork =
+    let struct (_, cryptoCode) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.Validate() =
+    if this.ExpectedAmount <= Money.Zero then Error ("LoopIn has non-positive expected amount") else
+    Ok()

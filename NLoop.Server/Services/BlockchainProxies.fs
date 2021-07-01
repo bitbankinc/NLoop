@@ -2,7 +2,9 @@ namespace NLoop.Server.Services
 
 open System.Threading.Tasks
 open DotNetLightning.Chain
+open DotNetLightning.Utils
 open FSharp.Control.Tasks.Affine
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -10,6 +12,7 @@ open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.Actors
 
 type BoltzFeeEstimator(boltzClient: BoltzClient) =
   interface IFeeEstimator with
@@ -46,3 +49,4 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
       let! resp = cli.WalletProcessPSBTAsync(psbt)
       return resp.PSBT
     }
+

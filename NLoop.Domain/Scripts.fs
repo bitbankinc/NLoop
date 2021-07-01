@@ -46,9 +46,6 @@ module Scripts =
     l.Add(Op.op_Implicit (OpcodeType.OP_CHECKSIG))
     Script(l)
 
-  let isSwapScriptV1 (_sc: Script) =
-    failwith "TODO"
-
   let private checkOpcode (os: Op []) index expected =
     (os.[index].Code = expected)
     |> Result.requireTrue $"The {index}th opcode must be {expected}, it was {os.[index].Code}"
@@ -57,6 +54,7 @@ module Scripts =
     (Utils.ArrayEqual(os.[index].PushData, expected))
     |> Result.requireTrue
       $"The {index}th opcode's pushdata must be {expected |> hex.EncodeData} it was {os.[index].PushData |> hex.EncodeData}"
+
   let validateReverseSwapScript (preimageHash: uint256) (claimPubKey: PubKey) (BlockHeight timeout) (script: Script) =
     let os = script.ToOps() |> Seq.toArray
     let checkOpcode = checkOpcode os
@@ -99,7 +97,3 @@ module Scripts =
       do! checkOpcode 10 OpcodeType.OP_ENDIF
       do! checkOpcode 11 OpcodeType.OP_CHECKSIG
     }
-
-type HTLC = {
-  HTLCScript: Script
-}

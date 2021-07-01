@@ -1,6 +1,7 @@
 module SwapTests
 
 open DotNetLightning.Payment
+open NBitcoin.Altcoins
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -44,7 +45,7 @@ type SwapDomainTests() =
           psbt.SignWithKeys(keys)
           |> Task.FromResult
     }
-  let getChangeAddress = GetChangeAddress(fun _cryptoCode ->
+  let getChangeAddress = GetAddress(fun _cryptoCode ->
       (new Key()).PubKey.WitHash
       :> IDestination
       |> Ok
@@ -66,7 +67,7 @@ type SwapDomainTests() =
       Swap.Deps.FeeEstimator = mockFeeEstimator
       Swap.Deps.UTXOProvider = mockUtxoProvider ([||])
       Swap.Deps.GetChangeAddress = getChangeAddress
-    }
+      Swap.Deps.GetRefundAddress = getChangeAddress }
 
   do
     Arb.register<PrimitiveGenerator>() |> ignore
@@ -116,9 +117,9 @@ type SwapDomainTests() =
   [<Fact>]
   member this.JsonSerializerTest() =
     let events = [
-      Swap.Event.LoopErrored("Error msg")
+      Swap.Event.LoopErrored(SwapId("foo"), "Error msg")
       Swap.Event.ClaimTxPublished(uint256.Zero)
-      Swap.Event.SwapTxPublished(uint256.One)
+      Swap.Event.SwapTxPublished(Network.RegTest.CreateTransaction().ToHex())
     ]
 
     for e in events do
@@ -127,15 +128,15 @@ type SwapDomainTests() =
       Assertion.isOk(e2)
 
   [<Property(MaxTest=10)>]
-  member this.JsonSerializerTest_LoopIn(loopIn: LoopIn) =
-    let e = Swap.Event.NewLoopInAdded(loopIn)
+  member this.JsonSerializerTest_LoopIn(loopIn: LoopIn, height: uint32) =
+    let e = Swap.Event.NewLoopInAdded(height |> BlockHeight, loopIn)
     let ser = Swap.serializer
     let e2 = ser.EventToBytes(e) |> ser.BytesToEvents
     Assertion.isOk(e2)
 
   [<Property(MaxTest=10)>]
-  member this.JsonSerializerTest_LoopOut(loopOut: LoopOut) =
-    let e = Swap.Event.NewLoopOutAdded(loopOut)
+  member this.JsonSerializerTest_LoopOut(loopOut: LoopOut, height: uint32) =
+    let e = Swap.Event.NewLoopOutAdded(height |> BlockHeight,loopOut)
     let ser = Swap.serializer
     let e2 = ser.EventToBytes(e) |> ser.BytesToEvents
     Assertion.isOk(e2)
@@ -155,11 +156,16 @@ type SwapDomainTests() =
     Assert.Equal(se, se2)
 
   [<Property(MaxTest=10)>]
-  member this.TestNewLoopOut(loopOut: LoopOut) =
-    let loopOut = { loopOut with Id = SwapId(Guid.NewGuid().ToString()) }
+  member this.TestNewLoopOut(loopOut: LoopOut, height: uint32) =
+    let loopOut = {
+      loopOut with
+        Id = SwapId(Guid.NewGuid().ToString())
+        OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(10000m))
+    }
+
     let commands =
       [
-        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(height |> BlockHeight, loopOut))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
@@ -169,22 +175,29 @@ type SwapDomainTests() =
     Assertion.isOk events
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopOut(loopOut: LoopOut) =
-    let loopOut = { loopOut with Id = SwapId(Guid.NewGuid().ToString()) }
+  member this.TestLoopOut(loopOut: LoopOut, testAltcoin: bool) =
+    let ourCryptoCode =
+      if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
+    let loopOut =
+      { loopOut with
+          Id = SwapId(Guid.NewGuid().ToString())
+          ChainName = Network.RegTest.ChainName.ToString()
+          PairId = (ourCryptoCode, SupportedCryptoCode.BTC)
+        }
     let commands =
       [
         let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
         let loopOut =
           let claimKey = new Key()
           let claimAddr =
-            claimKey.PubKey.WitHash.GetAddress(Network.RegTest)
+            claimKey.PubKey.WitHash.GetAddress(loopOut.OurNetwork)
           let paymentHash = paymentPreimage.Hash
           let refundKey = new Key()
           let redeemScript =
             Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey (loopOut.TimeoutBlockHeight)
           let invoice =
             let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
-            PaymentRequest.TryCreate(Network.RegTest, None, DateTimeOffset.UtcNow, fields, new Key())
+            PaymentRequest.TryCreate(loopOut.TheirNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
             |> ResultUtils.Result.deref
           { loopOut with
               Preimage = paymentPreimage
@@ -193,29 +206,31 @@ type SwapDomainTests() =
               OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
               RedeemScript = redeemScript
               ClaimAddress = claimAddr.ToString(); }
-        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopOut(loopOut))
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(BlockHeight.One, loopOut))
         let update =
           let swapTx =
             let fee = Money.Satoshis(30m)
-            let txb = Network.RegTest.CreateTransactionBuilder()
+            let txb =
+              loopOut
+                .OurNetwork
+                .CreateTransactionBuilder()
             txb
               .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
               .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
               .SendFees(fee)
               .SetChange((new Key()).PubKey.WitHash)
               .BuildTransaction(true)
-          { Swap.Data.SwapStatusUpdate.Network = Network.RegTest
-            Swap.Data.Response = {
-              Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
-              Transaction = Some({ Tx = swapTx
-                                   TxId = swapTx.GetWitHash()
-                                   Eta = 1 })
-              FailureReason = None
-            }
+          {
+            Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
+            Swap.Data.SwapStatusResponseData.Transaction =
+              Some({ Tx = swapTx
+                     TxId = swapTx.GetWitHash()
+                     Eta = 1 })
+            Swap.Data.SwapStatusResponseData.FailureReason = None
           }
 
-        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Msg.SwapUpdate(update))
-        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Msg.OffChainPaymentReception(paymentPreimage))
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(update))
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.OffChainOfferResolve(paymentPreimage))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
@@ -228,30 +243,114 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.SuccessfullyFinished.Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.Event.SuccessfullyFinished(loopOut.Id).Type, lastEvent.Data.Type)
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopIn(loopIn: LoopIn) =
-    let loopIn = { loopIn with Id = SwapId(Guid.NewGuid().ToString()) }
+  member this.TestLoopIn_Timeout(loopIn: LoopIn, testAltcoin: bool) =
+    let theirCryptoCode =
+      if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
+    let ourCryptoCode = SupportedCryptoCode.BTC
+    let loopIn =
+      { loopIn with
+          Id = SwapId(Guid.NewGuid().ToString())
+          ChainName = Network.RegTest.ChainName.ToString()
+          PairId = (ourCryptoCode, theirCryptoCode)
+        }
     let commands =
       [
         let addr =
           use key = new Key()
-          key.PubKey.GetAddress(ScriptPubKeyType.Segwit, Network.RegTest)
+          key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.TheirNetwork)
+        let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+        let initialBlockHeight = BlockHeight.One
         let loopIn = {
           loopIn with
             LoopIn.Address = addr.ToString()
-            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi < 0L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+            TimeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
+            RedeemScript =
+              let remoteClaimKey = new Key()
+              let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
+              Scripts.swapScriptV1
+                preimage.Hash
+                (remoteClaimKey.PubKey)
+                (loopIn.RefundPrivateKey.PubKey)
+                timeoutBlockHeight
           }
-        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Msg.NewLoopIn(loopIn))
+
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopIn(initialBlockHeight, loopIn))
 
         let swapUpdate =
-          { Swap.Data.SwapStatusUpdate.Response = {
-              Swap.Data.SwapStatusResponseData._Status = "invoice.set"
-              Transaction = None
-              FailureReason = None }
-            Swap.Data.SwapStatusUpdate.Network = Network.RegTest }
-        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Msg.SwapUpdate(swapUpdate))
+          {
+            Swap.Data.SwapStatusResponseData._Status = "invoice.set"
+            Swap.Data.SwapStatusResponseData.Transaction = None
+            Swap.Data.SwapStatusResponseData.FailureReason = None
+          }
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
+
+        let nextHeight = initialBlockHeight + BlockHeightOffset16(1us)
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+        let nextHeight = initialBlockHeight + BlockHeightOffset16(2us)
+        (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+        let nextHeight = initialBlockHeight + BlockHeightOffset16(3us)
+        (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+
+    let mutable txBroadcasted = 0
+    let events =
+      use fundsKey = new Key()
+      let deps =
+        let mockBroadcaster = {
+          new IBroadcaster with
+            member this.BroadcastTx(tx, cc) =
+              txBroadcasted <- txBroadcasted + 1
+              Task.CompletedTask
+        }
+        { mockDeps(None) with
+            UTXOProvider = mockUtxoProvider([|fundsKey|])
+            Broadcaster = mockBroadcaster }
+      let repo = getTestRepository()
+      commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands
+    Assertion.isOk events
+    Assert.Equal(2, txBroadcasted) // swap tx and refund tx
+
+    let lastEvent =
+      events
+      |> Result.deref
+      |> List.last
+    Assert.Equal(Swap.Event.FinishedByRefund(loopIn.Id).Type, lastEvent.Data.Type)
+
+  [<Property(MaxTest=10)>]
+  member this.TestLoopIn(loopIn: LoopIn, testAltcoin: bool) =
+    let theirCryptoCode =
+      if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
+    let loopIn =
+      { loopIn with
+          Id = SwapId(Guid.NewGuid().ToString())
+          ChainName = Network.RegTest.ChainName.ToString()
+          PairId = (SupportedCryptoCode.BTC, theirCryptoCode) }
+    let commands =
+      [
+        let addr =
+          use key = new Key()
+          key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.TheirNetwork)
+        let loopIn = {
+          loopIn with
+            LoopIn.Address = addr.ToString()
+            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+          }
+        let initialBlockHeight = BlockHeight.One
+        (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopIn(initialBlockHeight, loopIn))
+
+        let swapUpdate =
+          {
+            Swap.Data.SwapStatusResponseData._Status = "invoice.set"
+            Swap.Data.SwapStatusResponseData.Transaction = None
+            Swap.Data.SwapStatusResponseData.FailureReason = None
+          }
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.OffChainPaymentReception)
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
@@ -260,4 +359,9 @@ type SwapDomainTests() =
       let repo = getTestRepository()
       commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands
     Assertion.isOk events
-
+    let lastEvent =
+      events
+      |> Result.deref
+      |> List.last
+    Assert.Equal(Swap.Event.SuccessfullyFinished(loopIn.Id).Type, lastEvent.Data.Type)
+    ()

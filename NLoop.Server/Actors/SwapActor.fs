@@ -16,17 +16,17 @@ module private Helpers =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
       Swap.Deps.UTXOProvider = u
-      Swap.Deps.GetChangeAddress = g }
+      Swap.Deps.GetChangeAddress = g
+      Swap.Deps.GetRefundAddress = g }
 
 type SwapActor(broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
-               getChangeAddress: GetChangeAddress,
-               lightningClientProvider: ILightningClientProvider,
+               getChangeAddress: GetAddress,
                opts: IOptions<NLoopOptions>,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator
-  ) as this =
+  )  =
 
   let aggr =
     getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress
@@ -34,24 +34,10 @@ type SwapActor(broadcaster: IBroadcaster,
   let handler =
     Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
 
-  let _ =
-    eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()
-    |> Observable.choose(fun e ->
-      match e.Data with
-      | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice) -> Some(swapId, pairId, invoice)
-      | _ -> None)
-    |> Observable.flatmapAsync(fun (swapId, struct(ourCC, _theirCC), invoice) ->
-      let t = unitTask {
-        let! p = lightningClientProvider.GetClient(ourCC).Offer(invoice)
-        do! this.Execute(swapId, Swap.Msg.OffChainPaymentReception(p), nameof(SwapActor))
-      }
-      t |> Async.AwaitTask)
-    |> Observable.subscribe(id)
-
   member val Handler = handler with get
   member val Aggregate = aggr with get
 
-  member this.Execute(swapId, msg: Swap.Msg, ?source) = task {
+  member this.Execute(swapId, msg: Swap.Command, ?source) = task {
     let source = source |> Option.defaultValue (nameof(SwapActor))
     let cmd =
       { ESCommand.Data = msg

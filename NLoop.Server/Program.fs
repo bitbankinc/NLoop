@@ -54,9 +54,9 @@ module App =
         choose [
           POST >=>
             route "/loop/out" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut)
+              (bindJsonWithCryptoCode<LoopOutRequest> cryptoCode handleLoopOut)
             route "/loop/in" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn)
+              (bindJsonWithCryptoCode<LoopInRequest> cryptoCode handleLoopIn)
       ])
       subRoute "/v1" (choose [
         GET >=>

@@ -24,4 +24,4 @@ type IUTXOProvider =
 type INLoopLightningClient =
   abstract member Offer: cryptoCode: SupportedCryptoCode * invoice: PaymentRequest -> Task<PaymentPreimage>
 
-type GetChangeAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>
+type GetAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>

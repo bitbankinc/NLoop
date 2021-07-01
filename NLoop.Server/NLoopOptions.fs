@@ -31,6 +31,8 @@ type NLoopOptions() =
   static member val Instance = NLoopOptions() with get
   member val ChainOptions = Dictionary<SupportedCryptoCode, ChainOptions>() with get
   member val Network = Network.Main.ChainName.ToString() with get, set
+  member this.ChainName =
+    this.Network |> ChainName
 
   member this.GetNetwork(cryptoCode: SupportedCryptoCode) =
     this.ChainOptions.[cryptoCode].GetNetwork(this.Network)
@@ -83,7 +85,11 @@ type NLoopOptions() =
   member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 
-  member this.OnChainNetworks = this.OnChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
-  member this.OffChainNetworks = this.OffChainCrypto |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
+  member this.OnChainNetworks =
+    this.OnChainCrypto
+    |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
+  member this.OffChainNetworks =
+    this.OffChainCrypto
+    |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
 
   member this.DBPath = Path.Join(this.DataDir, "nloop.db")

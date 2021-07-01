@@ -299,7 +299,6 @@ type Repository<'TEvent, 'TEntityId> = {
       Commit = commit
     }
 
-/// a.k.a. "aggregate root"
 type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
   Replay: 'TEntityId -> ObservationDate -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
   Reconstitute: Event<'TEvent> list -> 'TState

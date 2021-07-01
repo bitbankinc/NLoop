@@ -4,6 +4,7 @@ open System
 open System.IO
 open DotNetLightning.Utils.Primitives
 open NBitcoin
+open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
 
@@ -71,8 +72,48 @@ module Transactions =
     txb
       .AddCoins(inputs)
       .SendEstimatedFees(feeRate)
-      .Send(redeemScript.WitHash.ScriptPubKey, outputAmount)
+      .Send(redeemScript.WitHash, outputAmount)
       .SetChange(change)
       .SetLockTime(timeout.Value |> LockTime)
       .BuildPSBT(false)
+      |> Ok
+
+  let createRefundTx
+    (lockupTxHex: string)
+    (redeemScript: Script)
+    (fee)
+    (refundAddress: IDestination)
+    (refundKey: Key)
+    (timeout: BlockHeight)
+    (n) =
+    let swapTx =
+      lockupTxHex
+      |> fun hex -> Transaction.Parse(hex, n)
+    let coins =
+      swapTx.Outputs.AsCoins()
+    let mutable sc = null
+    let txb =
+      n.CreateTransactionBuilder()
+    for c in coins do
+      if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
+        sc <- ScriptCoin(c, redeemScript)
+        txb.AddCoins(sc) |> ignore
+    if (sc |> isNull) then
+      let actualOutputs = swapTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
+      Error(RedeemScriptMismatch(actualOutputs, redeemScript))
+    else
+      let tx =
+        txb
+          .SendEstimatedFees(fee)
+          .SendAll(refundAddress)
+          .SetLockTime(timeout.Value |> LockTime)
+          .AddKeys(refundKey)
+          .BuildTransaction(false)
+      let signature = tx.SignInput(refundKey, sc)
+      let witnessItems =
+        WitScript(Op.GetPushOp(signature.ToBytes())) +
+          WitScript(Op.GetPushOp([||])) +
+          WitScript(Op.GetPushOp(redeemScript.ToBytes()))
+      tx.Inputs.[0].WitScript <- witnessItems
+      tx
       |> Ok

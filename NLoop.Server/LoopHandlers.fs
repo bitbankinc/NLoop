@@ -22,27 +22,19 @@ module LoopHandlers =
   open Microsoft.AspNetCore.Http
   open FSharp.Control.Tasks
   open Giraffe
-
-  let handleLoopOut (ourCryptoCode: SupportedCryptoCode) (req: LoopOutRequest) =
+  let handleLoopOutCore(ourCryptoCode) (req: LoopOutRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
-        let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
-        let boltzCli = ctx.GetService<BoltzClient>()
-
-        use! claimKey = repo.NewPrivateKey()
-        let! preimage = repo.NewPreimage()
-        let preimageHash = preimage.Hash
-
-        match req.Validate(opts.Value) with
-        | Error errors ->
-          ctx.SetStatusCode StatusCodes.Status400BadRequest
-          return! json {| errors = errors.ToArray() |} next ctx
-        | Ok _ ->
         let counterPartyPair =
           req.CounterPartyPair
           |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
+        let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
+        let boltzCli = ctx.GetService<BoltzClient>()
+        use! claimKey = repo.NewPrivateKey()
+        let! preimage = repo.NewPreimage()
+        let preimageHash = preimage.Hash
 
         let! outResponse =
           let req =
@@ -74,17 +66,19 @@ module LoopHandlers =
           LockupTransactionId = None
           ClaimTransactionId = None
           PairId = ourCryptoCode, counterPartyPair
+          ChainName = opts.Value.ChainName.ToString()
         }
 
         let actor = ctx.GetService<SwapActor>()
         match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Execute(loopOut.Id, Swap.Msg.SetValidationError(e), "handleLoopOut")
+          do! actor.Execute(loopOut.Id, Swap.Command.SetValidationError(e), "handleLoopOut")
           return! (error503 e) next ctx
         | Ok () ->
+          let height = ctx.GetBlockHeight(ourCryptoCode)
           if (not req.AcceptZeroConf) then
-            do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
-            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
+            do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
+            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id |> SwapId, n)
             let response = {
               LoopOutResponse.Id = outResponse.Id
               Address = outResponse.LockupAddress
@@ -96,8 +90,8 @@ module LoopHandlers =
               ctx
                 .GetService<IEventAggregator>()
                 .GetObservable<Swap.Event, Swap.Error>()
-            do! actor.Execute(loopOut.Id, Swap.Msg.NewLoopOut(loopOut))
-            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id, n)
+            do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
+            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id |> SwapId, n)
             let! first =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             let! second =
@@ -117,13 +111,33 @@ module LoopHandlers =
               return failwithf "Unreachable! (%A, %A)" a b
       }
 
-  let handleLoopIn (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =
+  let handleLoopOut (ourCryptoCode: SupportedCryptoCode) (req: LoopOutRequest) =
+    fun (next : HttpFunc) (ctx : HttpContext) ->
+      task {
+        let opts = ctx.GetService<IOptions<NLoopOptions>>()
+
+        match req.Validate(opts.Value) with
+        | Error errors ->
+          ctx.SetStatusCode StatusCodes.Status400BadRequest
+          return! json {| errors = errors.ToArray() |} next ctx
+        | Ok _ ->
+        let counterPartyPair =
+          req.CounterPartyPair
+          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
+        return!
+          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyPair) >=> handleLoopOutCore ourCryptoCode req)
+            next ctx
+      }
+  let handleLoopInCore (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
         let boltzCli = ctx.GetService<BoltzClient>()
+        let counterPartyPair =
+          loopIn.CounterPartyPair
+          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
 
         let! refundKey = repo.NewPrivateKey()
         let! invoice =
@@ -133,9 +147,6 @@ module LoopHandlers =
             .GetClient(ourCryptoCode)
             .CreateInvoice(amt, $"This is an invoice for LoopIn by NLoop ({loopIn.Label})", TimeSpan.FromMinutes(5.))
         let invoice = invoice.ToDNLInvoice()
-        let counterPartyPair =
-          loopIn.CounterPartyPair
-          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
         let! inResponse =
           let req =
             { CreateSwapRequest.Invoice = invoice
@@ -144,32 +155,47 @@ module LoopHandlers =
               RefundPublicKey = refundKey.PubKey }
           boltzCli.CreateSwapAsync(req)
 
-        ctx.GetService<ISwapEventListener>().RegisterSwap(inResponse.Id, n)
+        ctx.GetService<ISwapEventListener>().RegisterSwap(inResponse.Id |> SwapId, n)
 
         let actor = ctx.GetService<SwapActor>()
         let id = inResponse.Id |> SwapId
         match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
         | Error e ->
-          do! actor.Execute(id, Swap.Msg.SetValidationError(e))
+          do! actor.Execute(id, Swap.Command.SetValidationError(e))
           return! (error503 e) next ctx
         | Ok _events ->
           let loopIn = {
             LoopIn.Id = id
             Status = SwapStatusType.InvoiceSet
-            PrivateKey = refundKey
+            RefundPrivateKey = refundKey
             Preimage = None
             RedeemScript = inResponse.RedeemScript
             Invoice = invoice.ToString()
             Address = inResponse.Address.ToString()
             ExpectedAmount = Money.Zero
             TimeoutBlockHeight = inResponse.TimeoutBlockHeight
-            LockupTransactionId = None
+            LockupTransactionHex = None
             RefundTransactionId = None
-            PairId = (ourCryptoCode, counterPartyPair) }
-          do! actor.Execute(id, Swap.Msg.NewLoopIn(loopIn))
+            PairId = (ourCryptoCode, counterPartyPair)
+            ChainName = opts.Value.ChainName.ToString()
+          }
+          let height = ctx.GetBlockHeight(ourCryptoCode)
+          do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
           let response = {
             LoopInResponse.Id = inResponse.Id
             Address = inResponse.Address
           }
           return! json response next ctx
       }
+  let handleLoopIn (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =
+    fun (next : HttpFunc) (ctx : HttpContext) ->
+      task {
+        let handle = (handleLoopInCore ourCryptoCode loopIn)
+        let counterPartyPair =
+          loopIn.CounterPartyPair
+          |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
+        return!
+          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyPair) >=> handle)
+            next ctx
+      }
+
