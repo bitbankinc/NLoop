@@ -30,6 +30,12 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
     obs
     |> Observable.iter(fun e ->
       match e.Data with
+      | Swap.Event.NewLoopOutAdded(_, { Id = swapId })
+      | Swap.Event.NewLoopInAdded(_, { Id = swapId }) ->
+        // TODO: re-registering everything from start is not very performant nor scalable.
+        // Ideally we should register only the one which is not finished.
+        for l in listeners do
+          l.RegisterSwap(swapId)
       | Swap.Event.SuccessfullyFinished swapId
       | Swap.Event.FinishedByRefund swapId
       | Swap.Event.LoopErrored (swapId, _) ->

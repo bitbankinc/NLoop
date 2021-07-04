@@ -44,7 +44,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
   }
 
   interface ISwapEventListener with
-    member this.RegisterSwap(id: SwapId, _network) =
+    member this.RegisterSwap(id: SwapId) =
       swaps.TryAdd(id, ())
       |> ignore
 
