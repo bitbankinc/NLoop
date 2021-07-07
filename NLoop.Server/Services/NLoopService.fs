@@ -55,20 +55,16 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
           )
+
           .AddSingleton<ISwapEventListener, BoltzListener>()
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ISwapEventListener>() :?> BoltzListener :> IHostedService
-          )
           .AddSingleton<ISwapEventListener, BlockchainListener>()
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ISwapEventListener>() :?> BlockchainListener :> IHostedService
-          )
+          .AddHostedService<SwapEventListeners>()
+
           .AddSingleton<SwapStateProjection>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<SwapStateProjection>() :> IHostedService
           )
-        |> ignore
-
+          |> ignore
       this
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
@@ -90,5 +86,4 @@ type NLoopExtensions() =
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<SwapActor>()
         .AddSingleton<SwapProcessManager>()
-        .AddHostedService<BlockchainListener>()
 

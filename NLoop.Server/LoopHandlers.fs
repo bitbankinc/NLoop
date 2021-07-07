@@ -78,7 +78,6 @@ module LoopHandlers =
           let height = ctx.GetBlockHeight(ourCryptoCode)
           if (not req.AcceptZeroConf) then
             do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
-            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id |> SwapId, n)
             let response = {
               LoopOutResponse.Id = outResponse.Id
               Address = outResponse.LockupAddress
@@ -91,7 +90,6 @@ module LoopHandlers =
                 .GetService<IEventAggregator>()
                 .GetObservable<Swap.Event, Swap.Error>()
             do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
-            ctx.GetService<ISwapEventListener>().RegisterSwap(outResponse.Id |> SwapId, n)
             let! first =
               obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
             let! second =
@@ -154,8 +152,6 @@ module LoopHandlers =
               OrderSide = OrderType.buy
               RefundPublicKey = refundKey.PubKey }
           boltzCli.CreateSwapAsync(req)
-
-        ctx.GetService<ISwapEventListener>().RegisterSwap(inResponse.Id |> SwapId, n)
 
         let actor = ctx.GetService<SwapActor>()
         let id = inResponse.Id |> SwapId

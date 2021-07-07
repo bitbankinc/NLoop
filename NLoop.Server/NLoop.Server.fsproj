@@ -44,6 +44,7 @@
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\BoltzListener.fs" />
     <Compile Include="Services\BlockchainListener.fs" />
+    <Compile Include="Services\SwapEventListeners.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
     <Compile Include="GiraffeExtensions.fs" />

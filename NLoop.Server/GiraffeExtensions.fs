@@ -75,11 +75,3 @@ module CustomHandlers =
       else
         return! error503 errorMsg next ctx
     }
-
-  let internal registerSwap (swapId: SwapId) (network: Network) =
-    fun (next : HttpFunc) (ctx : HttpContext) -> task {
-      let listeners = ctx.GetService<ISwapEventListener seq>()
-      for l in listeners do
-        l.RegisterSwap(swapId, network)
-      return! next ctx
-    }
