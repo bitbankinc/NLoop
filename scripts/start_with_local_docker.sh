@@ -15,6 +15,14 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --network RegTest \
   --nohttps true \
   --btc.lightningconnectionstring "type=lnd-rest;macaroonfilepath="$admin_macaroon";server=https://localhost:32736;certthumbprint="$certthumbprint"" \
+  --btc.rpcuser=johndoe \
+  --btc.rpcpassword=unsafepassword \
+  --btc.rpchost=localhost \
+  --btc.rpcport=43782 \
+  --ltc.rpcuser=johndoe \
+  --ltc.rpcpassword=unsafepassword \
+  --ltc.rpchost=localhost \
+  --ltc.rpcport=43783 \
   --eventstoreurl tcp://admin:changeit@localhost:1113 \
   --boltzhost https://localhost \
   --boltzport 6028 \
