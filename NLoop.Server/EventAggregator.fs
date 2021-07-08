@@ -35,9 +35,9 @@ type ReactiveEventAggregator() =
   let mutable disposed = false
 
   interface IEventAggregator with
-    member this.Publish(item) =
+    member this.Publish<'T>(item: 'T) =
       _subject.OnNext(item)
-    member this.GetObservable() =
+    member this.GetObservable<'T>() =
       _subject.OfType<'T>().AsObservable()
 
   interface IDisposable with

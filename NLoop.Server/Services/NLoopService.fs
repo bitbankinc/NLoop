@@ -78,6 +78,10 @@ type NLoopExtensions() =
       this.AddSignalR() |> ignore
 
       this
+        .AddHostedService<SwapProcessManager>()
+        |> ignore
+
+      this
         .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
@@ -85,5 +89,4 @@ type NLoopExtensions() =
         .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<SwapActor>()
-        .AddSingleton<SwapProcessManager>()
 

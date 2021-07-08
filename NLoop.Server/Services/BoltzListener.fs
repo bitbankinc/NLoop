@@ -35,7 +35,6 @@ type BoltzListener(boltzClient: BoltzClient,
       }
 
     member this.StopAsync(_cancellationToken) =
-      tasks.Values |> Seq.iter(fun s -> s.Dispose())
       tasks.Clear()
       Task.CompletedTask
 

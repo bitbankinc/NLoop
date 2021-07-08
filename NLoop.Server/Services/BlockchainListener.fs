@@ -34,7 +34,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
       for (cli, cc) in clis do
         let! info = cli.GetBlockchainInfoAsync()
         let newBlockNum = info.Blocks |> uint32 |> BlockHeight
-        if (not <| info.InitialBlockDownload) && currentHeight <> newBlockNum then
+        let isIBDDone = not <| (info.VerificationProgress < 1.0f)
+        if isIBDDone && currentHeight <> newBlockNum then
           currentHeight <- newBlockNum
           let cmd =
             (newBlockNum, cc)
@@ -45,8 +46,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
 
   interface ISwapEventListener with
     member this.RegisterSwap(id: SwapId) =
-      swaps.TryAdd(id, ())
-      |> ignore
+      if not <| swaps.TryAdd(id, ()) then
+        logger.LogError($"Failed to add swap id {id}")
 
     member this.RemoveSwap(swapId) =
       if swaps.TryRemove(swapId) |> fst then

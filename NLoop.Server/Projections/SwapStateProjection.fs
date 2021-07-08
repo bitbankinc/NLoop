@@ -43,6 +43,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
           |> Map.change
             (r.StreamId)
             (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
+        log.LogTrace($"Publishing RecordedEvent {r}")
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
         do!
           r.EventNumber.Value
@@ -62,7 +63,6 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
     and set v =
       lock (lockObj) <| fun () ->
         _state <- v
-        ()
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let! maybeCheckpoint = checkpointDB.GetSwapStateCheckpoint(stoppingToken)

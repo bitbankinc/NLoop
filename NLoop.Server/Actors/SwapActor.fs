@@ -38,6 +38,7 @@ type SwapActor(broadcaster: IBroadcaster,
   member val Aggregate = aggr with get
 
   member this.Execute(swapId, msg: Swap.Command, ?source) = task {
+    logger.LogDebug($"New Command {msg}")
     let source = source |> Option.defaultValue (nameof(SwapActor))
     let cmd =
       { ESCommand.Data = msg
