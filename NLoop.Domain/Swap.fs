@@ -41,7 +41,7 @@ module Swap =
     type TxInfo = {
       TxId: uint256
       Tx: Transaction
-      Eta: int
+      Eta: int option
     }
     and SwapStatusResponseData = {
       _Status: string
@@ -136,7 +136,6 @@ module Swap =
     | UnExpectedError of exn
     | FailedToGetAddress of string
     | UTXOProviderError of UTXOProviderError
-    | BlockSkipped of currentTip: BlockHeight * receivedNextTip: BlockHeight
     | InputError of string
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
@@ -187,18 +186,22 @@ module Swap =
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
         let checkHeight (height: BlockHeight) (oldHeight: BlockHeight) =
-          if height.Value = oldHeight.Value + 1u then
+          if height.Value > oldHeight.Value then
             [NewTipReceived(height)] |> enhance |> Ok
-          elif height.Value > oldHeight.Value + 1u then
-            (oldHeight, height) |> Error.BlockSkipped |> Error
           else
-            [] |> enhance |> Ok
+            [] |> Ok
 
         match cmd.Data, s with
         // --- loop out ---
         | NewLoopOut (h, loopOut), Initialized ->
           do! loopOut.Validate() |> expectInputError
-          return [NewLoopOutAdded(h, loopOut)] |> enhance
+          let invoice =
+            loopOut.Invoice
+            |> PaymentRequest.Parse
+            |> ResultUtils.Result.deref
+          return
+            [NewLoopOutAdded(h, loopOut); OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice) ]
+            |> enhance
         | OffChainOfferResolve pp, Out(_, loopOut) ->
           return [OffChainOfferResolved pp; SuccessfullyFinished loopOut.Id] |> enhance
         | SwapUpdate u, Out(_height, loopOut) ->
@@ -228,11 +231,7 @@ module Swap =
             do!
               broadcaster.BroadcastTx(claimTx, counterPartyCryptoCode)
             let txid = claimTx.GetWitHash()
-            let invoice =
-              loopOut.Invoice
-              |> PaymentRequest.Parse
-              |> ResultUtils.Result.deref
-            return [ClaimTxPublished(txid); OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice)] |> enhance
+            return [ClaimTxPublished(txid);] |> enhance
           | _ ->
             return []
 
@@ -272,6 +271,12 @@ module Swap =
               return [SwapTxPublished(tx.ToHex())] |> enhance
           | _ ->
           return []
+        | SwapUpdate x, Out (_, { Id = swapId }) when x.SwapStatus = SwapStatusType.SwapExpired ->
+          let reason = x.FailureReason |> Option.defaultValue ""
+          return [LoopErrored(swapId, $"Swap expired (Reason: %s{reason})")] |> enhance
+        | SwapUpdate x, In (_, { Id = swapId }) when x.SwapStatus = SwapStatusType.SwapExpired ->
+          let reason = x.FailureReason |> Option.defaultValue ""
+          return [LoopErrored(swapId, $"Swap expired (Reason: %s{reason})")] |> enhance
         | OffChainPaymentReception, In (_ ,loopIn) ->
           return [SuccessfullyFinished(loopIn.Id)] |> enhance
 
