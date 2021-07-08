@@ -65,11 +65,17 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
         _state <- v
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
-    let! maybeCheckpoint = checkpointDB.GetSwapStateCheckpoint(stoppingToken)
+    let maybeCheckpoint = ValueNone
+    //let! maybeCheckpoint =
+      //checkpointDB.GetSwapStateCheckpoint(stoppingToken)
     let checkpoint =
       maybeCheckpoint
       |> ValueOption.map(Checkpoint.StreamPosition)
       |> ValueOption.defaultValue Checkpoint.StreamStart
     log.LogDebug($"Start projecting from checkpoint {checkpoint}")
-    do! subscription.SubscribeAsync(checkpoint, stoppingToken)
+    try
+      do! subscription.SubscribeAsync(checkpoint, stoppingToken)
+    with
+    | ex ->
+      log.LogError($"{ex}")
   }

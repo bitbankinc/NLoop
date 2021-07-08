@@ -43,13 +43,13 @@ type ILightningClientProviderExtensions =
     )
 
   [<Extension>]
-  static member Offer(cli: ILightningClient, invoice: PaymentRequest) =
+  static member Offer(cli: ILightningClient, invoice: PaymentRequest, ct: CancellationToken) =
     task {
-      let! p = cli.Pay(invoice.ToString())
+      let! p = cli.Pay(invoice.ToString(), ct).ConfigureAwait(false)
       match p.Result with
       | PayResult.Ok ->
         let hex = HexEncoder()
-        let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync()
+        let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync(ct).ConfigureAwait(false)
         let preimage =
           p.Payments
           |> Seq.filter(fun i -> i.Payment_hash = invoice.PaymentHash.Value.ToString())
@@ -63,15 +63,17 @@ type ILightningClientProviderExtensions =
       }
 
 
-type LightningClientProvider(opts: IOptions<NLoopOptions>) =
+type LightningClientProvider(opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
   let clients = Dictionary<SupportedCryptoCode, ILightningClient>()
 
   member this.CheckClientConnection(c, ct) = task {
     let n  = opts.Value.GetNetwork(c)
     let cli =
       let factory = LightningClientFactory(n)
-      if (factory.HttpClient |> isNull |> not) then
-        factory.HttpClient.Timeout <- TimeSpan.MaxValue
+      if (factory.HttpClient |> isNull) then
+        factory.HttpClient <- httpClientFactory.CreateClient()
+      // We need this since `Pay` ing will hang in case of HODL invoice which is necessary for swapping.
+      factory.HttpClient.Timeout <- TimeSpan.FromDays(3.)
       let cli = factory.Create(opts.Value.ChainOptions.[c].LightningConnectionString)
       cli
     let! _info = cli.GetInfo(ct)

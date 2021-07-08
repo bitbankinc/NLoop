@@ -1,11 +1,13 @@
 namespace NLoop.Server
 
 open System.Text.Json
+open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open Giraffe
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
+open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
@@ -74,4 +76,31 @@ module CustomHandlers =
         return! next ctx
       else
         return! error503 errorMsg next ctx
+    }
+
+  open System.Threading.Tasks
+  let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) =
+    fun (next: HttpFunc) ( ctx: HttpContext) -> task {
+      let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
+      let boltzCli = ctx.GetService<BoltzClient>()
+      let nodesT = boltzCli.GetNodesAsync()
+      let! nodes = nodesT
+      let mutable maybeResult = null
+      for kv in nodes.Nodes do
+        if (maybeResult |> isNull |> not) then () else
+        try
+          let! r  = (cli :?> LndClient).SwaggerClient.QueryRoutesAsync(kv.Value.NodeKey.ToHex(), amt.Satoshi.ToString(), 1)
+          if (r.Routes.Count > 0) then
+            maybeResult <- r
+        with
+        | ex ->
+          ctx
+            .GetLogger<_>()
+            .LogError $"{ex}"
+          ()
+
+      if maybeResult |> isNull then
+        return! error503 $"Failed to find route to Boltz server. Make sure the channel is open" next ctx
+      else
+        return! next ctx
     }

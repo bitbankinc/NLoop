@@ -2,6 +2,7 @@ namespace NLoop.Server.ProcessManagers
 
 open System.Collections.Generic
 open System.Threading.Tasks
+open System.Reactive.Linq
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open Microsoft.Extensions.Hosting
@@ -31,8 +32,15 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           | _ -> None)
         |> Observable.flatmapTask(fun (swapId, struct(ourCC, _theirCC), invoice) ->
           task {
-            let! p = lightningClientProvider.GetClient(ourCC).Offer(invoice)
-            do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
+            try
+              printfn "DEBUG: staring offer..."
+              let! p = lightningClientProvider.GetClient(ourCC).Offer(invoice, ct).ConfigureAwait(false)
+              printfn "DEBUG: finished offer..."
+              do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
+            with
+            | ex ->
+              logger.LogError($"{ex}")
+              do! actor.Execute(swapId, Swap.Command.SetValidationError(ex.Message))
           })
         |> Observable.subscribe(id)
 

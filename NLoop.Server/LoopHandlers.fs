@@ -119,11 +119,13 @@ module LoopHandlers =
           ctx.SetStatusCode StatusCodes.Status400BadRequest
           return! json {| errors = errors.ToArray() |} next ctx
         | Ok _ ->
-        let counterPartyPair =
+        let counterPartyCryptoCode =
           req.CounterPartyPair
           |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
         return!
-          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyPair) >=> handleLoopOutCore ourCryptoCode req)
+          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyCryptoCode)
+           >=> checkWeHaveRouteToCounterParty counterPartyCryptoCode req.Amount
+           >=> handleLoopOutCore ourCryptoCode req)
             next ctx
       }
   let handleLoopInCore (ourCryptoCode: SupportedCryptoCode) (loopIn: LoopInRequest) =

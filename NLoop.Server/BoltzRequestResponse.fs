@@ -72,7 +72,7 @@ type TxInfo = {
   TxId: uint256
   [<JsonPropertyName("hex")>]
   Tx: Transaction
-  Eta: int
+  Eta: int option
 }
   with
   member this.ToDomain = {

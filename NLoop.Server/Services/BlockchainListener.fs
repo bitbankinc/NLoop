@@ -23,25 +23,29 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
   let mutable currentHeight = BlockHeight 0u
 
   override this.ExecuteAsync(ct) = unitTask {
-    let clis: (RPCClient * _) seq =
-      opts.Value.OnChainCrypto
-      |> Seq.distinct
-      |> Seq.map(fun x -> (opts.Value.GetRPCClient x, x))
+    try
+      let clis: (RPCClient * _) seq =
+        opts.Value.OnChainCrypto
+        |> Seq.distinct
+        |> Seq.map(fun x -> (opts.Value.GetRPCClient x, x))
 
-    while true do
-      do! Task.Delay 5000
-      ct.ThrowIfCancellationRequested()
-      for (cli, cc) in clis do
-        let! info = cli.GetBlockchainInfoAsync()
-        let newBlockNum = info.Blocks |> uint32 |> BlockHeight
-        let isIBDDone = not <| (info.VerificationProgress < 1.0f)
-        if isIBDDone && currentHeight <> newBlockNum then
-          currentHeight <- newBlockNum
-          let cmd =
-            (newBlockNum, cc)
-            |> Swap.Command.NewBlock
-          for s in swaps.Keys do
-            do! actor.Execute(s, cmd, nameof(BlockchainListener))
+      while true do
+        do! Task.Delay 5000
+        ct.ThrowIfCancellationRequested()
+        for (cli, cc) in clis do
+          let! info = cli.GetBlockchainInfoAsync()
+          let newBlockNum = info.Blocks |> uint32 |> BlockHeight
+          let isIBDDone = not <| (info.VerificationProgress < 1.0f)
+          if isIBDDone && currentHeight <> newBlockNum then
+            currentHeight <- newBlockNum
+            let cmd =
+              (newBlockNum, cc)
+              |> Swap.Command.NewBlock
+            for s in swaps.Keys do
+              do! actor.Execute(s, cmd, nameof(BlockchainListener))
+    with
+    | ex ->
+      logger.LogError($"{ex}")
   }
 
   interface ISwapEventListener with
