@@ -1,19 +1,14 @@
 namespace NLoop.Domain
 
 open System
-open System
-open System.Linq
 open System.Text.Json
 open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils.Primitives
 open NBitcoin
-open NBitcoin
-open NLoop.Domain
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
-open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
 open NLoop.Domain.Utils.EventStore
 
@@ -24,7 +19,6 @@ open NLoop.Domain.Utils.EventStore
 /// * RefundTx ... TX to take funds from SwapTx in case of the timeout.
 /// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient to claim SwapTx.
 /// * Payment ... off-chain payment from counterparty to us.
-///
 module Swap =
   [<RequireQualifiedAccess>]
   type FinishedState =
@@ -56,24 +50,8 @@ module Swap =
     }
       with
       member this.SwapStatus =
-        match this._Status with
-        | "swap.created" -> SwapStatusType.SwapCreated
-        | "swap.expired" -> SwapStatusType.SwapExpired
+        SwapStatusType.FromString(this._Status)
 
-        | "invoice.set" -> SwapStatusType.InvoiceSet
-        | "invoice.payed" -> SwapStatusType.InvoicePayed
-        | "invoice.pending" -> SwapStatusType.InvoicePending
-        | "invoice.settled" -> SwapStatusType.InvoiceSettled
-        | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
-
-        | "channel.created" -> SwapStatusType.ChannelCreated
-
-        | "transaction.failed" -> SwapStatusType.TxFailed
-        | "transaction.mempool" -> SwapStatusType.TxMempool
-        | "transaction.claimed" -> SwapStatusType.TxClaimed
-        | "transaction.refunded" -> SwapStatusType.TxRefunded
-        | "transaction.confirmed" -> SwapStatusType.TxConfirmed
-        | _ -> SwapStatusType.Unknown
 
   [<Literal>]
   let entityType = "swap"

@@ -147,6 +147,17 @@ type SwapIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> SwapId.SwapId
 
+type SwapStatusTypeJsonConverter() =
+  inherit JsonConverter<SwapStatusType>()
+
+  override this.Write(writer, value, _options) =
+    writer.WriteStringValue(value.AsString())
+  override this.Read(reader, _typeToConvert, _options) =
+    match reader.GetString() |> SwapStatusType.FromString with
+    | SwapStatusType.Unknown -> raise <| JsonException()
+    | x -> x
+
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -165,6 +176,7 @@ type Extensions() =
       this.Converters.Add(HexTxConverter(n))
     )
 
+    this.Converters.Add(SwapStatusTypeJsonConverter())
     this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
