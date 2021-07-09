@@ -3,6 +3,7 @@ namespace NLoop.Server
 open System
 open System.Linq
 open System.Threading.Tasks
+open DotNetLightning.Utils.Primitives
 open FSharp.Control.Reactive
 
 open BTCPayServer.Lightning
@@ -140,13 +141,16 @@ module LoopHandlers =
           |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
 
         let! refundKey = repo.NewPrivateKey()
+        let! preimage = repo.NewPreimage()
+        let preimageHash = preimage.Hash
+
         let! invoice =
-          let amt = LightMoney.Satoshis(loopIn.Amount.Satoshi)
+          let amt = Money.Satoshis(loopIn.Amount.Satoshi)
           ctx
             .GetService<ILightningClientProvider>()
             .GetClient(ourCryptoCode)
-            .CreateInvoice(amt, $"This is an invoice for LoopIn by NLoop ({loopIn.Label})", TimeSpan.FromMinutes(5.))
-        let invoice = invoice.ToDNLInvoice()
+            .AddHodlInvoice(preimageHash, amt, BlockHeightOffset16(144us), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
+
         let! inResponse =
           let req =
             { CreateSwapRequest.Invoice = invoice
@@ -170,7 +174,7 @@ module LoopHandlers =
             RedeemScript = inResponse.RedeemScript
             Invoice = invoice.ToString()
             Address = inResponse.Address.ToString()
-            ExpectedAmount = Money.Zero
+            ExpectedAmount = inResponse.ExpectedAmount
             TimeoutBlockHeight = inResponse.TimeoutBlockHeight
             LockupTransactionHex = None
             RefundTransactionId = None
@@ -193,7 +197,8 @@ module LoopHandlers =
           loopIn.CounterPartyPair
           |> Option.defaultValue<SupportedCryptoCode> (ourCryptoCode)
         return!
-          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyPair) >=> handle)
+          (checkBlockchainIsSyncedAndSetTipHeight (ourCryptoCode, counterPartyPair)>=>
+           handle)
             next ctx
       }
 

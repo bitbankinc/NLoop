@@ -62,21 +62,20 @@ module Transactions =
     (outputAmount: Money)
     (feeRate: FeeRate)
     (change: IDestination)
-    (timeout: BlockHeight)
     (n: Network)
     =
     if (outputAmount.Satoshi < 0L) then Error("Negative amount for swap output") else
     let whatWeHave = inputs |> Seq.sumBy(fun i -> i.TxOut.Value)
     if (whatWeHave < outputAmount) then Error($"Insufficient funds (what we have: {whatWeHave.Satoshi} satoshi, output: {outputAmount.Satoshi} satoshis)") else
-    let txb = n.CreateTransactionBuilder()
-    txb
-      .AddCoins(inputs)
-      .SendEstimatedFees(feeRate)
-      .Send(redeemScript.WitHash, outputAmount)
-      .SetChange(change)
-      .SetLockTime(timeout.Value |> LockTime)
-      .BuildPSBT(false)
-      |> Ok
+    let psbt =
+      n.CreateTransactionBuilder()
+        .AddCoins(inputs)
+        .SendEstimatedFees(feeRate)
+        .Send(redeemScript.WitHash, outputAmount)
+        .SetChange(change)
+        .BuildPSBT(false)
+    psbt.AddScripts(redeemScript)
+    |> Ok
 
   let createRefundTx
     (lockupTxHex: string)

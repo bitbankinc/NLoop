@@ -8,6 +8,7 @@ open System.Threading
 open System.Threading.Tasks
 open BTCPayServer.Lightning.LND
 open DotNetLightning.Payment
+open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open System.Collections.Generic
@@ -62,6 +63,17 @@ type ILightningClientProviderExtensions =
         return failwithf "Unexpected PayResult: %A (%s)" s p.ErrorDetail
       }
 
+  [<Extension>]
+  static member AddHodlInvoice(cli: ILightningClient, paymentHash: PaymentHash, amount: Money, expiry: BlockHeightOffset16, memo: string): Task<PaymentRequest> = task {
+    let invoice: LightningInvoice =
+      match cli with
+      | :? LndClient as lndClient ->
+        ()
+      | _ ->
+        raise <| NotSupportedException("Unknown LN client type")
+      failwith "todo"
+    return invoice.ToDNLInvoice()
+  }
 
 type LightningClientProvider(opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
   let clients = Dictionary<SupportedCryptoCode, ILightningClient>()

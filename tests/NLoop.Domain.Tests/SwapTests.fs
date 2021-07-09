@@ -118,7 +118,7 @@ type SwapDomainTests() =
   [<Fact>]
   member this.JsonSerializerTest() =
     let events = [
-      Swap.Event.LoopErrored(SwapId("foo"), "Error msg")
+      Swap.Event.FinishedByError(SwapId("foo"), "Error msg")
       Swap.Event.ClaimTxPublished(uint256.Zero)
       Swap.Event.SwapTxPublished(Network.RegTest.CreateTransaction().ToHex())
     ]
@@ -162,8 +162,19 @@ type SwapDomainTests() =
       loopOut with
         Id = SwapId(Guid.NewGuid().ToString())
         OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(10000m))
+        ChainName = ChainName.Regtest.ToString()
+        PairId = (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
     }
-
+    let loopOut = {
+      loopOut with
+        Invoice =
+          let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+          let paymentHash = paymentPreimage.Hash
+          let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
+          PaymentRequest.TryCreate(loopOut.TheirNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
+          |> ResultUtils.Result.deref
+          |> fun x -> x.ToString()
+    }
     let commands =
       [
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(height |> BlockHeight, loopOut))
@@ -226,7 +237,7 @@ type SwapDomainTests() =
             Swap.Data.SwapStatusResponseData.Transaction =
               Some({ Tx = swapTx
                      TxId = swapTx.GetWitHash()
-                     Eta = 1 })
+                     Eta = Some 1 })
             Swap.Data.SwapStatusResponseData.FailureReason = None
           }
 
@@ -244,7 +255,7 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.SuccessfullyFinished(loopOut.Id), lastEvent.Data)
+    Assert.Equal(Swap.Event.FinishedSuccessfully(loopOut.Id), lastEvent.Data)
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn_Timeout(loopIn: LoopIn, testAltcoin: bool) =
@@ -354,7 +365,11 @@ type SwapDomainTests() =
             Swap.Data.SwapStatusResponseData.FailureReason = None
           }
         (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
-        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.OffChainPaymentReception)
+        let swapUpdate = {
+          swapUpdate with
+            _Status = "transaction.claimed"
+        }
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
@@ -367,5 +382,5 @@ type SwapDomainTests() =
       events
       |> Result.deref
       |> List.last
-    Assert.Equal(Swap.Event.SuccessfullyFinished(loopIn.Id), lastEvent.Data)
+    Assert.Equal(Swap.Event.FinishedSuccessfully(loopIn.Id), lastEvent.Data)
     ()

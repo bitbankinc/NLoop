@@ -86,6 +86,9 @@ module CustomHandlers =
       let nodesT = boltzCli.GetNodesAsync()
       let! nodes = nodesT
       let mutable maybeResult = null
+      let logger =
+        ctx
+          .GetLogger<_>()
       for kv in nodes.Nodes do
         if (maybeResult |> isNull |> not) then () else
         try
@@ -94,13 +97,19 @@ module CustomHandlers =
             maybeResult <- r
         with
         | ex ->
-          ctx
-            .GetLogger<_>()
+          logger
             .LogError $"{ex}"
           ()
 
       if maybeResult |> isNull then
         return! error503 $"Failed to find route to Boltz server. Make sure the channel is open" next ctx
       else
+        let chanIds =
+          maybeResult.Routes
+          |> Seq.head
+          |> fun firstRoute -> firstRoute.Hops
+          |> Seq.toList
+          // |> List.map(fun h -> h.Chan_id)
+        logger.LogDebug($"paying through following channel ({chanIds})")
         return! next ctx
     }

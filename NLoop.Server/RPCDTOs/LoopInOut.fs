@@ -11,6 +11,7 @@ open NLoop.Domain
 open NLoop.Server
 
 type LoopInRequest = {
+  [<JsonPropertyName "amount">]
   Amount: Money
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId option

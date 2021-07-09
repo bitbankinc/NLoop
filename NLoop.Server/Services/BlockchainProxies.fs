@@ -46,7 +46,7 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
 
     member this.SignSwapTxPSBT(psbt, cryptoCode) = task {
       let cli = opts.Value.GetRPCClient(cryptoCode)
-      let! resp = cli.WalletProcessPSBTAsync(psbt)
+      let! resp = cli.WalletProcessPSBTAsync(psbt, sign=true)
       return resp.PSBT
     }
 

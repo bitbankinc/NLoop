@@ -28,12 +28,12 @@ module Swap =
     /// Counterparty gave us bogus msg. Swap did not start.
     | Errored of msg: string
   type State =
-    | Initialized
+    | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
     | In of blockHeight: BlockHeight * LoopIn
     | Finished of FinishedState
     with
-    static member Zero = Initialized
+    static member Zero = HasNotStarted
 
   // ------ command -----
 
@@ -63,7 +63,6 @@ module Swap =
 
     // -- loop in --
     | NewLoopIn of height: BlockHeight * LoopIn
-    | OffChainPaymentReception
 
     // -- both
     | SwapUpdate of Data.SwapStatusResponseData
@@ -88,8 +87,9 @@ module Swap =
 
     // -- general --
     | NewTipReceived of BlockHeight
-    | LoopErrored of id: SwapId * err: string
-    | SuccessfullyFinished of id: SwapId
+
+    | FinishedByError of id: SwapId * err: string
+    | FinishedSuccessfully of id: SwapId
     | FinishedByRefund of id: SwapId
     with
     member this.Version =
@@ -103,10 +103,11 @@ module Swap =
       | SwapTxPublished _
       | RefundTxPublished _
 
-      | LoopErrored _
-      | SuccessfullyFinished _
-      | FinishedByRefund _
       | NewTipReceived _
+      | FinishedByError _
+
+      | FinishedSuccessfully _
+      | FinishedByRefund _
        -> 0
 
     member this.Type =
@@ -120,10 +121,11 @@ module Swap =
       | SwapTxPublished _ -> "swap_tx_published"
       | RefundTxPublished _ -> "refund_tx_published"
 
-      | LoopErrored _ -> "loop_errored"
-      | SuccessfullyFinished _ -> "successfully_finished"
-      | FinishedByRefund _ -> "finished_by_refund"
       | NewTipReceived _ -> "new_tip_received"
+
+      | FinishedByError _ -> "finished_by_error"
+      | FinishedSuccessfully _ -> "finished_successfully"
+      | FinishedByRefund _ -> "finished_by_refund"
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
@@ -172,6 +174,7 @@ module Swap =
 
   // ----- aggregates ----
 
+
   let private enhanceEvents date source (events: Event list) =
     events |> List.map(fun e -> e.ToEventSourcingEvent date source)
 
@@ -193,7 +196,7 @@ module Swap =
 
         match cmd.Data, s with
         // --- loop out ---
-        | NewLoopOut (h, loopOut), Initialized ->
+        | NewLoopOut (h, loopOut), HasNotStarted ->
           do! loopOut.Validate() |> expectInputError
           let invoice =
             loopOut.Invoice
@@ -203,7 +206,7 @@ module Swap =
             [NewLoopOutAdded(h, loopOut); OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice) ]
             |> enhance
         | OffChainOfferResolve pp, Out(_, loopOut) ->
-          return [OffChainOfferResolved pp; SuccessfullyFinished loopOut.Id] |> enhance
+          return [OffChainOfferResolved pp; FinishedSuccessfully loopOut.Id] |> enhance
         | SwapUpdate u, Out(_height, loopOut) ->
           if (u.SwapStatus = loopOut.Status) then
             return []
@@ -232,11 +235,14 @@ module Swap =
               broadcaster.BroadcastTx(claimTx, counterPartyCryptoCode)
             let txid = claimTx.GetWitHash()
             return [ClaimTxPublished(txid);] |> enhance
+          | SwapStatusType.SwapExpired ->
+            let reason = u.FailureReason |> Option.defaultValue ""
+            return [FinishedByError(loopOut.Id, $"Swap expired (Reason: %s{reason})");] |> enhance
           | _ ->
             return []
 
         // --- loop in ---
-        | NewLoopIn(h, loopIn), Initialized ->
+        | NewLoopIn(h, loopIn), HasNotStarted ->
           do! loopIn.Validate() |> expectInputError
           return [NewLoopInAdded(h, loopIn)] |> enhance
         | SwapUpdate u, In(_height, loopIn) ->
@@ -258,32 +264,42 @@ module Swap =
                 (loopIn.ExpectedAmount)
                 feeRate
                 change
-                loopIn.TimeoutBlockHeight
                 loopIn.TheirNetwork
               |> function | Ok x -> x | Error e -> failwithf "%A" e
             let! psbt = utxoProvider.SignSwapTxPSBT(psbt, counterPartyCryptoCode)
             match psbt.TryFinalize() with
             | false, e ->
-              return raise <| Exception(sprintf "%A" e)
+              return raise <| Exception(sprintf "%A" (e |> Seq.toList))
             | true, _ ->
               let tx = psbt.ExtractTransaction()
               do! broadcaster.BroadcastTx(tx, counterPartyCryptoCode)
               return [SwapTxPublished(tx.ToHex())] |> enhance
+          | SwapStatusType.TxConfirmed
+          | SwapStatusType.InvoicePayed ->
+            // Ball is on their side. Just wait till they claim their on-chain share.
+            return []
+          | SwapStatusType.TxClaimed ->
+            // boltz server has happily claimed their on-chain share.
+            return [FinishedSuccessfully(loopIn.Id)] |> enhance
+          | SwapStatusType.InvoiceFailedToPay ->
+            // The counterparty says that they have failed to receive preimage before timeout. This should never happen.
+            // But even if it does, we will just reclaim the swap tx when the timeout height has reached.
+            // So nothing to do here.
+            return []
+          | SwapStatusType.SwapExpired ->
+            // This means we have not send SwapTx. Or they did not recognize it.
+            // This can be caused only by our bug.
+            // (e.g. boltz-server did not recognize our swap script.)
+            // So just ignore it.
+            return []
           | _ ->
-          return []
-        | SwapUpdate x, Out (_, { Id = swapId }) when x.SwapStatus = SwapStatusType.SwapExpired ->
-          let reason = x.FailureReason |> Option.defaultValue ""
-          return [LoopErrored(swapId, $"Swap expired (Reason: %s{reason})")] |> enhance
-        | SwapUpdate x, In (_, { Id = swapId }) when x.SwapStatus = SwapStatusType.SwapExpired ->
-          let reason = x.FailureReason |> Option.defaultValue ""
-          return [LoopErrored(swapId, $"Swap expired (Reason: %s{reason})")] |> enhance
-        | OffChainPaymentReception, In (_ ,loopIn) ->
-          return [SuccessfullyFinished(loopIn.Id)] |> enhance
+            return []
 
         // --- ---
+
         | SetValidationError(err), Out(_, { Id = swapId })
         | SetValidationError(err), In (_ , { Id = swapId }) ->
-          return [LoopErrored( swapId, err )] |> enhance
+          return [FinishedByError( swapId, err )] |> enhance
         | NewBlock (height, cc), Out(oldHeight, loopOut) when let struct (ourCC,_ ) = loopOut.PairId in ourCC = cc ->
             return! (height, oldHeight) ||> checkHeight
         | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, theirCC) = loopIn.PairId in theirCC = cc ->
@@ -325,27 +341,26 @@ module Swap =
   let applyChanges
     (state: State) (event: Event) =
     match event, state with
-    | NewLoopOutAdded(h, x), Initialized ->
+    | NewLoopOutAdded(h, x), HasNotStarted ->
       Out (h, x)
     | ClaimTxPublished (txid), Out(h, x) ->
       Out (h, { x with ClaimTransactionId = Some txid })
     | OffChainOfferResolved(preimage), Out(h, x) ->
       Out(h, { x with Preimage = preimage })
 
-    | NewLoopInAdded(h, x), Initialized ->
+    | NewLoopInAdded(h, x), HasNotStarted ->
       In (h, x)
     | SwapTxPublished (tx), In(h, x) ->
       In (h, { x with LockupTransactionHex = Some(tx) })
     | RefundTxPublished txid, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
 
-    | LoopErrored (_, err), In _ ->
+    | FinishedByError (_, err), In _ ->
       Finished(FinishedState.Errored(err))
-    | LoopErrored (_, err), Out _ ->
+    | FinishedByError (_, err), Out _ ->
       Finished(FinishedState.Errored(err))
-    | SuccessfullyFinished _, Out _ ->
-      Finished(FinishedState.Success)
-    | SuccessfullyFinished _, In _ ->
+    | FinishedSuccessfully _, Out _
+    | FinishedSuccessfully _, In _ ->
       Finished(FinishedState.Success)
     | FinishedByRefund _, In (_h, { RefundTransactionId = Some txid }) ->
       Finished(FinishedState.Refunded(txid))

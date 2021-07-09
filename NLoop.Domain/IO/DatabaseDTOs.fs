@@ -11,7 +11,7 @@ open NLoop.Domain.Utils
 type LoopOut = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<JsonStringEnumConverter>)>]
+  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
   AcceptZeroConf: bool
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
@@ -47,7 +47,7 @@ type LoopOut = {
 type LoopIn = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<JsonStringEnumConverter>)>]
+  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
 
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
@@ -77,5 +77,5 @@ type LoopIn = {
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
   member this.Validate() =
-    if this.ExpectedAmount <= Money.Zero then Error ("LoopIn has non-positive expected amount") else
+    if this.ExpectedAmount <= Money.Zero then Error ($"LoopIn has non-positive expected amount {this.ExpectedAmount}") else
     Ok()

@@ -153,9 +153,7 @@ type SwapStatusTypeJsonConverter() =
   override this.Write(writer, value, _options) =
     writer.WriteStringValue(value.AsString())
   override this.Read(reader, _typeToConvert, _options) =
-    match reader.GetString() |> SwapStatusType.FromString with
-    | SwapStatusType.Unknown -> raise <| JsonException()
-    | x -> x
+    reader.GetString() |> SwapStatusType.FromString
 
 
 [<AbstractClass;Sealed;Extension>]

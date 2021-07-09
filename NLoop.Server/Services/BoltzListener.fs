@@ -24,19 +24,15 @@ type BoltzListener(boltzClient: BoltzClient,
 
   override  this.ExecuteAsync(ct) = unitTask {
       try
-        let! boltzVersion = boltzClient.GetVersionAsync(ct).ConfigureAwait(false)
-        logger.LogInformation($"Listening to boltz version {boltzVersion.Version}")
+        // Just to check the connection on startup.
+        let! _boltzVersion = boltzClient.GetVersionAsync(ct).ConfigureAwait(false)
 
         while true do
-          logger.LogInformation($"Listening to Boltz...")
           for kv in statuses do
-            logger.LogInformation($"Listening to Boltz for {kv.Key} in status {kv.Value}")
             do! Async.Sleep 5000
             let swapId = kv.Key
             let! resp = boltzClient.GetSwapStatusAsync(swapId.Value, ct).ConfigureAwait(false)
-            logger.LogInformation($"resp was {resp.SwapStatus.AsString}")
             let isNoChange = kv.Value.IsSome && resp.SwapStatus = kv.Value.Value
-            logger.LogInformation($"isNoChange? {isNoChange}")
             if (isNoChange) then () else
             if not <| statuses.TryUpdate(swapId, (resp.SwapStatus |> ValueSome), kv.Value) then
               logger.LogError($"Failed to update ({swapId})! this should never happen")
