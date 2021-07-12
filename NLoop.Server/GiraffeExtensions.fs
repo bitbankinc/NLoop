@@ -1,9 +1,9 @@
 namespace NLoop.Server
 
 open System.Text.Json
-open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open Giraffe
+open LndClient
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
@@ -85,31 +85,29 @@ module CustomHandlers =
       let boltzCli = ctx.GetService<BoltzClient>()
       let nodesT = boltzCli.GetNodesAsync()
       let! nodes = nodesT
-      let mutable maybeResult = null
+      let mutable maybeResult = None
       let logger =
         ctx
           .GetLogger<_>()
       for kv in nodes.Nodes do
-        if (maybeResult |> isNull |> not) then () else
+        if (maybeResult.IsSome) then () else
         try
-          let! r  = (cli :?> LndClient).SwaggerClient.QueryRoutesAsync(kv.Value.NodeKey.ToHex(), amt.Satoshi.ToString(), 1)
-          if (r.Routes.Count > 0) then
-            maybeResult <- r
+          let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney(), 1)
+          if (r.Value.Length > 0) then
+            maybeResult <- Some r
         with
         | ex ->
           logger
             .LogError $"{ex}"
           ()
 
-      if maybeResult |> isNull then
+      if maybeResult.IsNone then
         return! error503 $"Failed to find route to Boltz server. Make sure the channel is open" next ctx
       else
         let chanIds =
-          maybeResult.Routes
-          |> Seq.head
-          |> fun firstRoute -> firstRoute.Hops
-          |> Seq.toList
-          // |> List.map(fun h -> h.Chan_id)
+          maybeResult.Value.Value
+          |> List.head
+          |> fun firstRoute -> firstRoute.ShortChannelId
         logger.LogDebug($"paying through following channel ({chanIds})")
         return! next ctx
     }

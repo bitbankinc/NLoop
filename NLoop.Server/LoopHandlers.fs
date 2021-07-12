@@ -6,7 +6,6 @@ open System.Threading.Tasks
 open DotNetLightning.Utils.Primitives
 open FSharp.Control.Reactive
 
-open BTCPayServer.Lightning
 open FsToolkit.ErrorHandling
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -18,6 +17,8 @@ open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Services
 open System.Reactive.Linq
+
+open DotNetLightning.Utils
 
 module LoopHandlers =
   open Microsoft.AspNetCore.Http
@@ -145,11 +146,11 @@ module LoopHandlers =
         let preimageHash = preimage.Hash
 
         let! invoice =
-          let amt = Money.Satoshis(loopIn.Amount.Satoshi)
+          let amt = loopIn.Amount.ToLNMoney()
           ctx
             .GetService<ILightningClientProvider>()
             .GetClient(ourCryptoCode)
-            .AddHodlInvoice(preimageHash, amt, BlockHeightOffset16(144us), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
+            .GetHodlInvoice(preimageHash, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
 
         let! inResponse =
           let req =

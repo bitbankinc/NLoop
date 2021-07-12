@@ -33,10 +33,13 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         |> Observable.flatmapTask(fun (swapId, struct(ourCC, _theirCC), invoice) ->
           task {
             try
-              printfn "DEBUG: staring offer..."
-              let! p = lightningClientProvider.GetClient(ourCC).Offer(invoice, ct).ConfigureAwait(false)
-              printfn "DEBUG: finished offer..."
-              do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
+              let! pr = lightningClientProvider.GetClient(ourCC).Offer(invoice).ConfigureAwait(false)
+              match pr with
+              | Ok p ->
+                do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
+              | Error e ->
+                logger.LogError(e)
+                do! actor.Execute(swapId, Swap.Command.SetValidationError(e))
             with
             | ex ->
               logger.LogError($"{ex}")

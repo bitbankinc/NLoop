@@ -10,11 +10,9 @@ certthumbprint=$(openssl x509 -in ${SCRIPT_DIR}/../tests/NLoop.Server.Tests/data
 
 LOGGING__LogLevel__Microsoft=Information
 
-
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --network RegTest \
   --nohttps true \
-  --btc.lightningconnectionstring "type=lnd-rest;macaroonfilepath="$admin_macaroon";server=https://localhost:32736;certthumbprint="$certthumbprint"" \
   --btc.rpcuser=johndoe \
   --btc.rpcpassword=unsafepassword \
   --btc.rpchost=localhost \
@@ -23,6 +21,9 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --ltc.rpcpassword=unsafepassword \
   --ltc.rpchost=localhost \
   --ltc.rpcport=43783 \
+  --lndserver https://localhost:32736 \
+  --lndmacaroonfilepath ${admin_macaroon} \
+  --lndcertthumbprint ${certthumbprint} \
   --eventstoreurl tcp://admin:changeit@localhost:1113 \
   --boltzhost https://localhost \
   --boltzport 6028 \

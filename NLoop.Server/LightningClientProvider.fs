@@ -1,27 +1,22 @@
 namespace NLoop.Server
 
 open System
+open System.Collections.Generic
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
-open System.Threading
 open System.Threading.Tasks
-open BTCPayServer.Lightning.LND
-open DotNetLightning.Payment
-open DotNetLightning.Utils
-open DotNetLightning.Utils.Primitives
-open FSharp.Control.Tasks
-open System.Collections.Generic
-open BTCPayServer.Lightning
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
-open NBitcoin.DataEncoders
+open FsToolkit.ErrorHandling
+open FSharp.Control.Tasks
+open LndClient
 open NLoop.Domain
-open NLoop.Server
 
 type ILightningClientProvider =
-  abstract member TryGetClient: crypto: SupportedCryptoCode -> ILightningClient option
+  abstract member TryGetClient: crypto: SupportedCryptoCode -> INLoopLightningClient option
 
 [<AbstractClass;Sealed;Extension>]
 type ILightningClientProviderExtensions =
@@ -43,59 +38,29 @@ type ILightningClientProviderExtensions =
       }
     )
 
-  [<Extension>]
-  static member Offer(cli: ILightningClient, invoice: PaymentRequest, ct: CancellationToken) =
-    task {
-      let! p = cli.Pay(invoice.ToString(), ct).ConfigureAwait(false)
-      match p.Result with
-      | PayResult.Ok ->
-        let hex = HexEncoder()
-        let! p = (cli :?> LndClient).SwaggerClient.ListPaymentsAsync(ct).ConfigureAwait(false)
-        let preimage =
-          p.Payments
-          |> Seq.filter(fun i -> i.Payment_hash = invoice.PaymentHash.Value.ToString())
-          |> Seq.exactlyOne
-          |> fun i -> i.Payment_preimage
-          |> hex.DecodeData
-          |> PaymentPreimage.Create
-        return preimage
-      | s ->
-        return failwithf "Unexpected PayResult: %A (%s)" s p.ErrorDetail
-      }
+type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
+  let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
 
-  [<Extension>]
-  static member AddHodlInvoice(cli: ILightningClient, paymentHash: PaymentHash, amount: Money, expiry: BlockHeightOffset16, memo: string): Task<PaymentRequest> = task {
-    let invoice: LightningInvoice =
-      match cli with
-      | :? LndClient as lndClient ->
-        ()
-      | _ ->
-        raise <| NotSupportedException("Unknown LN client type")
-      failwith "todo"
-    return invoice.ToDNLInvoice()
-  }
-
-type LightningClientProvider(opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
-  let clients = Dictionary<SupportedCryptoCode, ILightningClient>()
-
-  member this.CheckClientConnection(c, ct) = task {
-    let n  = opts.Value.GetNetwork(c)
+  member private this.CheckClientConnection(c: SupportedCryptoCode) = task {
+    let settings = opts.Value.GetLndRestSettings()
+    let httpClient = httpClientFactory.CreateClient()
+    httpClient.Timeout <- TimeSpan.FromDays(3.)
     let cli =
-      let factory = LightningClientFactory(n)
-      if (factory.HttpClient |> isNull) then
-        factory.HttpClient <- httpClientFactory.CreateClient()
-      // We need this since `Pay` ing will hang in case of HODL invoice which is necessary for swapping.
-      factory.HttpClient.Timeout <- TimeSpan.FromDays(3.)
-      let cli = factory.Create(opts.Value.ChainOptions.[c].LightningConnectionString)
-      cli
-    let! _info = cli.GetInfo(ct)
+      LndTypeProviderClient(opts.Value.GetNetwork(c), settings, httpClient)
+      :> INLoopLightningClient
     clients.Add(c, cli)
-    return ()
+    try
+      let! _info = cli.GetInfo()
+      ()
+    with
+    | ex ->
+      logger.LogCritical($"Failed to connect to the LND for cryptocode: {c}. Check your settings are correct.")
+      raise <| ex
   }
 
   interface IHostedService with
-    member this.StartAsync(ct) = unitTask {
-      let! _ = Task.WhenAll([for c in opts.Value.OffChainCrypto -> this.CheckClientConnection(c, ct)])
+    member this.StartAsync(_ct) = unitTask {
+      let! _ = Task.WhenAll([for c in opts.Value.OffChainCrypto -> this.CheckClientConnection(c)])
       ()
     }
 
@@ -108,3 +73,4 @@ type LightningClientProvider(opts: IOptions<NLoopOptions>, httpClientFactory: IH
       match clients.TryGetValue(crypto) with
       | true, v -> v |> Some
       | _, _ -> None
+

@@ -9,9 +9,8 @@ open System.CommandLine.Parsing
 open System.IO
 open System.Linq
 open System.Net.Http
-open BTCPayServer.Lightning
-open BTCPayServer.Lightning.LND
 open DockerComposeFixture
+open LndClient
 open Helpers
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
@@ -25,8 +24,8 @@ open NLoopClient
 type Clients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
-  User: {| Lnd: LndClient; NLoop: NLoopClient; NLoopServer: TestServer |}
-  Server: {| Lnd: LndClient; Boltz: BoltzClient |}
+  User: {| Lnd: LndTypeProviderClient; NLoop: NLoopClient; NLoopServer: TestServer |}
+  Server: {| Lnd: LndTypeProviderClient; Boltz: BoltzClient |}
 }
 
 [<AutoOpen>]
@@ -38,7 +37,7 @@ module DockerFixtureExtensions =
   let private getLNDClient (path) port  =
     getLNDConnectionString path port
     |> fun connStr ->
-      LightningClientFactory.CreateClient(connStr, Network.RegTest) :?> LndClient
+      LightningClientFactory.CreateClient(connStr, Network.RegTest) :?> LndTypeProviderClient
 
   type DockerFixture with
     member this.StartFixture(testName: string) =

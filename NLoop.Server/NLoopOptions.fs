@@ -3,6 +3,7 @@ namespace NLoop.Server
 open System
 open System.Collections.Generic
 open System.IO
+open LndClient
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.RPC
@@ -16,8 +17,6 @@ type ChainOptions() =
   member val RPCPassword = String.Empty with get, set
   member val RPCCookieFile = String.Empty with get, set
 
-  member val LightningConnectionString = String.Empty with get, set
-
   member val CryptoCode = SupportedCryptoCode.BTC with get, set
 
   member this.GetNetwork(chainName: string) =
@@ -25,6 +24,11 @@ type ChainOptions() =
 
   member this.GetRPCClient(chainName: string) =
     RPCClient($"{this.RPCUser}:{this.RPCPassword}", $"{this.RPCHost}:{this.RPCPort}", this.GetNetwork(chainName))
+
+  // --- ln client ---
+  member val LightningConnectionString = String.Empty with get, set
+
+  // --- ---
 
 type NLoopOptions() =
   // -- general --
@@ -93,3 +97,25 @@ type NLoopOptions() =
     |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
 
   member this.DBPath = Path.Join(this.DataDir, "nloop.db")
+
+  member val LndCertThumbprint = null with get, set
+  member val LndMacaroon = null with get, set
+  member val LndMacaroonFilePath = null with get, set
+  member val LndServer = "https://localhost:9735" with get, set
+
+  member val LndAllowUnsafe = false with get, set
+
+  member this.GetLndRestSettings() =
+    LndRestSettings.Create(
+      this.LndServer,
+      this.LndCertThumbprint |> Option.ofObj,
+      this.LndMacaroon |> Option.ofObj,
+      this.LndMacaroonFilePath |> Option.ofObj,
+      this.LndAllowUnsafe
+    )
+    |>
+      function
+        | Ok x -> x
+        | Error e -> failwith $"Invalid Lnd config: {e}"
+
+
