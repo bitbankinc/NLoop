@@ -5,6 +5,7 @@ open DotNetLightning.Chain
 open DotNetLightning.Utils
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -25,10 +26,11 @@ type BoltzFeeEstimator(boltzClient: BoltzClient) =
         return raise <| BoltzRPCException($"Boltz did not return feerate for cryptoCode {cryptoCode}! Supported CryptoCode was {feeMap |> Seq.map(fun k _ -> k) |> Seq.toList}")
     }
 
-type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>) =
+type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>, logger: ILogger<BitcoinRPCBroadcaster>) =
   interface IBroadcaster with
     member this.BroadcastTx(tx, cryptoCode) = unitTask {
       let cli = opts.Value.GetRPCClient(cryptoCode)
+      logger.LogInformation($"Broadcasting Transaction: {tx.GetWitHash()}")
       let! _ = cli.SendRawTransactionAsync(tx)
       ()
     }

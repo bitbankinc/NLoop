@@ -142,6 +142,11 @@ type INLoopLightningClient =
     expiry: TimeSpan *
     memo: string
       -> Task<PaymentRequest>
+  abstract member GetInvoice:
+    paymentPreimage: PaymentPreimage *
+    amount: LNMoney *
+    expiry: TimeSpan *
+    memo: string -> Task<PaymentRequest>
   abstract member Offer: invoice: PaymentRequest -> Task<Result<Primitives.PaymentPreimage, string>>
   abstract member Listen: unit -> Task<ILightningInvoiceListener>
   abstract member GetInfo: unit -> Task<obj>

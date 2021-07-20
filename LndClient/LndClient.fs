@@ -134,6 +134,20 @@ module LndInvoiceSwaggerClient =
           |> ResultUtils.Result.deref
       }
 
+      member this.GetInvoice(preimage: PaymentPreimage, amount: LNMoney, expiry: TimeSpan, memo: string) = task {
+        let! resp =
+          let req = LndBaseRpcSpecProvider.lnrpcInvoice()
+          req.ValueMsat <- amount.MilliSatoshi.ToString()
+          req.Expiry <- expiry.Seconds.ToString()
+          req.RPreimage <- preimage.ToByteArray()
+          req.Memo <- memo
+          baseRPCClient.AddInvoice(req)
+        return
+          resp.PaymentRequest
+          |> PaymentRequest.Parse
+          |> ResultUtils.Result.deref
+      }
+
       member this.GetInfo() = task {
         let! r = baseRPCClient.GetInfo()
         return r |> box

@@ -11,6 +11,7 @@ open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
+open NLoop.Server.Projections
 open NLoop.Server.Services
 
 [<AutoOpen>]
@@ -99,7 +100,6 @@ module CustomHandlers =
         | ex ->
           logger
             .LogError $"{ex}"
-          ()
 
       if maybeResult.IsNone then
         return! error503 $"Failed to find route to Boltz server. Make sure the channel is open" next ctx

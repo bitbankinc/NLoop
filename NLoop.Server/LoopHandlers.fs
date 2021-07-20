@@ -143,14 +143,13 @@ module LoopHandlers =
 
         let! refundKey = repo.NewPrivateKey()
         let! preimage = repo.NewPreimage()
-        let preimageHash = preimage.Hash
 
         let! invoice =
           let amt = loopIn.Amount.ToLNMoney()
           ctx
             .GetService<ILightningClientProvider>()
             .GetClient(ourCryptoCode)
-            .GetHodlInvoice(preimageHash, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
+            .GetInvoice(preimage, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
 
         let! inResponse =
           let req =
