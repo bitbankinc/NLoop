@@ -23,7 +23,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
   let mutable subsc2 = null
 
   interface IHostedService with
-    member this.StartAsync(ct) =
+    member this.StartAsync(_ct) =
       subsc1 <-
         obs
         |> Observable.choose(fun e ->
@@ -68,7 +68,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         )
       Task.CompletedTask
 
-    member this.StopAsync(ct) =
+    member this.StopAsync(_ct) =
       do
         subsc1.Dispose()
         subsc2.Dispose()

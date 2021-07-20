@@ -30,14 +30,18 @@ type Clients = {
 
 [<AutoOpen>]
 module DockerFixtureExtensions =
-  let private getLNDConnectionString path port =
+  let private getLndRestSettings(path) port =
     let lndMacaroonPath = Path.Join(path, "chain", "bitcoin", "regtest", "admin.macaroon")
-    let lndCertThumbprint = getCertFingerPrintHex(Path.Join(path, "tls.cert"))
-    $"type=lnd-rest;macaroonfilepath={lndMacaroonPath};certthumbprint={lndCertThumbprint};server=https://localhost:{port}"
+    let lndCertThumbprint =
+      getCertFingerPrintHex(Path.Join(path, "tls.cert"))
+    let uri = $"https://localhost:%d{port}"
+    (uri, lndCertThumbprint, lndMacaroonPath)
   let private getLNDClient (path) port  =
-    getLNDConnectionString path port
-    |> fun connStr ->
-      LightningClientFactory.CreateClient(connStr, Network.RegTest) :?> LndTypeProviderClient
+    let (uri, lndCertThumbprint, lndMacaroonPath) = getLndRestSettings path port
+    let settings =
+      LndRestSettings.Create(uri, lndCertThumbprint |> Some, None, Some <| lndMacaroonPath, false)
+      |> function | Ok x -> x | Error e -> failwith e
+    LndTypeProviderClient(Network.RegTest, settings)
 
   type DockerFixture with
     member this.StartFixture(testName: string) =
@@ -104,7 +108,7 @@ module DockerFixtureExtensions =
               { new ILightningClientProvider with
                 member this.TryGetClient(cryptoCode) =
                   userLnd
-                  :> ILightningClient
+                  :> INLoopLightningClient
                   |> Some
              }
             let cliOpts =
@@ -113,12 +117,20 @@ module DockerFixtureExtensions =
                 CommandLineBuilder(rc)
                   .UseMiddleware(Main.useWebHostMiddleware)
                   .Build()
-              let lndUserConStr = getLNDConnectionString (Path.Join(dataPath, "lnd_user")) ports.[2]
+              let (uri, lndCertThumbprint, lndMacaroonPath) = getLndRestSettings (Path.Join(dataPath, "lnd_user")) ports.[2]
               p.Parse($"""--network RegTest
                       --datadir {dataPath}
                       --nohttps true
-                      --btc.lightningconnectionstring {lndUserConStr}
-                      --ltc.lightningconnectionstring {lndUserConStr}
+                      --btc.rpcuser=johndoe
+                      --btc.rpcpassword=unsafepassword
+                      --btc.rpcport={ports.[0]}
+                      --ltc.rpcuser=johndoe
+                      --ltc.rpcpassword=unsafepassword
+                      --ltc.rpcport={ports.[1]}
+                      --lndserver {uri}
+                      --lndmacaroonfilepath {lndMacaroonPath}
+                      --lndcertthumbprint {lndCertThumbprint}
+                      --eventstoreurl tcp://admin:changeit@localhost:{ports.[5]}
                       --boltzhost http://localhost
                       --boltzport {ports.[4]}
                       --boltzhttps false

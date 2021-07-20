@@ -7,10 +7,9 @@ open System.Linq
 open System.Net.Http
 open System.Reflection
 open System.Threading.Tasks
-open BTCPayServer.Lightning
-open BTCPayServer.Lightning.LND
 open DotNetLightning.Utils
 open FSharp.Control
+open LndClient
 open NBitcoin
 open NBitcoin.Crypto
 open NLoop.Domain
@@ -54,18 +53,13 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
 
       let! _a = cli.Litecoin.GetBlockchainInfoAsync() // just to check litecoin is working
 
-      // check lnd is working
-      let! r = cli.User.Lnd.SwaggerClient.GetInfoAsync()
-      Assert.NotNull(r.Block_hash)
-      Assert.NotNull(r.Block_height)
-      let lndC = cli.User.Lnd :> ILightningClient
-      let! listChannelResult = lndC.ListChannels()
-      Assert.Empty(listChannelResult)
+      let lndC = cli.User.Lnd :> INLoopLightningClient
       // --- create swap ---
       let refundKey = new Key()
       let invoiceAmt = 100000m
       let! invoice =
-            lndC.CreateInvoice(amount=(LNMoney.Satoshis invoiceAmt).ToLightMoney(), description="test", expiry=TimeSpan.FromMinutes(5.))
+            let pp = PaymentPreimage.Create(RandomUtils.GetBytes(32))
+            lndC.GetInvoice(pp, amount=(LNMoney.Satoshis invoiceAmt), expiry=TimeSpan.FromMinutes(5.), memo="test")
       let! resp =
         let channelOpenReq =  { ChannelOpenRequest.Private = true
                                 InboundLiquidity = 50.
@@ -73,7 +67,7 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
         b.CreateSwapAsync({ PairId = pairId
                             OrderSide = OrderType.buy
                             RefundPublicKey = refundKey.PubKey
-                            Invoice = invoice.ToDNLInvoice() }, channelOpenReq)
+                            Invoice = invoice }, channelOpenReq)
 
       Assert.NotNull(resp)
       Assert.NotNull(resp.Address)
@@ -141,7 +135,7 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
     }
     *)
 
-  [<Fact>]
+  [<Fact(Skip="Must Open Channel before performing swap")>]
   [<Trait("Docker", "Docker")>]
   member this.ServerIntegrationTests() = task {
       let server = cli.User.NLoopServer
@@ -156,5 +150,5 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
       let i = reader.Current
       Assert.NotNull(i)
       do i |> function | Swap.Event.NewLoopOutAdded _ -> () | e -> failwithf "Unexpected event %A" e
-      failwith "TODO"
+      ()
     }

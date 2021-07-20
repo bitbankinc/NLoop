@@ -25,7 +25,7 @@ type ICheckpointDB =
   abstract member GetSwapStateCheckpoint: ct: CancellationToken -> ValueTask<int64 voption>
   abstract member SetSwapStateCheckpoint: checkpoint: int64 * ct:CancellationToken -> ValueTask
 
-type FlatFileCheckpointDB(opts: IOptions<NLoopOptions>, logger: ILogger<FlatFileCheckpointDB>) =
+type FlatFileCheckpointDB(opts: IOptions<NLoopOptions>, _logger: ILogger<FlatFileCheckpointDB>) =
   let openEngine(dbPath) = task {
     return! DBTrieEngine.OpenFromFolder(dbPath)
   }

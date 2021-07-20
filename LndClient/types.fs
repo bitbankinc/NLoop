@@ -71,7 +71,7 @@ module private Helpers =
       Error($"{ex}")
 
 
-type LndRestSettings = private {
+type LndRestSettings = internal {
   Uri: Uri
   MaybeCertificateThumbprint: byte[] option
   Macaroon: MacaroonInfo
