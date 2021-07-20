@@ -6,17 +6,18 @@ open DotNetLightning.Utils
 open NBitcoin
 open Newtonsoft.Json
 open NLoop.Domain
+open NLoop.Domain.Utils
 
 type LoopOut = {
-  Id: string
-  [<JsonConverter(typeof<JsonStringEnumConverter>)>]
+  [<JsonConverter(typeof<SwapIdJsonConverter>)>]
+  Id: SwapId
+  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
-  Error: string
   AcceptZeroConf: bool
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
-  PrivateKey: Key
-  [<JsonConverter(typeof<UInt256JsonConverter>)>]
-  Preimage: uint256
+  ClaimKey: Key
+  [<JsonConverter(typeof<PaymentPreimageJsonConverter>)>]
+  Preimage: PaymentPreimage
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   Invoice: string
@@ -29,16 +30,29 @@ type LoopOut = {
   ClaimTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  ChainName: string
 }
+  with
+  member this.OurNetwork =
+    let struct (cryptoCode, _) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+  member this.TheirNetwork =
+    let struct (_, cryptoCode) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.Validate() =
+    if this.OnChainAmount <= Money.Zero then Error ("LoopOut has non-positive on chain amount") else
+    Ok()
 
 type LoopIn = {
-  Id: string
-  [<JsonConverter(typeof<JsonStringEnumConverter>)>]
+  [<JsonConverter(typeof<SwapIdJsonConverter>)>]
+  Id: SwapId
+  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
-  Error: string
+
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
-  PrivateKey: Key
-  Preimage: uint256 option
+  RefundPrivateKey: Key
+  Preimage: PaymentPreimage option
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   Invoice: string
@@ -47,8 +61,21 @@ type LoopIn = {
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
-  LockupTransactionId: uint256 option
+
+  LockupTransactionHex: string option
   RefundTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  ChainName: string
 }
+  with
+  member this.OurNetwork =
+    let struct (cryptoCode, _) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+  member this.TheirNetwork =
+    let struct (_, cryptoCode) = this.PairId
+    cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.Validate() =
+    if this.ExpectedAmount <= Money.Zero then Error ($"LoopIn has non-positive expected amount {this.ExpectedAmount}") else
+    Ok()

@@ -109,21 +109,21 @@ module NLoopServerCommandLine =
   let getChainOptions(c) =
      let b = getChainOptionString (c)
      seq [
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCHost).ToLowerInvariant()),
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCHost)),
                               "RPC host name of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o :> Option
-       let o = Option<int>(b (nameof(ChainOptions.Instance.RPCPort).ToLowerInvariant()),
+       let o = Option<int>(b (nameof(ChainOptions.Instance.RPCPort)),
                               "RPC port number of the blockchain client")
        o.Argument <-
          let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCUser).ToLowerInvariant()),
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCUser)),
                               "RPC username of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -131,7 +131,7 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCPassword).ToLowerInvariant()),
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCPassword)),
                               "RPC password of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -139,23 +139,15 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCCookieFile).ToLowerInvariant()),
+       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCCookieFile)),
                               "RPC cookie file path of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-
-       let o = Option<string>(b (nameof(ChainOptions.Instance.LightningConnectionString).ToLowerInvariant()),
-                              "Connection string to connect to Lightning Daemon instance. See BTCPayServer.Lightning for the detail. (https://github.com/btcpayserver/BTCPayServer.Lightning#examples)")
-       o.Argument <-
-         let a = Argument<string>()
-         a.Arity <- ArgumentArity.ZeroOrOne
-         a.SetDefaultValue(Constants.DefaultLightningConnectionString)
-         a
-       o
      ]
+
   let getOptions(): Option seq =
     seq [
       yield! optionsForBothCliAndServer
@@ -175,6 +167,12 @@ module NLoopServerCommandLine =
       o
 
       let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MaxAcceptableSwapFee).ToLowerInvariant()}")
+      o.Argument <-
+        let a = Argument<int64>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MinimumSwapAmountSatoshis).ToLowerInvariant()}", $"Minimum Swap amount we can perform. (default: {NLoopOptions.Instance.MinimumSwapAmountSatoshis})")
       o.Argument <-
         let a = Argument<int64>()
         a.Arity <- ArgumentArity.ZeroOrOne
@@ -222,6 +220,56 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
+
+      let o = Option<string>([|$"--{nameof(NLoopOptions.Instance.EventStoreUrl).ToLowerInvariant()}";|],
+                             $"Url for your eventstore db. (default: {NLoopOptions.Instance.EventStoreUrl})")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      // --- lnd ---
+
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCertThumbprint).ToLowerInvariant()}",
+                             "hex-encoded sha256 thumbnail of the lnd certificate")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndMacaroon).ToLowerInvariant()}",
+                             "hex-encoded macaroon for the lnd")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndMacaroonFilePath).ToLowerInvariant()}",
+                             "path to the admin macaroon file for the lnd.")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndServer).ToLowerInvariant()}",
+                             "Host Url for the lnd")
+      o.Argument <-
+        let a = Argument<string>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+
+      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.LndAllowUnsafe).ToLowerInvariant()}",
+                             "Allow connection to the LND without ssl/tls (intended for test use)")
+      o.Argument <-
+        let a = Argument<bool>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+       // --- ---
     ]
 
 

@@ -1,32 +1,54 @@
 namespace NLoop.Server.Actors
 
-open System.Threading.Tasks
+open System
+open FSharp.Control.Tasks
+open FSharp.Control.Reactive
 open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Options
 open NLoop.Domain
 open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server
 
-type SwapActor(logger: ILoggerFactory,
-               broadcaster: IBroadcaster,
+[<AutoOpen>]
+module private Helpers =
+  let getSwapDeps b f u g =
+    { Swap.Deps.Broadcaster = b
+      Swap.Deps.FeeEstimator = f
+      Swap.Deps.UTXOProvider = u
+      Swap.Deps.GetChangeAddress = g
+      Swap.Deps.GetRefundAddress = g }
+
+type SwapActor(broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
-               getChangeAddress: GetChangeAddress,
-               eventAggregator: EventAggregator) =
-  inherit Actor<Swap.State, Swap.Command, Swap.Event, Swap.Error, Swap.Deps>
-    ({ Zero = Swap.State.Zero
-       Apply = Swap.applyChanges
-       Exec = Swap.executeCommand },
-       { Swap.Deps.Broadcaster = broadcaster
-         Swap.Deps.FeeEstimator = feeEstimator
-         Swap.Deps.UTXOProvider = utxoProvider
-         Swap.Deps.GetChangeAddress = getChangeAddress },
-       logger.CreateLogger<SwapActor>())
+               getChangeAddress: GetAddress,
+               opts: IOptions<NLoopOptions>,
+               logger: ILogger<SwapActor>,
+               eventAggregator: IEventAggregator
+  )  =
 
-  let logger = logger.CreateLogger<SwapActor>()
-  override this.HandleError(error) =
-    logger.LogError($"{error}")
-    Task.CompletedTask
-  override this.PublishEvent(evt) =
-    eventAggregator.Publish(evt)
-    Task.CompletedTask
+  let aggr =
+    getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress
+    |> Swap.getAggregate
+  let handler =
+    Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
 
+  member val Handler = handler with get
+  member val Aggregate = aggr with get
+
+  member this.Execute(swapId, msg: Swap.Command, ?source) = task {
+    logger.LogDebug($"New Command {msg}")
+    let source = source |> Option.defaultValue (nameof(SwapActor))
+    let cmd =
+      { ESCommand.Data = msg
+        Meta = { CommandMeta.Source = source
+                 EffectiveDate = UnixDateTime.UtcNow } }
+    match! handler.Execute swapId cmd with
+    | Ok events ->
+      events
+      |> List.iter eventAggregator.Publish
+    | Error s ->
+      logger.LogError($"Error when executing swap handler %A{s}")
+      eventAggregator.Publish(s)
+  }

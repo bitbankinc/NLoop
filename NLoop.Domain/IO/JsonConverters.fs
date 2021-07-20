@@ -74,6 +74,20 @@ type UInt256JsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> uint256.Parse
 
+type PaymentPreimageJsonConverter() =
+  inherit JsonConverter<PaymentPreimage>()
+  let hex = HexEncoder()
+  override this.Write(writer, value, _options) =
+    value.Value
+    |> Seq.toArray
+    |> hex.EncodeData
+    |> writer.WriteStringValue
+
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString()
+    |> hex.DecodeData
+    |> PaymentPreimage.Create
+
 type MoneyJsonConverter() =
   inherit JsonConverter<Money>()
   override this.Write(writer, value, _options) =
@@ -102,7 +116,7 @@ type BitcoinAddressJsonConverter(n: Network) =
 type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
   override this.Write(writer, value, _options) =
-    let bid, ask = value
+    let (struct (bid, ask)) = value
     $"{bid.ToString()}/{ask.ToString()}"
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
@@ -126,6 +140,22 @@ type ShortChannelIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> ShortChannelId.ParseUnsafe
 
+type SwapIdJsonConverter() =
+  inherit JsonConverter<SwapId>()
+  override this.Write(writer, value, _options) =
+    value.Value |> writer.WriteStringValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> SwapId.SwapId
+
+type SwapStatusTypeJsonConverter() =
+  inherit JsonConverter<SwapStatusType>()
+
+  override this.Write(writer, value, _options) =
+    writer.WriteStringValue(value.AsString())
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetString() |> SwapStatusType.FromString
+
+
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
@@ -137,12 +167,14 @@ type Extensions() =
     this.Converters.Add(MoneyJsonConverter())
     this.Converters.Add(PaymentRequestJsonConverter())
     this.Converters.Add(PairIdJsonConverter())
+    this.Converters.Add(PaymentPreimageJsonConverter())
 
     n |> Option.iter(fun n ->
       this.Converters.Add(BitcoinAddressJsonConverter(n))
       this.Converters.Add(HexTxConverter(n))
     )
 
+    this.Converters.Add(SwapStatusTypeJsonConverter())
     this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())

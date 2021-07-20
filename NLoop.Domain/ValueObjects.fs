@@ -6,7 +6,6 @@ open System.Runtime.CompilerServices
 open System.Text.Json.Serialization
 open NBitcoin
 open NBitcoin.Altcoins
-open ResultUtils
 
 type PeerConnectionString = {
   NodeId: PubKey
@@ -65,17 +64,88 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (SupportedCryptoCode * SupportedCryptoCode)
+type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
 
 type SwapStatusType =
-  | Created = 0uy
-  | InvoiceSet = 1uy
-  | TxMempool = 2uy
-  | TxConfirmed = 3uy
-  | InvoicePayed = 4uy
-  | InvoiceFailedToPay = 5uy
-  | TxClaimed = 6uy
-  | Unknown = 7uy
+  | SwapCreated = 0uy
+  | SwapExpired = 1uy
 
+  | InvoiceSet = 10uy
+  | InvoicePayed = 11uy
+  | InvoicePending = 12uy
+  | InvoiceSettled = 13uy
+  | InvoiceFailedToPay = 14uy
+
+  | ChannelCreated = 20uy
+
+  | TxFailed = 30uy
+  | TxMempool = 31uy
+  | TxClaimed = 32uy
+  | TxRefunded = 33uy
+  | TxConfirmed = 34uy
+
+  | Unknown = 255uy
+
+[<RequireQualifiedAccess>]
+module SwapStatusType =
+  let FromString(s) =
+    match s with
+      | "swap.created" -> SwapStatusType.SwapCreated
+      | "swap.expired" -> SwapStatusType.SwapExpired
+
+      | "invoice.set" -> SwapStatusType.InvoiceSet
+      | "invoice.payed" -> SwapStatusType.InvoicePayed
+      | "invoice.pending" -> SwapStatusType.InvoicePending
+      | "invoice.settled" -> SwapStatusType.InvoiceSettled
+      | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
+
+      | "channel.created" -> SwapStatusType.ChannelCreated
+
+      | "transaction.failed" -> SwapStatusType.TxFailed
+      | "transaction.mempool" -> SwapStatusType.TxMempool
+      | "transaction.claimed" -> SwapStatusType.TxClaimed
+      | "transaction.refunded" -> SwapStatusType.TxRefunded
+      | "transaction.confirmed" -> SwapStatusType.TxConfirmed
+      | _ -> SwapStatusType.Unknown
+
+[<AbstractClass;Sealed;Extension>]
+type SwapStatusTypeExt() =
+
+  [<Extension>]
+  static member AsString(this: SwapStatusType) =
+    match this with
+    | SwapStatusType.SwapCreated ->
+      "swap.created"
+    | SwapStatusType.SwapExpired ->
+      "swap.expired"
+    | SwapStatusType.InvoiceSet ->
+      "invoice.set"
+    | SwapStatusType.InvoicePayed ->
+      "invoice.payed"
+    | SwapStatusType.InvoicePending ->
+      "invoice.pending"
+    | SwapStatusType.InvoiceSettled ->
+      "invoice.settled"
+    | SwapStatusType.InvoiceFailedToPay ->
+      "invoice.failedToPay"
+
+    | SwapStatusType.ChannelCreated ->
+      "channel.created"
+
+    | SwapStatusType.TxFailed ->
+      "transaction.failed"
+    | SwapStatusType.TxMempool ->
+      "transaction.mempool"
+    | SwapStatusType.TxClaimed ->
+      "transaction.claimed"
+    | SwapStatusType.TxRefunded ->
+      "transaction.refunded"
+    | SwapStatusType.TxConfirmed ->
+      "transaction.confirmed"
+    | _ -> "unknown"
 
 type SwapId = SwapId of string
+  with
+  member this.Value = let (SwapId v) = this in v
+  override this.ToString() =
+    this.Value

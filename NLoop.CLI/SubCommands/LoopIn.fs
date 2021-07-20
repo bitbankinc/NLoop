@@ -21,7 +21,14 @@ module LoopIn =
       let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
       let opts = host.Services.GetRequiredService<IOptions<NLoop.Server.NLoopOptions>>()
       cli.Configure(opts.Value)
-      return! cli.InAsync(cryptoCode, req)
+      try
+        return! cli.InAsync(cryptoCode, req)
+      with
+      | :? ApiException<Response> as ex ->
+        let str =
+          let errors = ex.Result.Errors |> List.ofSeq
+          $"\n{ex.Message}.\nStatusCode: {ex.StatusCode}.\nerrors: {errors}"
+        return failwith str
     }
   let handler = CommandHandler.Create(Func<IHost,_>(handle))
   let command: Command =

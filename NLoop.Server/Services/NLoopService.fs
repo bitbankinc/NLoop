@@ -5,6 +5,7 @@ open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
@@ -15,6 +16,8 @@ open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 open NLoop.Server.Actors
+open NLoop.Server.ProcessManagers
+open NLoop.Server.Projections
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
@@ -53,8 +56,16 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
           )
-        |> ignore
 
+          .AddSingleton<ISwapEventListener, BoltzListener>()
+          .AddSingleton<ISwapEventListener, BlockchainListener>()
+          .AddHostedService<SwapEventListeners>()
+
+          .AddSingleton<SwapStateProjection>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<SwapStateProjection>() :> IHostedService
+          )
+          |> ignore
       this
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
@@ -65,12 +76,18 @@ type NLoopExtensions() =
             u.Uri
         )
         |> ignore
+      this.AddSignalR() |> ignore
+
       this
+        .AddHostedService<SwapProcessManager>()
+        |> ignore
+
+      this
+        .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
-        .AddSingleton<GetChangeAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
-        .AddSingleton<EventAggregator>()
-        .AddHostedService<SwapEventListener>()
+        .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
+        .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<SwapActor>()
 

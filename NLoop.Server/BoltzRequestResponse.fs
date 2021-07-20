@@ -72,7 +72,7 @@ type TxInfo = {
   TxId: uint256
   [<JsonPropertyName("hex")>]
   Tx: Transaction
-  Eta: int
+  Eta: int option
 }
   with
   member this.ToDomain = {
@@ -89,7 +89,7 @@ type SwapStatusResponse = {
   with
   member this.SwapStatus =
     match this._Status with
-    | "swap.created" -> SwapStatusType.Created
+    | "swap.created" -> SwapStatusType.SwapCreated
     | "invoice.set" -> SwapStatusType.InvoiceSet
     | "transaction.mempool" -> SwapStatusType.TxMempool
     | "transaction.confirmed" -> SwapStatusType.TxConfirmed
@@ -191,7 +191,7 @@ type CreateReverseSwapResponse = {
   RedeemScript: Script
 }
   with
-  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, n): Result<_, string> =
+  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, n: Network): Result<_, string> =
     let mutable addr = null
     let mutable e = null
     try

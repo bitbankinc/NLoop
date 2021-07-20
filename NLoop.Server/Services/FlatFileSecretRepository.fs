@@ -5,6 +5,7 @@ open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.Text.Json
 open System.Threading.Tasks
+open DotNetLightning.Utils.Primitives
 open Microsoft.Extensions.Logging
 open NBitcoin
 
@@ -33,35 +34,31 @@ module private DBKeys =
   [<Literal>]
   let idToLoopInSwap = "ii"
 
-type IRepository =
+type ISecretRepository =
   abstract member SetPrivateKey: key: Key -> Task
   abstract member GetPrivateKey: keyId: KeyId -> Task<Key option>
   abstract member SetPreimage: preimage: byte[] -> Task
   abstract member GetPreimage: preimageHashHash: uint160 -> Task<byte[] option>
-  abstract member SetLoopOut: loopOut: LoopOut -> Task
-  abstract member GetLoopOut: id: string -> Task<LoopOut option>
-  abstract member SetLoopIn: loopIn: LoopIn -> Task
-  abstract member GetLoopIn: id: string -> Task<LoopIn option>
   abstract member JsonOpts: JsonSerializerOptions
 
 [<Sealed;AbstractClass;Extension>]
-type IRepositoryExtensions() =
+type ISecretRepositoryExtensions() =
   [<Extension>]
-  static member NewPrivateKey(this: IRepository) = task {
+  static member NewPrivateKey(this: ISecretRepository) = task {
     let k = new Key()
     do! this.SetPrivateKey(k)
     return k
   }
 
   [<Extension>]
-  static member NewPreimage(this: IRepository) = task {
+  static member NewPreimage(this: ISecretRepository) = task {
     let preimage = RandomUtils.GetBytes(32)
     do! this.SetPreimage(preimage)
-    return preimage
+    return preimage |> PaymentPreimage.Create
   }
 
 
-type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions, dbPath) =
+type FlatFileSecretRepository(engine: DBTrieEngine, chainName: string, settings: ChainOptions, dbPath) =
   let jsonOpts = JsonSerializerOptions()
 
   do
@@ -85,6 +82,7 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
         use! tx = engine.OpenTransaction(ct)
         let k = pubKeyHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
+        if (row |> isNull) then return None else
         let! b = row.ReadValue()
         return new Key(b.ToArray()) |> Some
       with
@@ -108,97 +106,45 @@ type Repository(engine: DBTrieEngine, chainName: string, settings: ChainOptions,
         use! tx = engine.OpenTransaction(ct)
         let k = preimageHash.ToBytes() |> ReadOnlyMemory
         let! row = tx.GetTable(DBKeys.HashToKey).Get(k)
+        if (row |> isNull) then return None else
         let! x = row.ReadValue()
         return x.ToArray() |> Some
       with
       | _ -> return None
     }
 
-    member this.SetLoopOut(loopOut: LoopOut) =
-      if (loopOut |> box |> isNull) then raise <| ArgumentNullException(nameof loopOut) else
-      unitTask {
-        use! tx = engine.OpenTransaction()
-        let v =
-          let j = JsonSerializer.SerializeToUtf8Bytes(loopOut, jsonOpts)
-          ReadOnlyMemory(j)
-        let! _ = tx.GetTable(DBKeys.idToLoopOutSwap).Insert(loopOut.Id, v)
-        do! tx.Commit()
-      }
-    member this.GetLoopOut(id: string) =
-      if (id |> box |> isNull) then raise <| ArgumentNullException(nameof id) else
-      task {
-        try
-          use! tx = engine.OpenTransaction()
-          let! row = tx.GetTable(DBKeys.idToLoopOutSwap).Get(id)
-          let! x = row.ReadValueString()
-          return JsonSerializer.Deserialize<LoopOut>(x, jsonOpts) |> Some
-        with
-        | _e -> return None
-      }
-    member this.SetLoopIn(loopIn: LoopIn) =
-      if (loopIn |> box |> isNull) then raise <| ArgumentNullException(nameof loopIn) else
-      unitTask {
-        use! tx = engine.OpenTransaction()
-        let v =
-          let j = JsonSerializer.SerializeToUtf8Bytes(loopIn, jsonOpts)
-          ReadOnlyMemory(j)
-        let! _ = tx.GetTable(DBKeys.idToLoopInSwap).Insert(loopIn.Id, v)
-        do! tx.Commit()
-      }
-    member this.GetLoopIn(id: string) =
-      if (id |> box |> isNull) then raise <| ArgumentNullException(nameof id) else
-      task {
-        try
-          use! tx = engine.OpenTransaction()
-          let! row = tx.GetTable(DBKeys.idToLoopInSwap).Get(id)
-          match row with
-          | null ->
-            return None
-          | r ->
-            let! x = r.ReadValueString()
-            return JsonSerializer.Deserialize<LoopIn>(x, jsonOpts) |> Some
-        with
-        | _e ->
-          printfn "\n\n\nRepo: %A\n\n\n" _e
-          return None
-      }
-
-    interface IRepository with
-      member this.GetLoopIn(id) = this.GetLoopIn(id)
-      member this.GetLoopOut(id) = this.GetLoopOut(id)
-      member this.GetPreimage(preimageHashHash) = this.GetPreimage(preimageHashHash)
-      member this.GetPrivateKey(keyId) = this.GetPrivateKey(keyId)
-      member this.SetLoopIn(loopIn) = this.SetLoopIn(loopIn)
-      member this.SetLoopOut(loopOut) = this.SetLoopOut(loopOut)
-      member this.SetPreimage(preimage) = this.SetPreimage(preimage)
-      member this.SetPrivateKey(key) = this.SetPrivateKey(key)
-      member val JsonOpts = jsonOpts with get
+  interface ISecretRepository with
+    member this.GetPreimage(preimageHashHash) = this.GetPreimage(preimageHashHash)
+    member this.GetPrivateKey(keyId) = this.GetPrivateKey(keyId)
+    member this.SetPreimage(preimage) = this.SetPreimage(preimage)
+    member this.SetPrivateKey(key) = this.SetPrivateKey(key)
+    member val JsonOpts = jsonOpts with get
 
 
 type IRepositoryProvider =
-  abstract member TryGetRepository: crypto: SupportedCryptoCode -> IRepository option
+  abstract member TryGetRepository: crypto: SupportedCryptoCode -> ISecretRepository option
 
 [<Extension;AbstractClass;Sealed>]
 type IRepositoryProviderExtensions()=
   [<Extension>]
-  static member GetRepository(this: IRepositoryProvider, crypto: SupportedCryptoCode): IRepository =
+  static member GetRepository(this: IRepositoryProvider, crypto: SupportedCryptoCode): ISecretRepository =
     match this.TryGetRepository crypto with
     | Some x -> x
     | None ->
       raise <| InvalidDataException($"cryptocode {crypto} not supported")
 
   [<Extension>]
-  static member TryGetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository option =
+  static member TryGetRepository(this: IRepositoryProvider, cryptoCode: string): ISecretRepository option =
     cryptoCode |> SupportedCryptoCode.TryParse |> Option.bind this.TryGetRepository
 
   [<Extension>]
-  static member GetRepository(this: IRepositoryProvider, cryptoCode: string): IRepository =
+  static member GetRepository(this: IRepositoryProvider, cryptoCode: string): ISecretRepository =
     match this.TryGetRepository(cryptoCode) with
     | Some x -> x
     | None ->
       raise <| InvalidDataException($"cryptocode {cryptoCode} not supported")
 type RepositoryProvider(opts: IOptions<NLoopOptions>, logger: ILogger<RepositoryProvider>) =
-  let repositories = Dictionary<SupportedCryptoCode, IRepository>()
+  let repositories = Dictionary<SupportedCryptoCode, ISecretRepository>()
   let startCompletion = TaskCompletionSource<bool>()
 
   let openEngine(dbPath) = task {
@@ -211,7 +157,7 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Repository
   member this.StartCompletion = startCompletion.Task
 
   interface IRepositoryProvider with
-    member this.TryGetRepository(crypto: SupportedCryptoCode): IRepository option =
+    member this.TryGetRepository(crypto: SupportedCryptoCode): ISecretRepository option =
       match repositories.TryGetValue(crypto) with
       | true, v -> Some v
       | false, _ -> None
@@ -229,7 +175,7 @@ type RepositoryProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Repository
         for kv in opts.Value.ChainOptions do
           let repo =
             let dbPath = Path.Join(dbPath, kv.Key.ToString())
-            Repository(engine, opts.Value.Network, kv.Value, dbPath)
+            FlatFileSecretRepository(engine, opts.Value.Network, kv.Value, dbPath)
           repositories.Add(kv.Key, repo)
         startCompletion.TrySetResult(true)
         |> ignore

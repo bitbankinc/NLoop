@@ -1,9 +1,29 @@
 namespace NLoop.Domain
 
 open System
+open System
 open System.Runtime.CompilerServices
 open NBitcoin
 open NBitcoin.Altcoins
+
+[<AbstractClass;Sealed;Extension>]
+type PrimitiveExtensions() =
+  [<Extension>]
+  static member CopyWithLength(data: byte[], spanToWrite: Span<byte>) =
+    let len = Utils.ToBytes(data.Length |> uint32, false)
+    len.CopyTo(spanToWrite)
+    data.CopyTo(spanToWrite.Slice(4))
+
+  [<Extension>]
+  static member BytesWithLength(data: byte[]) =
+    let res = Array.zeroCreate(data.Length + 4)
+    data.CopyWithLength(res.AsSpan())
+    res
+
+  [<Extension>]
+  static member PopWithLen(this: byte[]) =
+    let len = Utils.ToUInt32(this.[0..4], false) |> int32
+    this.[4..(len + 4)], this.[(len + 4)..]
 
 
 [<AbstractClass;Sealed;Extension>]

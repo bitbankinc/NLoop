@@ -1,6 +1,8 @@
 namespace NLoop.Domain.IO
 
 open System.Threading.Tasks
+open DotNetLightning.Payment
+open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NLoop.Domain
 
@@ -10,14 +12,8 @@ type IFeeEstimator =
 type IBroadcaster =
   abstract member BroadcastTx: tx: Transaction * cryptoCode: SupportedCryptoCode -> Task
 
-
 type UTXOProviderError =
-  | InsufficientFunds of leftOver: Money * whatWeWant: Money
-  with
-  member this.Message =
-    match this with
-    | InsufficientFunds(leftOver, whatWeWant) ->
-      $"We can not afford to pay {whatWeWant} satoshis. We only have {leftOver.Satoshi} satoshis"
+  | InsufficientFunds of whatWeHave: Money * whatWeNeed: Money
 
 type IUTXOProvider =
   /// Get UTXO from your wallet
@@ -25,4 +21,7 @@ type IUTXOProvider =
   /// Sign psbt for UTXOs provided by `GetUTXOs`
   abstract member SignSwapTxPSBT: psbt: PSBT * cryptoCode: SupportedCryptoCode -> Task<PSBT>
 
-type GetChangeAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>
+type INLoopLightningClient =
+  abstract member Offer: cryptoCode: SupportedCryptoCode * invoice: PaymentRequest -> Task<PaymentPreimage>
+
+type GetAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>

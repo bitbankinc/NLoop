@@ -10,6 +10,7 @@ open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
 open Microsoft.AspNetCore.Http
+open Microsoft.AspNetCore.Routing
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
@@ -26,6 +27,7 @@ open Microsoft.AspNetCore.Server.Kestrel.Core
 
 open Giraffe
 
+open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
@@ -52,15 +54,21 @@ module App =
         choose [
           POST >=>
             route "/loop/out" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopOutRequest> cryptoCode (handleLoopOut)
+              (bindJsonWithCryptoCode<LoopOutRequest> cryptoCode handleLoopOut)
             route "/loop/in" >=> mustAuthenticate >=>
-              bindJsonWithCryptoCode<LoopInRequest> cryptoCode (handleLoopIn)
+              (bindJsonWithCryptoCode<LoopInRequest> cryptoCode handleLoopIn)
       ])
       subRoute "/v1" (choose [
         GET >=>
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
           route "/events" >=> QueryHandlers.handleListenEvent
+          subRoute "/swaps" (choose [
+            GET >=>
+              route "/history" >=> QueryHandlers.handleGetSwapHistory
+              route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
+              routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+          ])
         ])
       setStatusCode 404 >=> text "Not Found"
     ]
@@ -84,22 +92,29 @@ module App =
          .AllowAnyHeader()
          |> ignore
 
+  let configureSignalR(endpoints: IEndpointRouteBuilder) =
+      endpoints.MapHub<_>("/v1/events") |> ignore
+      ()
+
   let configureApp (app : IApplicationBuilder) =
-      let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
-      let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
+    let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
+    let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
+    do
       (match env.IsDevelopment() with
       | true  ->
-          app
-            .UseDeveloperExceptionPage()
-            .UseMiddleware<RequestResponseLoggingMiddleware>()
-      | false ->
-          app
-            .UseGiraffeErrorHandler(errorHandler))
-            .UseCors(configureCors opts) |> ignore
-
-      app
-        .UseAuthentication()
-        .UseGiraffe(webApp)
+        app
+          .UseDeveloperExceptionPage()
+          .UseMiddleware<RequestResponseLoggingMiddleware>()
+          |> ignore
+      | false -> ())
+    app
+      .UseGiraffeErrorHandler(errorHandler)
+      .UseCors(configureCors opts) |> ignore
+    app
+      .UseAuthentication()
+      .UseRouting()
+      .UseEndpoints(Action<_>(configureSignalR))
+      .UseGiraffe(webApp)
 
   let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
 
@@ -139,10 +154,11 @@ type Startup(conf: IConfiguration, env: IHostEnvironment) =
 
 module Main =
 
-  let configureLogging (builder : ILoggingBuilder) =
+  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
       builder
         .AddConsole()
         .AddDebug()
+        .AddConfiguration(ctx.Configuration.GetSection("Logging"))
 #if DEBUG
         .SetMinimumLevel(LogLevel.Debug)
 #else
@@ -150,13 +166,17 @@ module Main =
 #endif
         |> ignore
 
-  let configureConfig (builder: IConfigurationBuilder) =
+  let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
     Directory.CreateDirectory(Constants.HomeDirectoryPath) |> ignore
     let iniFile = Path.Join(Constants.HomeDirectoryPath, "nloop.conf")
     if (iniFile |> File.Exists) then
       builder.AddIniFile(iniFile) |> ignore
-    builder.AddEnvironmentVariables(prefix="NLOOP_") |> ignore
+    let env = ctx.HostingEnvironment
+    builder
+      .AddJsonFile("appsettings.json", optional = true)
+      .AddJsonFile($"appsettings.{env.EnvironmentName}.json", optional=true)
+      .AddEnvironmentVariables(prefix="NLOOP_") |> ignore
     ()
 
   let configureHostBuilder (hostBuilder: IHostBuilder) =

@@ -1,28 +1,39 @@
 namespace NLoop.Domain
 
-open System.Collections.Generic
-open System.Linq
+open System
+open System.Text.Json
 open System.Threading.Tasks
+open DotNetLightning.Payment
+open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open FsToolkit.ErrorHandling
+open NLoop.Domain.Utils.EventStore
 
 [<RequireQualifiedAccess>]
+/// List of ubiquitous languages
+/// * SwapTx (LockupTx) ... On-Chain TX which offers funds with HTLC.
+/// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage
+/// * RefundTx ... TX to take funds from SwapTx in case of the timeout.
+/// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient to claim SwapTx.
+/// * Payment ... off-chain payment from counterparty to us.
 module Swap =
-  // ------ state -----
-  type SwapList = {
-    Out: LoopOut list
-    In: LoopIn list
-  }
-
-  type State = {
-    OnGoing: SwapList
-  }
+  [<RequireQualifiedAccess>]
+  type FinishedState =
+    | Success
+    /// Counterparty went offline. And we refunded our funds.
+    | Refunded of uint256
+    /// Counterparty gave us bogus msg. Swap did not start.
+    | Errored of msg: string
+  type State =
+    | HasNotStarted
+    | Out of blockHeight: BlockHeight * LoopOut
+    | In of blockHeight: BlockHeight * LoopIn
+    | Finished of FinishedState
     with
-    static member Zero = {
-      State.OnGoing = { Out = []; In = [] }
-    }
+    static member Zero = HasNotStarted
 
   // ------ command -----
 
@@ -30,7 +41,7 @@ module Swap =
     type TxInfo = {
       TxId: uint256
       Tx: Transaction
-      Eta: int
+      Eta: int option
     }
     and SwapStatusResponseData = {
       _Status: string
@@ -39,164 +50,348 @@ module Swap =
     }
       with
       member this.SwapStatus =
-        match this._Status with
-        | "swap.created" -> SwapStatusType.Created
-        | "invoice.set" -> SwapStatusType.InvoiceSet
-        | "transaction.mempool" -> SwapStatusType.TxMempool
-        | "transaction.confirmed" -> SwapStatusType.TxConfirmed
-        | "invoice.payed" -> SwapStatusType.InvoicePayed
-        | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
-        | "transaction.claimed" -> SwapStatusType.TxClaimed
-        | _ -> SwapStatusType.Unknown
+        SwapStatusType.FromString(this._Status)
 
-    and SwapStatusUpdate = {
-      Id: string
-      Response: SwapStatusResponseData
-      Network: Network
-    }
+
+  [<Literal>]
+  let entityType = "swap"
 
   type Command =
-    | NewLoopOut of LoopOut
-    | NewLoopIn of LoopIn
-    | SwapUpdate of Data.SwapStatusUpdate
-    | SetValidationError of id: string * err: string
+    // -- loop out --
+    | NewLoopOut of height: BlockHeight * LoopOut
+    | OffChainOfferResolve of paymentPreimage: PaymentPreimage
+
+    // -- loop in --
+    | NewLoopIn of height: BlockHeight * LoopIn
+
+    // -- both
+    | SwapUpdate of Data.SwapStatusResponseData
+    | SetValidationError of err: string
+    | NewBlock of height: BlockHeight * cryptoCode: SupportedCryptoCode
 
   // ------ event -----
   type Event =
-    | KnownSwapAddedAgain of id: string
-    | NewLoopOutAdded of LoopOut
-    | NewLoopInAdded of LoopIn
-    | LoopErrored of id: string * err: string
-    | ClaimTxPublished of txid: uint256 * swapId: string
-    | SwapTxPublished of txid: uint256 * swapId: string
+    // -- loop out --
+    | NewLoopOutAdded of  height: BlockHeight * loopIn: LoopOut
+    | ClaimTxPublished of txid: uint256
+    | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest
+    | OffChainOfferResolved of paymentPreimage: PaymentPreimage
 
-  // ------ error -----
+    // -- loop in --
+    | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
+    // We do not use `Transaction` type just to make serializer happy.
+    // if we stop using json serializer for serializing this event, we can use `Transaction` instead.
+    // But it seems that just using string is much simpler.
+    | SwapTxPublished of txHex: string
+    | RefundTxPublished of txid: uint256
+
+    // -- general --
+    | NewTipReceived of BlockHeight
+
+    | FinishedByError of id: SwapId * err: string
+    | FinishedSuccessfully of id: SwapId
+    | FinishedByRefund of id: SwapId
+    with
+    member this.Version =
+      match this with
+      | NewLoopOutAdded _
+      | ClaimTxPublished _
+      | OffChainOfferStarted _
+      | OffChainOfferResolved _
+
+      | NewLoopInAdded _
+      | SwapTxPublished _
+      | RefundTxPublished _
+
+      | NewTipReceived _
+      | FinishedByError _
+
+      | FinishedSuccessfully _
+      | FinishedByRefund _
+       -> 0
+
+    member this.Type =
+      match this with
+      | NewLoopOutAdded _ -> "new_loop_out_added"
+      | ClaimTxPublished _ -> "claim_tx_published"
+      | OffChainOfferStarted _ -> "offchain_offer_started"
+      | OffChainOfferResolved _ -> "offchain_offer_resolved"
+
+      | NewLoopInAdded _ -> "new_loop_in_added"
+      | SwapTxPublished _ -> "swap_tx_published"
+      | RefundTxPublished _ -> "refund_tx_published"
+
+      | NewTipReceived _ -> "new_tip_received"
+
+      | FinishedByError _ -> "finished_by_error"
+      | FinishedSuccessfully _ -> "finished_successfully"
+      | FinishedByRefund _ -> "finished_by_refund"
+    member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
+      {
+        Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
+        Type = (entityType + "-" + this.Type) |> EventType.EventType
+        Data = this
+      }
+
   type Error =
-    | BogusResponseFromBoltz
-    | TransactionError of Transactions.Error
-    | CannotAffordUTXOs of UTXOProviderError
-    | FailedToGetChangeAddress of string
-    | PSBTNotCreated of string
-    | PSBTNotSigned of IList<PSBTError>
+    | TransactionError of string
+    | UnExpectedError of exn
+    | FailedToGetAddress of string
+    | UTXOProviderError of UTXOProviderError
+    | InputError of string
+
+  let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
+    r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)
+
+  let inline private expectInputError(r: Result<_, string>) =
+    r |> Result.mapError InputError
+
+  let private jsonConverterOpts =
+    let o = JsonSerializerOptions()
+    o.AddNLoopJsonConverters()
+    o
+  let serializer : Serializer<Event> = {
+    Serializer.EventToBytes = fun e -> JsonSerializer.SerializeToUtf8Bytes(e, jsonConverterOpts)
+    BytesToEvents =
+      fun b ->
+        try
+          JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b, jsonConverterOpts)
+          |> Ok
+        with
+        | ex ->
+          $"Failed to deserialize event json\n%A{ex}"
+          |> Error
+  }
 
   // ------ deps -----
   type Deps = {
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
     UTXOProvider: IUTXOProvider
-    GetChangeAddress: GetChangeAddress
+    GetChangeAddress: GetAddress
+    GetRefundAddress: GetAddress
   }
 
   // ----- aggregates ----
 
+
+  let private enhanceEvents date source (events: Event list) =
+    events |> List.map(fun e -> e.ToEventSourcingEvent date source)
+
+
   let executeCommand
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-      GetChangeAddress = getChangeAddress }
+      GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress }
     (s: State)
-    (command: Command): Task<Result<Event list, Error>> =
+    (cmd: ESCommand<Command>): Task<Result<Event<Event> list, _>> =
     taskResult {
-      match command with
-      | NewLoopOut loopOut when s.OnGoing.Out |> Seq.exists(fun o -> o.Id = loopOut.Id) ->
-        return [KnownSwapAddedAgain loopOut.Id]
-      | NewLoopOut loopOut ->
-        return [NewLoopOutAdded loopOut]
-      | NewLoopIn loopIn when s.OnGoing.In |> Seq.exists(fun o -> o.Id = loopIn.Id) ->
-        return [KnownSwapAddedAgain loopIn.Id]
-      | NewLoopIn loopIn ->
-        return [NewLoopInAdded loopIn]
-      | SwapUpdate u when s.OnGoing.Out |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let ourSwap = s.OnGoing.Out.First(fun o -> u.Id = o.Id)
-        if (u.Response.SwapStatus = ourSwap.Status) then
+      try
+        let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
+        let enhance = enhanceEvents effectiveDate source
+        let checkHeight (height: BlockHeight) (oldHeight: BlockHeight) =
+          if height.Value > oldHeight.Value then
+            [NewTipReceived(height)] |> enhance |> Ok
+          else
+            [] |> Ok
+
+        match cmd.Data, s with
+        // --- loop out ---
+        | NewLoopOut (h, loopOut), HasNotStarted ->
+          do! loopOut.Validate() |> expectInputError
+          let invoice =
+            loopOut.Invoice
+            |> PaymentRequest.Parse
+            |> ResultUtils.Result.deref
+          return
+            [NewLoopOutAdded(h, loopOut); OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice) ]
+            |> enhance
+        | OffChainOfferResolve pp, Out(_, loopOut) ->
+          return [OffChainOfferResolved pp; FinishedSuccessfully loopOut.Id] |> enhance
+        | SwapUpdate u, Out(_height, loopOut) ->
+          if (u.SwapStatus = loopOut.Status) then
+            return []
+          else
+          match u.SwapStatus with
+          | SwapStatusType.TxMempool when not <| loopOut.AcceptZeroConf ->
+            return []
+          | SwapStatusType.TxMempool
+          | SwapStatusType.TxConfirmed ->
+            let struct (_, counterPartyCryptoCode) = loopOut.PairId
+            let! feeRate =
+              feeEstimator.Estimate(counterPartyCryptoCode)
+            let lockupTx =
+              u.Transaction |> Option.defaultWith(fun () -> raise <| Exception("No Transaction in response"))
+            let! claimTx =
+              Transactions.createClaimTx
+                (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.OurNetwork))
+                (loopOut.ClaimKey)
+                (loopOut.Preimage)
+                (loopOut.RedeemScript)
+                (feeRate)
+                (lockupTx.Tx)
+                (loopOut.OurNetwork)
+              |> expectTxError "claim tx"
+            do!
+              broadcaster.BroadcastTx(claimTx, counterPartyCryptoCode)
+            let txid = claimTx.GetWitHash()
+            return [ClaimTxPublished(txid);] |> enhance
+          | SwapStatusType.SwapExpired ->
+            let reason = u.FailureReason |> Option.defaultValue ""
+            return [FinishedByError(loopOut.Id, $"Swap expired (Reason: %s{reason})");] |> enhance
+          | _ ->
+            return []
+
+        // --- loop in ---
+        | NewLoopIn(h, loopIn), HasNotStarted ->
+          do! loopIn.Validate() |> expectInputError
+          return [NewLoopInAdded(h, loopIn)] |> enhance
+        | SwapUpdate u, In(_height, loopIn) ->
+          match u.SwapStatus with
+          | SwapStatusType.InvoiceSet ->
+            let (struct (_ourCryptoCode, counterPartyCryptoCode)) = loopIn.PairId
+            let! utxos =
+              utxoProvider.GetUTXOs(loopIn.ExpectedAmount, counterPartyCryptoCode)
+              |> TaskResult.mapError(UTXOProviderError)
+            let! feeRate =
+              feeEstimator.Estimate(counterPartyCryptoCode)
+            let! change =
+              getChangeAddress.Invoke(counterPartyCryptoCode)
+              |> TaskResult.mapError(FailedToGetAddress)
+            let psbt =
+              Transactions.createSwapPSBT
+                (utxos)
+                loopIn.RedeemScript
+                (loopIn.ExpectedAmount)
+                feeRate
+                change
+                loopIn.TheirNetwork
+              |> function | Ok x -> x | Error e -> failwithf "%A" e
+            let! psbt = utxoProvider.SignSwapTxPSBT(psbt, counterPartyCryptoCode)
+            match psbt.TryFinalize() with
+            | false, e ->
+              return raise <| Exception(sprintf "%A" (e |> Seq.toList))
+            | true, _ ->
+              let tx = psbt.ExtractTransaction()
+              do! broadcaster.BroadcastTx(tx, counterPartyCryptoCode)
+              return [SwapTxPublished(tx.ToHex())] |> enhance
+          | SwapStatusType.TxConfirmed
+          | SwapStatusType.InvoicePayed ->
+            // Ball is on their side. Just wait till they claim their on-chain share.
+            return []
+          | SwapStatusType.TxClaimed ->
+            // boltz server has happily claimed their on-chain share.
+            return [FinishedSuccessfully(loopIn.Id)] |> enhance
+          | SwapStatusType.InvoiceFailedToPay ->
+            // The counterparty says that they have failed to receive preimage before timeout. This should never happen.
+            // But even if it does, we will just reclaim the swap tx when the timeout height has reached.
+            // So nothing to do here.
+            return []
+          | SwapStatusType.SwapExpired ->
+            // This means we have not send SwapTx. Or they did not recognize it.
+            // This can be caused only by our bug.
+            // (e.g. boltz-server did not recognize our swap script.)
+            // So just ignore it.
+            return []
+          | _ ->
+            return []
+
+        // --- ---
+
+        | SetValidationError(err), Out(_, { Id = swapId })
+        | SetValidationError(err), In (_ , { Id = swapId }) ->
+          return [FinishedByError( swapId, err )] |> enhance
+        | NewBlock (height, cc), Out(oldHeight, loopOut) when let struct (ourCC,_ ) = loopOut.PairId in ourCC = cc ->
+            return! (height, oldHeight) ||> checkHeight
+        | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, theirCC) = loopIn.PairId in theirCC = cc ->
+          let! events = (height, oldHeight) ||> checkHeight
+          if loopIn.TimeoutBlockHeight <= height then
+            let struct(_ourCC, theirCC) = loopIn.PairId
+            let! refundAddress =
+              getRefundAddress.Invoke(theirCC)
+              |> TaskResult.mapError(FailedToGetAddress)
+            let! fee =
+              feeEstimator.Estimate(theirCC)
+            let! refundTx =
+              Transactions.createRefundTx
+                (loopIn.LockupTransactionHex.Value)
+                (loopIn.RedeemScript)
+                fee
+                (refundAddress)
+                (loopIn.RefundPrivateKey)
+                (loopIn.TimeoutBlockHeight)
+                (loopIn.TheirNetwork)
+              |> expectTxError "refund tx"
+
+            do! broadcaster.BroadcastTx(refundTx, theirCC)
+            let additionalEvents =
+              [RefundTxPublished(refundTx.GetWitHash()); FinishedByRefund loopIn.Id]
+              |> enhance
+            return events @ additionalEvents
+          else
+            return events
+        | _, Finished _ ->
           return []
-        else
-        match u.Response.SwapStatus with
-        | SwapStatusType.TxMempool when not <| ourSwap.AcceptZeroConf ->
-          return []
-        | SwapStatusType.TxMempool
-        | SwapStatusType.TxConfirmed ->
-          let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
-          let! feeRate =
-            feeEstimator.Estimate(counterPartyCryptoCode)
-          let! lockupTx =
-            u.Response.Transaction |> function | Some x -> Ok x | None -> Error BogusResponseFromBoltz
-          let! claimTx =
-            Transactions.createClaimTx
-              (BitcoinAddress.Create(ourSwap.ClaimAddress, u.Network))
-              (ourSwap.PrivateKey)
-              (ourSwap.Preimage)
-              (ourSwap.RedeemScript)
-              (feeRate)
-              (lockupTx.Tx)
-              (u.Network)
-            |> Result.mapError(TransactionError)
-          do!
-            broadcaster.BroadcastTx(claimTx, ourCryptoCode)
-          let txid = claimTx.GetWitHash()
-          return [ClaimTxPublished(txid, ourSwap.Id)]
-        | _ ->
-          return []
-      | SwapUpdate u when s.OnGoing.In |> Seq.exists(fun o -> u.Id = o.Id) ->
-        let ourSwap = s.OnGoing.In.First(fun o -> u.Id = o.Id)
-        match u.Response.SwapStatus with
-        | SwapStatusType.InvoiceSet ->
-          // TODO: check confirmation?
-          let (ourCryptoCode, counterPartyCryptoCode) = ourSwap.PairId
-          let! utxos =
-            utxoProvider.GetUTXOs(ourSwap.ExpectedAmount, ourCryptoCode) |> TaskResult.mapError(CannotAffordUTXOs)
-          let! feeRate =
-            feeEstimator.Estimate(counterPartyCryptoCode)
-          let! change = getChangeAddress.Invoke(ourCryptoCode) |> TaskResult.mapError(FailedToGetChangeAddress)
-          let! psbt =
-            Transactions.createSwapPSBT
-              (utxos)
-              ourSwap.RedeemScript
-              (ourSwap.ExpectedAmount)
-              feeRate
-              change
-              ourSwap.TimeoutBlockHeight
-              u.Network
-            |> Result.mapError(PSBTNotCreated)
-          let! psbt = utxoProvider.SignSwapTxPSBT(psbt, ourCryptoCode)
-          match psbt.TryFinalize() with
-          | false, e ->
-            return! Error(PSBTNotSigned e)
-          | true, _ ->
-            let tx = psbt.ExtractTransaction()
-            do! broadcaster.BroadcastTx(tx, ourCryptoCode)
-            return [SwapTxPublished(tx.GetWitHash(), ourSwap.Id)]
-        | _ ->
-        return []
-      | SwapUpdate _u ->
-        return []
-      | SetValidationError(id, err) when
-          s.OnGoing.In |> Seq.exists(fun i -> i.Id = id)  ||
-          s.OnGoing.Out |> Seq.exists(fun i -> i.Id = id) ->
-        return [LoopErrored( id, err )]
-      | SetValidationError _ ->
-        return []
+        | x, s ->
+          return raise <| Exception($"Unexpected Command \n{x} \n\nWhile in the state\n{s}")
+      with
+      | ex ->
+        return! UnExpectedError ex |> Error
     }
 
-  let applyChanges (state: State) (event: Event) =
-    match event with
-    | KnownSwapAddedAgain _ ->
-      state
-    | ClaimTxPublished (txid, id) ->
-      let newOuts =
-        state.OnGoing.Out |> List.map(fun x -> if x.Id = id then { x with ClaimTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with Out = newOuts } }
-    | SwapTxPublished (txid, id) ->
-      let newIns =
-        state.OnGoing.In |> List.map(fun x -> if x.Id = id then { x with LockupTransactionId = Some txid } else x)
-      { state with OnGoing = { state.OnGoing with In = newIns } }
-    | NewLoopOutAdded loopOut ->
-      { state with OnGoing = { state.OnGoing with Out = loopOut::state.OnGoing.Out } }
-    | NewLoopInAdded loopIn ->
-      { state with OnGoing = { state.OnGoing with In = loopIn::state.OnGoing.In } }
-    | LoopErrored (id, err)->
-      let newLoopIns =
-        state.OnGoing.In |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
-      let newLoopOuts =
-        state.OnGoing.Out |> List.map(fun s -> if s.Id = id then { s with Error = err } else s)
-      { state with OnGoing = { state.OnGoing with In = newLoopIns; Out = newLoopOuts } }
+  let applyChanges
+    (state: State) (event: Event) =
+    match event, state with
+    | NewLoopOutAdded(h, x), HasNotStarted ->
+      Out (h, x)
+    | ClaimTxPublished (txid), Out(h, x) ->
+      Out (h, { x with ClaimTransactionId = Some txid })
+    | OffChainOfferResolved(preimage), Out(h, x) ->
+      Out(h, { x with Preimage = preimage })
 
-  type Aggregate = Aggregate<State, Command, Event, Error, Deps>
+    | NewLoopInAdded(h, x), HasNotStarted ->
+      In (h, x)
+    | SwapTxPublished (tx), In(h, x) ->
+      In (h, { x with LockupTransactionHex = Some(tx) })
+    | RefundTxPublished txid, In(h, x) ->
+      In(h, { x with RefundTransactionId = Some txid })
+
+    | FinishedByError (_, err), In _ ->
+      Finished(FinishedState.Errored(err))
+    | FinishedByError (_, err), Out _ ->
+      Finished(FinishedState.Errored(err))
+    | FinishedSuccessfully _, Out _
+    | FinishedSuccessfully _, In _ ->
+      Finished(FinishedState.Success)
+    | FinishedByRefund _, In (_h, { RefundTransactionId = Some txid }) ->
+      Finished(FinishedState.Refunded(txid))
+
+    | NewTipReceived h, Out(_, x) ->
+      Out(h, x)
+    | NewTipReceived h, In(_, x) ->
+      In(h, x)
+    | _, x -> x
+
+  type Aggregate = Aggregate<State, Command, Event, Error, DateTime * string>
+  type Handler = Handler<State, Command, Event, Error, SwapId>
+
+  let getAggregate deps: Aggregate = {
+    Zero = State.Zero
+    Exec = executeCommand deps
+    Aggregate.Apply = applyChanges
+    Filter = id
+    Enrich = id
+    SortBy = fun event ->
+      event.Meta.EffectiveDate.Value, event.Data.Type
+  }
+
+  let getRepository eventStoreUri =
+    let store = eventStore eventStoreUri
+    Repository.Create
+      store
+      serializer
+      entityType
+
+  let getHandler aggr eventStoreUri =
+    getRepository eventStoreUri
+    |> Handler.Create aggr
+

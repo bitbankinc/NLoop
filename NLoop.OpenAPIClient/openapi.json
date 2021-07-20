@@ -56,6 +56,84 @@
         }
       }
     },
+    "/v1/swaps/{id}": {
+      "get": {
+        "tags": [
+          "swap"
+        ],
+        "description": "Get the list of ongoing swaps.\n",
+        "operationId": "swaps",
+        "parameters": [
+          {
+            "$ref": "#/components/schemas/swapId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSwapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/swaps/history": {
+      "get": {
+        "tags": [
+          "swap"
+        ],
+        "description": "Get the full history of swaps.\n",
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSwapHistoryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/swaps/ongoing": {
+      "get": {
+        "tags": [
+          "swap"
+        ],
+        "description": "Get the list of ongoing swaps.\n",
+        "operationId": "ongoing",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetSwapStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/{cryptoCode}/loop/out": {
       "post": {
         "tags": [
@@ -64,7 +142,7 @@
         "operationId": "out",
         "parameters": [
           {
-            "$ref": "#/components/parameters/cryptoCode/schema"
+            "$ref": "#/components/schemas/cryptoCode"
           }
         ],
         "requestBody": {
@@ -86,6 +164,26 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "array",
+                      "description": "error message",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -103,7 +201,7 @@
         "operationId": "in",
         "parameters": [
           {
-            "$ref": "#/components/parameters/cryptoCode/schema"
+            "$ref": "#/components/schemas/cryptoCode"
           }
         ],
         "requestBody": {
@@ -125,6 +223,26 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "array",
+                      "description": "error message",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -132,6 +250,14 @@
   },
   "components": {
     "schemas": {
+      "cryptoCode": {
+        "type": "string",
+        "description": "Symbol name for the currency.",
+        "enum": [
+          "BTC",
+          "LTC"
+        ]
+      },
       "PubKey": {
         "type": "string",
         "description": "Bitcoin public key in 33 bytes length",
@@ -176,6 +302,9 @@
         "pattern": "(\\d{3})x(\\d{3})x(\\d{2})",
         "example": "140x10x1"
       },
+      "swapId": {
+        "type": "string"
+      },
       "LoopOutRequest": {
         "type": "object",
         "required": [
@@ -188,13 +317,9 @@
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "counter_party_pair": {
-            "description": "< counterparty's cryptoCode to swap against.",
-            "default": "The same cryptocurrency with the one you pay.",
+            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
             "nullable": true,
-            "enum": [
-              "LTC",
-              "BTC"
-            ]
+            "$ref": "#/components/schemas/cryptoCode"
           },
           "address": {
             "nullable": true,
@@ -235,13 +360,9 @@
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "counter_party_pair": {
-            "description": "< counterparty's cryptoCode to swap against.",
-            "default": "The same cryptocurrency with the one you pay.",
+            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
             "nullable": true,
-            "enum": [
-              "LTC",
-              "BTC"
-            ]
+            "$ref": "#/components/schemas/cryptoCode"
           },
           "label": {
             "type": "string",
@@ -254,7 +375,8 @@
         "type": "object",
         "required": [
           "version",
-          "supported_coins"
+          "supported_coins",
+          null
         ],
         "properties": {
           "version": {
@@ -266,26 +388,27 @@
               "on_chain": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "enum": [
-                    "LTC",
-                    "BTC"
-                  ]
+                  "$ref": "#/components/schemas/cryptoCode"
                 }
               },
               "off_chain": {
                 "type": "array",
                 "items": {
-                  "type": "string",
-                  "enum": [
-                    "LTC",
-                    "BTC"
-                  ]
+                  "$ref": "#/components/schemas/cryptoCode"
                 }
               }
             }
           }
         }
+      },
+      "GetSwapResponse": {
+        "type": "object"
+      },
+      "GetSwapHistoryResponse": {
+        "type": "object"
+      },
+      "GetSwapStatusResponse": {
+        "type": "object"
       },
       "LoopOutResponse": {
         "type": "object",
@@ -321,13 +444,7 @@
         "name": "cryptoCode",
         "in": "path",
         "required": true,
-        "description": "Symbol name for the currency.",
-        "schema": {
-          "enum": [
-            "BTC",
-            "LTC"
-          ]
-        }
+        "$ref": "#/components/schemas/cryptoCode"
       }
     },
     "securitySchemes": {

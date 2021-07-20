@@ -68,7 +68,7 @@ type RepositoryTests() =
   [<Fact>]
   [<Trait("Docker", "Off")>]
   member this.``Key and Preimage`` () = task {
-    let testRepo (repo: IRepository) = unitTask {
+    let testRepo (repo: ISecretRepository) = unitTask {
       let key = new Key()
       do! repo.SetPrivateKey(key)
       let! k = repo.GetPrivateKey(key.PubKey.Hash)
@@ -92,44 +92,3 @@ type RepositoryTests() =
     ()
   }
 
-  [<Property(MaxTest = 20)>]
-  [<Trait("Docker", "Off")>]
-  member this.``Repository(LoopOut)`` (loopOut: LoopOut) =
-    let testRepo (v: LoopOut) (repo: IRepository) = unitTask {
-      do! repo.SetLoopOut(v)
-      let! actual = repo.GetLoopOut(v.Id)
-      Assert.NotEqual(actual, None)
-      Assert.Equal(v, actual.Value)
-    }
-
-    let t = (task {
-      let! p = getRepositoryProvider(nameof(this.``Repository(LoopOut)``))
-      do!
-        p.GetRepository("BTC")
-        |> testRepo loopOut
-      do!
-        p.GetRepository("LTC")
-        |> testRepo loopOut
-      ()
-    })
-    t.GetAwaiter().GetResult()
-
-  [<Property(MaxTest = 20)>]
-  [<Trait("Docker", "Off")>]
-  member this.``Repository(LoopIn)`` (loopIn: LoopIn) =
-    let testRepo (v: LoopIn) (repo: IRepository) = unitTask {
-      do! repo.SetLoopIn(v)
-      let! actual = repo.GetLoopIn(v.Id)
-      Assert.NotEqual(actual, None)
-      Assert.Equal(v, actual.Value)
-    }
-    let t = (task {
-      let! p = getRepositoryProvider(nameof(this.``Repository(LoopIn)``))
-      do!
-        p.GetRepository("BTC")
-        |> testRepo loopIn
-      do!
-        p.GetRepository("LTC")
-        |> testRepo loopIn
-    })
-    t.GetAwaiter().GetResult()

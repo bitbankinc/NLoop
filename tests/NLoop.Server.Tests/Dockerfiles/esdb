@@ -1,0 +1,76 @@
+ARG CONTAINER_RUNTIME=focal
+FROM mcr.microsoft.com/dotnet/sdk:5.0-focal AS build
+LABEL maintainer="Joe Miyamoto <joemphilips@gmail.com>"
+ARG RUNTIME=linux-x64
+ARG EVENTSTORE_VERSION=oss-v20.10.2
+
+WORKDIR /build
+
+RUN apt-get update \
+  && apt-get install -y \
+  apt-utils \
+  curl \
+  gcc \
+  build-essential  # For compiling some deps (such as secp256k1) with g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --quiet --depth 1 --single-branch --branch $EVENTSTORE_VERSION https://github.com/EventStore/EventStore
+
+WORKDIR  /build/EventStore/src
+RUN dotnet restore --runtime=${RUNTIME}
+RUN dotnet build --configuration=Release --no-restore
+
+
+
+
+FROM build as publish
+ARG RUNTIME=linux-x64
+
+RUN dotnet publish \
+  --configuration=Release --runtime=${RUNTIME} \
+  --framework=net5.0 \
+  --output /publish EventStore.ClusterNode
+
+
+
+FROM  mcr.microsoft.com/dotnet/runtime-deps:5.0-${CONTAINER_RUNTIME} AS runtime
+ARG UID=1000
+ARG GID=1000
+
+RUN apt update && \
+  apt install -y \
+  curl && \
+  rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/eventstore
+
+RUN addgroup --gid ${GID} "eventstore" && \
+  adduser \
+  --disabled-password \
+  --gecos "" \
+  --ingroup "eventstore" \
+  --no-create-home \
+  --uid ${UID} \
+  "eventstore"
+
+COPY --from=publish /publish ./
+
+RUN mkdir -p /var/lib/eventstore && \
+    mkdir -p /var/log/eventstore && \
+    mkdir -p /etc/eventstore && \
+    chown -R eventstore:eventstore /opt/eventstore /var/lib/eventstore /var/log/eventstore /etc/eventstore
+RUN echo "ExtIp: 0.0.0.0\n\
+IntIp: 0.0.0.0" >> /etc/eventstore/eventstore.conf
+
+VOLUME /var/lib/eventstore
+VOLUME /var/log/eventstore
+
+EXPOSE 1112/tcp
+EXPOSE 1113/tcp
+EXPOSE 2112/tcp
+EXPOSE 2113/tcp
+
+HEALTHCHECK --interval=5s --timeout=5s --retries=24 \
+    CMD curl --fail --insecure https://localhost:2113/health/live || curl --fail http://localhost:2113/health/live || exit 1
+
+ENTRYPOINT ["/opt/eventstore/EventStore.ClusterNode"]

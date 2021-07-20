@@ -9,6 +9,7 @@ open NLoop.Domain
 open Xunit
 open FsToolkit.ErrorHandling
 
+(*
 [<Fact>]
 let ``SwapScriptValidationTest`` () =
   let hex = HexEncoder()
@@ -48,8 +49,9 @@ let ``ReverseSwapScriptValidationTest`` () =
     |> fun x -> new Key(x)
 
   let timeoutBlockHeight = BlockHeight(248u)
-  let t = Scripts.validateReverseSwapScript preimageHash claimKey.PubKey timeoutBlockHeight redeemScript
-  Assert.Equal(t, Ok())
+  let _ =
+    Scripts.validateReverseSwapScript preimageHash claimKey.PubKey timeoutBlockHeight redeemScript
+    |> function | Ok _ -> () | Error e -> failwithf "%A" e
 
   let e = Scripts.validateReverseSwapScript uint256.Zero claimKey.PubKey timeoutBlockHeight redeemScript
   Assert.True(e |> Result.isError)
@@ -58,3 +60,4 @@ let ``ReverseSwapScriptValidationTest`` () =
   let e = Scripts.validateReverseSwapScript preimageHash claimKey.PubKey BlockHeight.Zero redeemScript
   Assert.True(e |> Result.isError)
   ()
+*)

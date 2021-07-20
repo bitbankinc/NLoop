@@ -8,6 +8,8 @@ open FsCheck
 open NBitcoin
 open NBitcoin.Altcoins
 open NLoop.Domain
+open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Domain
@@ -196,6 +198,18 @@ type PrimitiveGenerator() =
   static member Coins() : Arbitrary<ICoin list> =
     coinsGen |> Arb.fromGen
 
+  static member PaymentPreimage : Arbitrary<PaymentPreimage> =
+    bytesOfNGen 32
+    |> Gen.map(PaymentPreimage.Create)
+    |> Arb.fromGen
+
+type DomainTypeGenerator =
+  static member UnixDateTime(): Arbitrary<UnixDateTime> =
+      Arb.generate<uint64>
+      |> Gen.map UnixDateTime.Create
+      |> Gen.filter(function | Ok s -> true | Error _ -> false)
+      |> Gen.map(function Ok s -> s  | Error _ -> failwith "Unreachable")
+      |> Arb.fromGen
 
 type ResponseGenerator =
   static member LoopOut() :Arbitrary<LoopOutResponse> =
@@ -205,7 +219,7 @@ type ResponseGenerator =
       let! txid = uint256Gen |> Gen.optionOf
       return {
         LoopOutResponse.Id = id.Get
-        Address = addr
+        Address = addr.ToString()
         ClaimTxId = txid }
     }
     |> Arb.fromGen
@@ -216,7 +230,7 @@ type ResponseGenerator =
       let! addr = bitcoinAddressGen
       return {
         LoopInResponse.Id = id.Get
-        Address = addr }
+        Address = addr.ToString() }
     }
     |> Arb.fromGen
 
