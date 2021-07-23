@@ -57,6 +57,7 @@ jobs:
           docker push nloop/litecoind:latest
           docker push nloop/lnd:latest
           docker push nloop/boltz:latest
+          docker push nloop/esdb:latest
 
       - name: Run integration tests in ${{ matrix.os }}
         run: sudo dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000

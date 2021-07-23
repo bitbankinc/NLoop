@@ -188,7 +188,7 @@ services:
       - "lnd_server"
 
   esdb:
-    image: nloop/eventstore
+    image: nloop/esdb
     container_name: esdb
     build:
       context: ./Dockerfiles
