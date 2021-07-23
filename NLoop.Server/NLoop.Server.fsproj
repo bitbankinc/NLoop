@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>net5.0</TargetFramework>
-    <AssemblyName>NLoop.Server.App</AssemblyName>
+    <AssemblyName>nloopd</AssemblyName>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
+    <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />

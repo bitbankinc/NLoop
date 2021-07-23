@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
+        <AssemblyName>nloop-cli</AssemblyName>
         <TargetFramework>net5.0</TargetFramework>
     </PropertyGroup>
 
