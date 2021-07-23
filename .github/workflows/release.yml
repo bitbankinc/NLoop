@@ -32,6 +32,9 @@ jobs:
         with:
           dotnet-version: ${{ matrix.dotnet }}
 
+      - name: dotnet tool restore
+        run: dotnet tool restore
+
       - name: publish (server)
         shell: bash
         run: |
