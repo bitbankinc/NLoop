@@ -3,6 +3,7 @@
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>nloopd</AssemblyName>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
+    <RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
