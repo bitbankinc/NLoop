@@ -46,12 +46,15 @@ jobs:
         run: dotnet test tests/NLoop.Server.Tests --filter="Docker=Off"
 
       - name: Log in to docker hub (For docker image caching)
+        if: startsWith(matrix.os, 'ubuntu')
         run: echo ${{ secrets.REGISTRY_PASS }} | docker login -u ${{ secrets.REGISTRY_USER }} --password-stdin
 
       - name: Prepare docker images for integration tests.
+        if: startsWith(matrix.os, 'ubuntu')
         run: cd tests/NLoop.Server.Tests && source env.sh && docker-compose build --build-arg BUILDKIT_INLINE_CACHE=1
 
       - name: Push docker images.
+        if: startsWith(matrix.os, 'ubuntu')
         run: |
           docker push nloop/bitcoind:latest
           docker push nloop/litecoind:latest
@@ -60,6 +63,7 @@ jobs:
           docker push nloop/esdb:latest
 
       - name: Run integration tests in ${{ matrix.os }}
+        if: startsWith(matrix.os, 'ubuntu')
         run: sudo dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
         # We need sudo since lnd creates admin.macaroon with permission `-rw-------` and the owner will be root
         # in case of docker in CI.
