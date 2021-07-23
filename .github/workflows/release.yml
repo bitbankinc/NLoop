@@ -62,11 +62,17 @@ jobs:
           NLoop.CLI \
           --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}
 
+      - name: prepare artifacts
+        shell: bash
+        run: |
+          gzip -c publish/nloopd > nloopd.${{ matrix.RID }}.gz
+          gzip -c publish/nloop-cli > nloop-cli.${{ matrix.RID }}.gz
+
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            publish/nloopd
-            publish/nloop-cli
+            nloopd.${{ matrix.RID }}.gz
+            nloop-cli.${{ matrix.RID }}.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
