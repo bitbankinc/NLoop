@@ -1,115 +1,78 @@
-name: publish(stable release)
+name: release
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]-*'
 
 jobs:
-  # we want to create release only once, hence indendent from build task.
-  create_release:
-    runs-on: ubuntu-18.04
-    steps:
-      # workaround for upload-release-asset does not support variable expansion.
-      # see: https://github.com/actions/upload-release-asset/issues/17
-      - name: get version
-        id: get_version
-        # the substitution we use here does not work in windows.
-        run: |
-          echo ${GITHUB_REF/refs\/tags\/v/}
-          echo ${GITHUB_REF/refs\/tags\/v/} > version.txt
-          echo "::set-output name=VERSION::${GITHUB_REF/refs\/tags\/v/}"
-      - name: Create release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: v${{ steps.get_version.outputs.VERSION }}
-          release_name: Release v${{ steps.get_version.outputs.VERSION }}
-          draft: false
-          prerelease: true # TODO: change to false when ready
-
-      - run: |
-          echo '${{ steps.create_release.outputs.upload_url }}' > release_upload_url.txt
-      - uses: actions/upload-artifact@v1
-        with:
-          name: create-release
-          path: release_upload_url.txt
-      - uses: actions/upload-artifact@v1
-        with:
-          name: get_version
-          path: version.txt
-
-  publish_and_push:
-    needs: create_release
+  pack_and_push:
+    name: "release"
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-18.04, windows-latest, macos-latest]
+        dotnet: ['5.0.202']
         include:
           - os: ubuntu-18.04
-            RID: linux
+            RID: linux-x64
           - os: windows-latest
-            RID: win
+            RID: win-x64
           - os: macos-latest
-            RID: osx
-    
+            RID: osx-x64
+      fail-fast: true
     steps:
       - uses: actions/checkout@v2
         with:
           submodules: recursive
-
-      - name: Setup 3.1.200 .NET Core
+      - name: Setup ${{ matrix.dotnet }} .NET Core
         uses: actions/setup-dotnet@v1
         with:
-          dotnet-version: 3.1.200
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
+          dotnet-version: ${{ matrix.dotnet }}
 
-      - name: Cache cargo registry
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('rust-lightning/Cargo.lock') }}
-      - name: Cache cargo index
-        uses: actions/cache@v1
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('rust-lightning/Cargo.lock') }}
-      - name: Cache cargo build
-        uses: actions/cache@v1
-        with:
-          path: rust-lightning/target
-          key: ${{ matrix.os }}-cargo-build-target-${{ hashFiles('rust-lightning/Cargo.lock') }}-${{ hashFiles('rust-lightning/**/src/**') }}
+      - name: dotnet tool restore
+        run: dotnet tool restore
 
-      - name: publish
+      - name: publish (server)
+        shell: bash
         run: |
-            dotnet publish  -p:Configuration=Release NLoop.Server NLoop.CLI
-          
-      # get and set release url and version
-      - uses: actions/download-artifact@v1
-        with:
-          name: create-release
-      - uses: actions/download-artifact@v1
-        with:
-          name: get_version
-      - id: upload-url
+          dotnet publish -c Release \
+          -o publish \
+          -p:PublishReadyToRun=true \
+          -p:PublishSingleFile=true \
+          -p:PublishTrimmed=true \
+          -p:RuntimeIdentifier=${{ matrix.RID }} \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          --self-contained true \
+          NLoop.Server \
+          --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}
+      - name: publish (cli)
+        shell: bash
         run: |
-          echo "::set-output name=url::$(cat create-release/release_upload_url.txt)"
-      - id: get_version
-        run: |
-          echo "::set-output name=VERSION::$(cat get_version/version.txt)"
+          dotnet publish -c Release \
+          -o publish \
+          -p:PublishReadyToRun=true \
+          -p:PublishSingleFile=true \
+          -p:PublishTrimmed=true \
+          -p:RuntimeIdentifier=${{ matrix.RID }} \
+          -p:IncludeNativeLibrariesForSelfExtract=true \
+          --self-contained true \
+          NLoop.CLI \
+          --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}
 
-      - name: upload release asset
-        uses: actions/upload-release-asset@v1
+      - name: prepare artifacts
+        shell: bash
+        run: |
+          gzip -c publish/nloopd > nloopd.${{ matrix.RID }}.gz
+          gzip -c publish/nloop-cli > nloop-cli.${{ matrix.RID }}.gz
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            nloopd.${{ matrix.RID }}.gz
+            nloop-cli.${{ matrix.RID }}.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.upload-url.outputs.url }}
-          asset_path: ./src/NRustLightning/bin/Release/NRustLightning.${{ steps.get_version.outputs.VERSION }}.nupkg
-          asset_name: NRustLightning-${{ matrix.RID }}.${{ steps.get_version.outputs.VERSION }}.nupkg
-          asset_content_type: application/zip
-

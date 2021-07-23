@@ -6,10 +6,8 @@ open System.IO
 [<RequireQualifiedAccess>]
 module Constants =
   let HomePath =
-     if (Environment.OSVersion.Platform = PlatformID.Unix || Environment.OSVersion.Platform = PlatformID.MacOSX)
-     then Environment.GetEnvironmentVariable("HOME")
-     else Environment.GetEnvironmentVariable("%HOMEDRIVE%%HOMEPATH%")
-     |> fun h -> if (isNull h) then raise <| Exception("Failed to define home directory path") else h
+     let envHome = if System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows) then "HOMEPATH" else "HOME"
+     Environment.GetEnvironmentVariable(envHome)
 
   [<Literal>]
   let HomeDirectoryName = ".nloop"
