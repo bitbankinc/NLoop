@@ -1,0 +1,7 @@
+{
+  "schema": "./openapi.json",
+  "project": "NLoop.OpenAPIClient.FSharp",
+  "output": "./NLoop.OpenAPIClient.FSharp",
+  "target": "fsharp",
+  "asyncReturnType": "task"
+}
