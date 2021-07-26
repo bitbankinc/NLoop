@@ -48,3 +48,10 @@ curl http://localhost:5000/v1/info
 
 Check out our [`openapi.yml`](./openapi.yml) for the REST API specification.
 
+## Why use NLoop?
+
+### Event Sourcing
+
+* Immutable audit trail with WORM
+* Cache invalidation
+
