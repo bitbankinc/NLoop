@@ -91,26 +91,25 @@ module Swap =
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
     | FinishedByRefund of id: SwapId
-    | UnknownVersionEvent of version: byte * data: byte[]
+    | UnknownTagEvent of tag: uint16 * data: byte[]
     with
-    member this.Version =
+    member this.EventTag =
       match this with
-      | NewLoopOutAdded _
-      | ClaimTxPublished _
-      | OffChainOfferStarted _
-      | OffChainOfferResolved _
+      | NewLoopOutAdded _ -> 0us
+      | ClaimTxPublished _ -> 1us
+      | OffChainOfferStarted _ -> 2us
+      | OffChainOfferResolved _ -> 3us
 
-      | NewLoopInAdded _
-      | SwapTxPublished _
-      | RefundTxPublished _
+      | NewLoopInAdded _ -> 256us + 0us
+      | SwapTxPublished _ -> 256us + 1us
+      | RefundTxPublished _-> 256us + 2us
 
-      | NewTipReceived _
-      | FinishedByError _
+      | NewTipReceived _ -> 512us + 0us
+      | FinishedByError _ -> 512us + 1us
 
-      | FinishedSuccessfully _
-      | FinishedByRefund _
-       -> 0uy
-      | UnknownVersionEvent (v, _) -> v
+      | FinishedSuccessfully _ -> 1024us + 0us
+      | FinishedByRefund _ -> 1024us + 1us
+      | UnknownTagEvent (t, _) -> t
 
     member this.Type =
       match this with
@@ -128,7 +127,7 @@ module Swap =
       | FinishedByError _ -> "finished_by_error"
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
-      | UnknownVersionEvent _ -> "unknown_version_event"
+      | UnknownTagEvent _ -> "unknown_version_event"
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
@@ -157,10 +156,10 @@ module Swap =
     o
   let serializer : Serializer<Event> = {
     Serializer.EventToBytes = fun (e: Event) ->
-      let v = e.Version |> uint8 |> Array.singleton
+      let v = e.EventTag |> fun t -> Utils.ToBytes(t, false)
       let b =
         match e with
-        | UnknownVersionEvent (_, b) ->
+        | UnknownTagEvent (_, b) ->
           b
         | e -> JsonSerializer.SerializeToUtf8Bytes(e, jsonConverterOpts)
       Array.concat (seq [v; b])
@@ -168,13 +167,14 @@ module Swap =
       fun b ->
         try
           let e =
-            match b.[0] with
-            | 0uy ->
-              let e = JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[1..], jsonConverterOpts)
-              assert(e |> function | UnknownVersionEvent _ -> false | _ -> true)
-              e
+            match Utils.ToUInt16(b.[0..1], false) with
+            | 0us | 1us | 2us | 3us
+            | 256us | 257us | 258us
+            | 512us | 513us
+            | 1024us | 1025us ->
+              JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[2..], jsonConverterOpts)
             | v ->
-              UnknownVersionEvent(v, b.[1..])
+              UnknownTagEvent(v, b.[2..])
           e |> Ok
         with
         | ex ->
@@ -390,7 +390,7 @@ module Swap =
       In(h, x)
     | _, x -> x
 
-  type Aggregate = Aggregate<State, Command, Event, Error, DateTime * string>
+  type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>
   type Handler = Handler<State, Command, Event, Error, SwapId>
 
   let getAggregate deps: Aggregate = {
@@ -400,7 +400,7 @@ module Swap =
     Filter = id
     Enrich = id
     SortBy = fun event ->
-      event.Meta.EffectiveDate.Value, event.Data.Type
+      event.Data.EventTag, event.Meta.EffectiveDate.Value
   }
 
   let getRepository eventStoreUri =
