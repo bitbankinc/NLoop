@@ -91,6 +91,7 @@ module Swap =
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
     | FinishedByRefund of id: SwapId
+    | UnknownVersionEvent of version: byte * data: byte[]
     with
     member this.Version =
       match this with
@@ -108,7 +109,8 @@ module Swap =
 
       | FinishedSuccessfully _
       | FinishedByRefund _
-       -> 0
+       -> 0uy
+      | UnknownVersionEvent (v, _) -> v
 
     member this.Type =
       match this with
@@ -126,12 +128,15 @@ module Swap =
       | FinishedByError _ -> "finished_by_error"
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
+      | UnknownVersionEvent _ -> "unknown_version_event"
     member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
       {
         Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
         Type = (entityType + "-" + this.Type) |> EventType.EventType
         Data = this
       }
+
+  let KnownEventVersions = [|0uy|]
 
   type Error =
     | TransactionError of string
@@ -151,12 +156,26 @@ module Swap =
     o.AddNLoopJsonConverters()
     o
   let serializer : Serializer<Event> = {
-    Serializer.EventToBytes = fun e -> JsonSerializer.SerializeToUtf8Bytes(e, jsonConverterOpts)
+    Serializer.EventToBytes = fun (e: Event) ->
+      let v = e.Version |> uint8 |> Array.singleton
+      let b =
+        match e with
+        | UnknownVersionEvent (_, b) ->
+          b
+        | e -> JsonSerializer.SerializeToUtf8Bytes(e, jsonConverterOpts)
+      Array.concat (seq [v; b])
     BytesToEvents =
       fun b ->
         try
-          JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b, jsonConverterOpts)
-          |> Ok
+          let e =
+            match b.[0] with
+            | 0uy ->
+              let e = JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[1..], jsonConverterOpts)
+              assert(e |> function | UnknownVersionEvent _ -> false | _ -> true)
+              e
+            | v ->
+              UnknownVersionEvent(v, b.[1..])
+          e |> Ok
         with
         | ex ->
           $"Failed to deserialize event json\n%A{ex}"
