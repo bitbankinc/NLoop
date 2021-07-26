@@ -1,6 +1,7 @@
 # NLoop: Generic Lightning Loop
 
-## Quick start
+## How to
+### Quick start
 
 We have a two binaries for you to work with.
 * `nloopd` ... standalone daemon to perform/manage the submarine swap.
@@ -19,7 +20,7 @@ and run with `--help` to see the possible configuration option
 Probably the best way to check its behaviour is to run it in the test environment.
 Check the following guide for how-to.
 
-## How to build in master
+### How to build in master
 
 We recommend to use a docker for testing the master version. (To avoid issues of dotnet sdk version incompatibility etc.)
 e.g.
@@ -29,7 +30,7 @@ docker build -f NLoop.Server/Dockerfile . -t nloopd_master
 docker run nloopd_master --help
 ```
 
-## How to try `nloopd` with local docker-compose environment
+### How to try `nloopd` with local docker-compose environment
 
 Note that this requires .NET SDK with compatible version installed.
 
