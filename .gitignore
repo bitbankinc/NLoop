@@ -3,4 +3,5 @@ tests/NLoop.Server.Tests/data/
 LndClient/LndSwaggerClient.cs
 LndClient/openapi.json
 publish/
+.vscode
 

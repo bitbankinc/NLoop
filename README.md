@@ -19,7 +19,19 @@ and run with `--help` to see the possible configuration option
 Probably the best way to check its behaviour is to run it in the test environment.
 Check the following guide for how-to.
 
-### How to try `nloopd` with local docker-compose environment
+## How to build in master
+
+We recommend to use a docker for testing the master version. (To avoid issues of dotnet sdk version incompatibility etc.)
+e.g.
+
+```sh
+docker build -f NLoop.Server/Dockerfile . -t nloopd_master
+docker run nloopd_master --help
+```
+
+## How to try `nloopd` with local docker-compose environment
+
+Note that this requires .NET SDK with compatible version installed.
 
 ```sh
 cd tests/NLoop.Server.Tests
@@ -32,6 +44,7 @@ cd ../..
 curl http://localhost:5000/v1/info
 ```
 
-### REST API
+## REST API
 
 Check out our [`openapi.yml`](./openapi.yml) for the REST API specification.
+
