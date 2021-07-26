@@ -172,3 +172,21 @@ module LndInvoiceSwaggerClient =
 
         return Route hops
       }
+
+      member this.OpenChannel(openChannelRequest) = task {
+        let! resp = 
+          let req = LndBaseRpcSpecProvider.lnrpcOpenChannelRequest()
+          req.Private <- openChannelRequest.Private
+          req.CloseAddress <- openChannelRequest.CloseAddress |> Option.toObj
+          req.LocalFundingAmount <- openChannelRequest.Amount.Satoshi.ToString()
+          baseRPCClient.OpenChannel(req)
+        if (resp.Error |> isNull) then
+          return () |> Ok
+        else
+          return
+            {
+              LndOpenChannelError.StatusCode = resp.Error.HttpCode
+              Message = resp.Error.Message
+            }
+            |> Error
+      }

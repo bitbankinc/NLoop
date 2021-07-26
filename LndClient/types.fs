@@ -134,6 +134,17 @@ type ILightningInvoiceListener =
   inherit IDisposable
   abstract member WaitInvoice: ct : CancellationToken -> Task<PaymentRequest>
 
+type LndOpenChannelRequest = {
+  Private: bool option
+  CloseAddress: string option
+}
+
+type LndOpenChannelError = {
+  StatusCode: int option
+  Detail: string
+  Message: string
+}
+
 type INLoopLightningClient =
   abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -151,3 +162,4 @@ type INLoopLightningClient =
   abstract member Listen: unit -> Task<ILightningInvoiceListener>
   abstract member GetInfo: unit -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * numRoutes: int -> Task<Route>
+  abstract member OpenChannel: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
