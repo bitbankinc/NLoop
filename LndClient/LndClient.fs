@@ -14,6 +14,7 @@ open NBitcoin.DataEncoders
 open System.Net.Http
 open System.Security.Authentication
 open System.Security.Cryptography.X509Certificates
+open System.Net
 
 type O = OptionalArgumentAttribute
 
@@ -174,19 +175,56 @@ module LndInvoiceSwaggerClient =
       }
 
       member this.OpenChannel(openChannelRequest) = task {
-        let! resp = 
-          let req = LndBaseRpcSpecProvider.lnrpcOpenChannelRequest()
-          req.Private <- openChannelRequest.Private
-          req.CloseAddress <- openChannelRequest.CloseAddress |> Option.toObj
-          req.LocalFundingAmount <- openChannelRequest.Amount.Satoshi.ToString()
-          baseRPCClient.OpenChannel(req)
-        if (resp.Error |> isNull) then
-          return () |> Ok
-        else
-          return
+        let exnToError(baseEx: exn) =
+          match baseEx with
+          | :? HttpRequestException as ex ->
             {
-              LndOpenChannelError.StatusCode = resp.Error.HttpCode
-              Message = resp.Error.Message
+              LndOpenChannelError.StatusCode = ex.StatusCode |> Option.ofNullable |> Option.map(int)
+              Message = ex.ToString()
             }
+          | :? AggregateException as e when (e.InnerException :? HttpRequestException) ->
+            let ex = e.InnerException :?> HttpRequestException
+            {
+              LndOpenChannelError.StatusCode = ex.StatusCode |> Option.ofNullable |> Option.map(int)
+              Message = ex.ToString()
+            }
+          | ex ->
+            {
+              LndOpenChannelError.StatusCode = None
+              Message = ex.ToString()
+            }
+
+        try
+          let! resp = 
+            let req = LndBaseRpcSpecProvider.lnrpcOpenChannelRequest()
+            req.Private <- openChannelRequest.Private
+            req.CloseAddress <- openChannelRequest.CloseAddress |> Option.toObj
+            req.NodePubkeyString <- openChannelRequest.NodeId.ToHex()
+            req.NodePubkey <- openChannelRequest.NodeId.ToBytes()
+            req.LocalFundingAmount <- openChannelRequest.Amount.Satoshi.ToString()
+            baseRPCClient.OpenChannel(req)
+          if (resp.Error |> isNull) then
+            return () |> Ok
+          else
+            return
+              {
+                LndOpenChannelError.StatusCode = resp.Error.HttpCode
+                Message = resp.Error.Message
+              }
+              |> Error
+        with
+        | ex ->
+          return
+            exnToError ex
             |> Error
+      }
+
+      member this.ConnectPeer(pubKey: PubKey, host: string) = unitTask {
+        let req = LndBaseRpcSpecProvider.lnrpcConnectPeerRequest()
+        req.Addr <-
+          let addr = LndBaseRpcSpecProvider.lnrpcLightningAddress()
+          addr.Pubkey <-  pubKey.ToHex()
+          addr.Host <- host
+          addr
+        return! baseRPCClient.ConnectPeer(req)
       }

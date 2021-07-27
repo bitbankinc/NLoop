@@ -135,12 +135,12 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
     }
     *)
 
-  [<Fact(Skip="Must Open Channel before performing swap")>]
+  [<Fact(Skip="Skip because channel opening is not ready")>]
   [<Trait("Docker", "Docker")>]
   member this.ServerIntegrationTests() = task {
-      let server = cli.User.NLoopServer
       let stream = cli.User.NLoop.ListenToEventsAsync()
       let reader = stream.GetAsyncEnumerator()
+      do! cli.OpenChannel(LNMoney.Satoshis(100000L))
       let! outResponse =
         let req = LoopOutRequest()
         req.Amount <- 10000L

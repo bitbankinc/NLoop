@@ -9,7 +9,10 @@ open System.CommandLine.Parsing
 open System.IO
 open System.Linq
 open System.Net.Http
+open FSharp.Control.Tasks
+
 open DockerComposeFixture
+open DotNetLightning.Utils
 open LndClient
 open Helpers
 open Microsoft.AspNetCore.Hosting
@@ -24,9 +27,66 @@ open NLoopClient
 type Clients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
-  User: {| Lnd: LndTypeProviderClient; NLoop: NLoopClient; NLoopServer: TestServer |}
-  Server: {| Lnd: LndTypeProviderClient; Boltz: BoltzClient |}
+  User: {| Lnd: INLoopLightningClient; NLoop: NLoopClient; NLoopServer: TestServer |}
+  Server: {| Lnd: INLoopLightningClient; Boltz: BoltzClient |}
 }
+  with
+  member this.AssureWalletIsReady() = task {
+    let! btcAddr = this.Bitcoin.GetNewAddressAsync()
+    let! _ = this.Bitcoin.GenerateToAddressAsync(Network.RegTest.Consensus.CoinbaseMaturity + 1, btcAddr)
+
+    let send (cli: INLoopLightningClient) = task {
+      let! addr = cli.GetDepositAddress()
+      let! _ = this.Bitcoin.SendToAddressAsync(addr, Money.Coins(10m))
+      return ()
+    }
+    do! send (this.User.Lnd)
+    do! send (this.Server.Lnd)
+
+    let! _ = this.Bitcoin.GenerateToAddressAsync(3, btcAddr)
+    ()
+  }
+
+  member this.AssureConnected() = task {
+    let! nodes = this.Server.Boltz.GetNodesAsync()
+    let connString =
+      nodes.Nodes |> Map.toSeq |> Seq.head |> fun (_, info) -> info.Uris.[0]
+    do! this.User.Lnd.ConnectPeer(connString.NodeId, connString.EndPoint.ToEndpointString())
+    return connString.NodeId
+  }
+
+  member this.OpenChannel(amount: LNMoney) =
+    let mutable nodeId = null
+    task {
+      do! this.AssureWalletIsReady()
+      let! n = this.AssureConnected()
+      nodeId <- n
+    } |> fun t -> t.GetAwaiter().GetResult()
+
+    let rec loop (count: int) = async {
+      let req =
+        { LndOpenChannelRequest.Private = None
+          Amount = amount
+          NodeId = nodeId
+          CloseAddress = None }
+      let! r = this.User.Lnd.OpenChannel(req) |> Async.AwaitTask
+      match r with
+      | Ok () ->
+        do! Async.Sleep(500)
+        let! btcAddr = this.Bitcoin.GetNewAddressAsync() |> Async.AwaitTask
+        let! _ = this.Bitcoin.GenerateToAddressAsync(3, btcAddr) |> Async.AwaitTask
+        let! s = this.Server.Lnd.GetInfo() |> Async.AwaitTask
+        return ()
+      | Error e ->
+        if (count <= 3 && e.StatusCode.IsSome && e.StatusCode.Value >= 500) then
+          let nextCount = count + 1
+          do! Async.Sleep(1000 *  nextCount)
+          printfn "retrying channel open..."
+          return! loop(nextCount)
+        else
+          failwithf "Failed opening channel %A" e
+    }
+    loop(0)
 
 [<AutoOpen>]
 module DockerFixtureExtensions =
@@ -59,6 +119,8 @@ module DockerFixtureExtensions =
         Directory.Delete(dataPath, true)
       Directory.CreateDirectory(dataPath) |> ignore
       env.Add("DATA_PATH", dataPath)
+
+      Directory.CreateDirectory(Path.Join(dataPath, "bitcoind")) |> ignore
 
       let boltzDir = Path.Join(dataPath, "boltz")
       Directory.CreateDirectory(boltzDir) |> ignore
