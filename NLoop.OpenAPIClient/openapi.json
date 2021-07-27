@@ -134,17 +134,12 @@
         }
       }
     },
-    "/v1/{cryptoCode}/loop/out": {
+    "/v1/loop/out": {
       "post": {
         "tags": [
           "swap"
         ],
         "operationId": "out",
-        "parameters": [
-          {
-            "$ref": "#/components/schemas/cryptoCode"
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -193,17 +188,12 @@
         ]
       }
     },
-    "/v1/{cryptoCode}/loop/in": {
+    "/v1/loop/in": {
       "post": {
         "tags": [
           "swap"
         ],
         "operationId": "in",
-        "parameters": [
-          {
-            "$ref": "#/components/schemas/cryptoCode"
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -256,6 +246,14 @@
         "enum": [
           "BTC",
           "LTC"
+        ]
+      },
+      "pairId": {
+        "type": "string",
+        "description": "Pair of cryptoCode",
+        "example": [
+          "BTC/LTC",
+          "BTC/BTC"
         ]
       },
       "PubKey": {
@@ -316,10 +314,10 @@
             "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
-          "counter_party_pair": {
-            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
+          "pair_id": {
+            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
             "nullable": true,
-            "$ref": "#/components/schemas/cryptoCode"
+            "$ref": "#/components/schemas/pairId"
           },
           "address": {
             "nullable": true,
@@ -355,14 +353,14 @@
             "format": "int64"
           },
           "channel_id": {
-            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
             "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
-          "counter_party_pair": {
+          "pair_id": {
             "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
             "nullable": true,
-            "$ref": "#/components/schemas/cryptoCode"
+            "$ref": "#/components/schemas/pairId"
           },
           "label": {
             "type": "string",
@@ -437,14 +435,6 @@
             "$ref": "#/components/schemas/P2WSH"
           }
         }
-      }
-    },
-    "parameters": {
-      "cryptoCode": {
-        "name": "cryptoCode",
-        "in": "path",
-        "required": true,
-        "$ref": "#/components/schemas/cryptoCode"
       }
     },
     "securitySchemes": {

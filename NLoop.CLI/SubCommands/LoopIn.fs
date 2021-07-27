@@ -25,13 +25,13 @@ module LoopIn =
       try
         let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
         let pr = host.Services.GetRequiredService<ParseResult>()
-        req.Counter_party_pair <- pr.ValueForOption<CryptoCode>("counter_party_pair")
+        req.Pair_id <- pr.ValueForOption<string>("pair_id")
         req.Amount <- pr.ValueForOption<int64>("amount")
         req.Channel_id <-
           pr.ValueForOption<uint64>("channel_id")
           |> ShortChannelId.FromUInt64
           |> fun cid -> cid.ToString()
-        return! cli.InAsync(cryptoCode, req)
+        return! cli.InAsync(req)
       with
       | :? ApiException<Response> as ex ->
         let str =
@@ -45,8 +45,7 @@ module LoopIn =
     command
       .AddAmountOption()
       .AddChannelOption()
-      .AddCounterPartyPairOption()
-      .AddCryptoCodeOption()
+      .AddPairIdOption()
       .AddLabelOption()
       |> ignore
     command.Handler <- handler
