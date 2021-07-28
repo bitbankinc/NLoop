@@ -52,6 +52,7 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
         req.Hash <- paymentHash.ToBytes()
         req.Value_msat <- value.MilliSatoshi.ToString()
         req.Expiry <- expiry.Seconds.ToString()
+        req.Memo <- memo
         invoiceRpcClient.AddHoldInvoiceAsync(req).ConfigureAwait false
       return
         resp.Payment_request
@@ -150,7 +151,7 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
           |> Error
     }
 
-    member this.QueryRoutes(nodeId, amount, numRoutes) = task {
+    member this.QueryRoutes(nodeId, amount) = task {
       let! resp = baseRpcClient.QueryRoutesAsync(nodeId.ToHex(), amount.Satoshi.ToString()).ConfigureAwait false
       let hops =
         resp.Routes

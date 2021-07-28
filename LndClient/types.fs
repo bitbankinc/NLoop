@@ -163,6 +163,6 @@ type INLoopLightningClient =
   abstract member Offer: invoice: PaymentRequest -> Task<Result<Primitives.PaymentPreimage, string>>
   abstract member Listen: unit -> Task<ILightningInvoiceListener>
   abstract member GetInfo: unit -> Task<obj>
-  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * numRoutes: int -> Task<Route>
+  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney -> Task<Route>
   abstract member OpenChannel: request: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string -> Task

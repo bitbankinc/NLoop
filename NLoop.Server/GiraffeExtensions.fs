@@ -93,7 +93,7 @@ module CustomHandlers =
       for kv in nodes.Nodes do
         if (maybeResult.IsSome) then () else
         try
-          let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney(), 1)
+          let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
           if (r.Value.Length > 0) then
             maybeResult <- Some r
         with
