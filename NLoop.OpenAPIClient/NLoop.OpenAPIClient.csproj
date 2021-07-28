@@ -19,7 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
   </ItemGroup>
-  
+
   <Target Name="GenerateNSwagClient">
     <PropertyGroup>
       <InputOpenApi>openapi.json</InputOpenApi>

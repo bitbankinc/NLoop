@@ -7,11 +7,16 @@
 
   <ItemGroup>
     <Compile Include="types.fs" />
-    <Compile Include="LndClient.fs" />
+    <Compile Include="Helpers.fs" />
+    <Compile Include="LndNSwagClient.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SwaggerProvider" Version="0.12.0" />
     <PackageReference Include="Newtonsoft.Json" Version="12.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LndSwaggerClient\LndSwaggerClient.csproj" />
   </ItemGroup>
 </Project>

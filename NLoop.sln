@@ -25,6 +25,8 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Tests.Common", "tests
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "LndClient", "LndClient\LndClient.fsproj", "{C7DF72D8-050F-40A9-873F-562954D166FA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LndSwaggerClient", "LndSwaggerClient\LndSwaggerClient.csproj", "{C439221D-0B31-4240-BD00-651C78A60D06}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,10 @@ Global
 		{C7DF72D8-050F-40A9-873F-562954D166FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C7DF72D8-050F-40A9-873F-562954D166FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C7DF72D8-050F-40A9-873F-562954D166FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C439221D-0B31-4240-BD00-651C78A60D06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C439221D-0B31-4240-BD00-651C78A60D06}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C439221D-0B31-4240-BD00-651C78A60D06}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C439221D-0B31-4240-BD00-651C78A60D06}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{345E44E3-D14F-4741-BB17-8BADD58BC303} = {4CF4C444-22AD-4BBD-A6F1-38051BC11435}

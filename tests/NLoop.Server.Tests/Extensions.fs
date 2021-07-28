@@ -101,7 +101,7 @@ module DockerFixtureExtensions =
     let settings =
       LndRestSettings.Create(uri, lndCertThumbprint |> Some, None, Some <| lndMacaroonPath, false)
       |> function | Ok x -> x | Error e -> failwith e
-    LndTypeProviderClient(Network.RegTest, settings)
+    LndNSwagClient(Network.RegTest, settings)
 
   type DockerFixture with
     member this.StartFixture(testName: string) =
