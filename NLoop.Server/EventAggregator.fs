@@ -29,7 +29,7 @@ type EventAggregatorExtensions() =
         | _ -> failwith "unreachable"
     )
 
-type ReactiveEventAggregator() =
+type ReactiveEventAggregator(_logger: ILogger<ReactiveEventAggregator>) =
   let _subject = new Subject<obj>()
 
   let mutable disposed = false

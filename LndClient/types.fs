@@ -147,6 +147,12 @@ type LndOpenChannelError = {
   Message: string
 }
 
+
+type ListChannelResponse = {
+  Id: ShortChannelId
+  Cap: Money
+  LocalBalance: Money
+}
 type INLoopLightningClient =
   abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -166,3 +172,4 @@ type INLoopLightningClient =
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney -> Task<Route>
   abstract member OpenChannel: request: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string -> Task
+  abstract member ListChannels: unit -> Task<ListChannelResponse list>

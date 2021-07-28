@@ -35,7 +35,8 @@ let private handle (host: IHost) =
       r
 
     try
-      return! cli.OutAsync(req)
+      let! resp = cli.OutAsync(req)
+      printfn $"{resp.ToJson()}"
     with
     | :? ApiException<Response> as ex ->
       let str =

@@ -16,8 +16,9 @@ type LoopInRequest = {
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId option
   Label: string option
+
   [<JsonPropertyName "pair_id">]
-  PairId: PairId
+  PairId: PairId option
 }
 
 type LoopOutRequest = {
@@ -29,7 +30,7 @@ type LoopOutRequest = {
   Address: BitcoinAddress option
 
   [<JsonPropertyName "pair_id">]
-  PairId: PairId
+  PairId: PairId option
 
   [<JsonPropertyName "amount">]
   Amount: Money

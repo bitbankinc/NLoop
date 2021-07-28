@@ -35,7 +35,7 @@ type BoltzListener(boltzClient: BoltzClient,
             let isNoChange = kv.Value.IsSome && resp.SwapStatus = kv.Value.Value
             if (isNoChange) then () else
             if not <| statuses.TryUpdate(swapId, (resp.SwapStatus |> ValueSome), kv.Value) then
-              logger.LogError($"Failed to update ({swapId})! this should never happen")
+              logger.LogWarning($"Failed to update ({swapId})! Probably already finished?")
             else
               do! actor.Execute(swapId, Swap.Command.SwapUpdate(resp.ToDomain))
       with

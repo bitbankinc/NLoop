@@ -66,6 +66,10 @@ module SupportedCryptoCode =
 
 type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
 
+[<RequireQualifiedAccess>]
+module PairId =
+  let Default = struct (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+
 type SwapStatusType =
   | SwapCreated = 0uy
   | SwapExpired = 1uy

@@ -73,8 +73,8 @@ module Swap =
   type Event =
     // -- loop out --
     | NewLoopOutAdded of  height: BlockHeight * loopIn: LoopOut
-    | ClaimTxPublished of txid: uint256
     | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest
+    | ClaimTxPublished of txid: uint256
     | OffChainOfferResolved of paymentPreimage: PaymentPreimage
 
     // -- loop in --
@@ -128,9 +128,9 @@ module Swap =
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
       | UnknownTagEvent _ -> "unknown_version_event"
-    member this.ToEventSourcingEvent effectiveDate source : Event<Event> =
+    member this.ToEventSourcingEvent effectiveDate source : ESEvent<Event> =
       {
-        Event.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
+        ESEvent.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
         Type = (entityType + "-" + this.Type) |> EventType.EventType
         Data = this
       }
@@ -202,7 +202,7 @@ module Swap =
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
       GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress }
     (s: State)
-    (cmd: ESCommand<Command>): Task<Result<Event<Event> list, _>> =
+    (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
     taskResult {
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta

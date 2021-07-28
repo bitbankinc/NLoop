@@ -12,6 +12,7 @@ open NBitcoin
 open NBitcoin.Crypto
 open NLoop.Domain
 open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
@@ -28,7 +29,9 @@ module LoopHandlers =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
-        let struct(ourCryptoCode, counterpartyCryptoCode) = req.PairId
+        let struct(ourCryptoCode, counterpartyCryptoCode) =
+          req.PairId
+          |> Option.defaultValue (PairId.Default)
         let n = opts.Value.GetNetwork(ourCryptoCode)
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let boltzCli = ctx.GetService<BoltzClient>()
@@ -88,25 +91,35 @@ module LoopHandlers =
             let obs =
               ctx
                 .GetService<IEventAggregator>()
-                .GetObservable<Swap.Event, Swap.Error>()
+                .GetObservable<SwapEventWithId, SwapErrorWithId>()
+                |> Observable.filter(function
+                                     | Choice1Of2 re -> re.Id.Value = outResponse.Id
+                                     | Choice2Of2 re -> re.Id.Value = outResponse.Id)
+
             do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
-            let! first =
-              obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
-            let! second =
-              obs.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
-            match (first, second) with
-            | Choice1Of2 _ev, Choice1Of2(Swap.Event.ClaimTxPublished(txId)) ->
+            let! firstErrorOrTxId =
+              obs
+              |> Observable.choose(
+                function
+                | Choice1Of2({ Data = Swap.Event.ClaimTxPublished txId }) -> txId |> box |> Some
+                | Choice1Of2( { Data = Swap.Event.FinishedByError(_id, err) }) -> err |> box |> Some
+                | Choice2Of2({ Error = e }) -> e.ToString() |> box |> Some
+                | _ -> None
+                )
+              |> fun o -> o.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
+
+            match firstErrorOrTxId with
+            | :? string as e ->
+              return! (error503 e) next ctx
+            | :? uint256 as txid ->
               let response = {
                 LoopOutResponse.Id = outResponse.Id
-                Address =outResponse.LockupAddress
-                ClaimTxId = txId |> Some
+                Address = outResponse.LockupAddress
+                ClaimTxId = Some txid
               }
               return! json response next ctx
-            | Choice2Of2 e, _
-            | _, Choice2Of2 e ->
-              return! (error503 e) next ctx
-            | a, b ->
-              return failwithf "Unreachable! (%A, %A)" a b
+            | x ->
+              return failwith $"Unreachable: {x}"
       }
 
   let handleLoopOut (req: LoopOutRequest) =
@@ -119,9 +132,13 @@ module LoopHandlers =
           ctx.SetStatusCode StatusCodes.Status400BadRequest
           return! json {| errors = errors.ToArray() |} next ctx
         | Ok _ ->
-        let struct(_ourCryptoCode, counterPartyCryptoCode) = req.PairId
+        let pairId =
+          req.PairId
+          |> Option.defaultValue (PairId.Default)
+        let struct(_ourCryptoCode, counterPartyCryptoCode) =
+          pairId
         return!
-          (checkBlockchainIsSyncedAndSetTipHeight req.PairId
+          (checkBlockchainIsSyncedAndSetTipHeight pairId
            >=> checkWeHaveRouteToCounterParty counterPartyCryptoCode req.Amount
            >=> handleLoopOutCore req)
             next ctx
@@ -129,8 +146,11 @@ module LoopHandlers =
   let handleLoopInCore (loopIn: LoopInRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
-        let struct(ourCryptoCode, counterpartyCryptoCode) =
+        let pairId =
           loopIn.PairId
+          |> Option.defaultValue (PairId.Default)
+        let struct(ourCryptoCode, counterpartyCryptoCode) =
+          pairId
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let opts = ctx.GetService<IOptions<NLoopOptions>>()
         let n = opts.Value.GetNetwork(ourCryptoCode)
@@ -173,7 +193,7 @@ module LoopHandlers =
             TimeoutBlockHeight = inResponse.TimeoutBlockHeight
             LockupTransactionHex = None
             RefundTransactionId = None
-            PairId = loopIn.PairId
+            PairId = pairId
             ChainName = opts.Value.ChainName.ToString()
           }
           let height = ctx.GetBlockHeight(ourCryptoCode)
@@ -188,8 +208,11 @@ module LoopHandlers =
     fun (next : HttpFunc) (ctx : HttpContext) ->
       task {
         let handle = (handleLoopInCore loopIn)
+        let pairId =
+          loopIn.PairId
+          |> Option.defaultValue (PairId.Default)
         return!
-          (checkBlockchainIsSyncedAndSetTipHeight loopIn.PairId >=>
+          (checkBlockchainIsSyncedAndSetTipHeight pairId >=>
            handle)
             next ctx
       }

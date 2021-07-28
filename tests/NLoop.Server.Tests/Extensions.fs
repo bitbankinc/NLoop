@@ -72,11 +72,20 @@ type Clients = {
       let! r = this.User.Lnd.OpenChannel(req) |> Async.AwaitTask
       match r with
       | Ok () ->
-        do! Async.Sleep(500)
-        let! btcAddr = this.Bitcoin.GetNewAddressAsync() |> Async.AwaitTask
-        let! _ = this.Bitcoin.GenerateToAddressAsync(3, btcAddr) |> Async.AwaitTask
-        let! s = this.Server.Lnd.GetInfo() |> Async.AwaitTask
-        return ()
+        let rec waitToSync(count) = async {
+          do! Async.Sleep(500)
+          let! btcAddr = this.Bitcoin.GetNewAddressAsync() |> Async.AwaitTask
+          let! _ = this.Bitcoin.GenerateToAddressAsync(2, btcAddr) |> Async.AwaitTask
+          let! s = this.Server.Lnd.ListChannels() |> Async.AwaitTask
+          match s with
+          | [] ->
+            if count > 4 then failwith "Failed to Create Channel" else
+            return! waitToSync(count + 1)
+          | s ->
+            printfn $"\n\nSuccessfully created a channel with cap: {s.First().Cap.Satoshi}. balance: {s.First().LocalBalance.Satoshi}\n\n"
+            return ()
+        }
+        do! waitToSync(0)
       | Error e ->
         if (count <= 3 && e.StatusCode.IsSome && e.StatusCode.Value >= 500) then
           let nextCount = count + 1

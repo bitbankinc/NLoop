@@ -44,7 +44,7 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
 
   interface IClassFixture<DockerFixture>
 
-  [<Fact>]
+  [<Fact(Skip="Skip for now")>]
   [<Trait("Docker", "Docker")>]
   member this.``BoltzClient tests (CreateSwap)`` () = task {
       let b = cli.Server.Boltz
@@ -135,12 +135,12 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
     }
     *)
 
-  [<Fact(Skip="Skip because channel opening is not ready")>]
+  [<Fact(Skip = "Skip for now")>]
   [<Trait("Docker", "Docker")>]
   member this.ServerIntegrationTests() = task {
       let stream = cli.User.NLoop.ListenToEventsAsync()
       let reader = stream.GetAsyncEnumerator()
-      do! cli.OpenChannel(LNMoney.Satoshis(100000L))
+      do! cli.OpenChannel(LNMoney.Satoshis(500_000L))
       let! outResponse =
         let req = LoopOutRequest()
         req.Amount <- 10000L

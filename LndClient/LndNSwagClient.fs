@@ -22,6 +22,10 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
     httpClient.AddLndAuthentication(auth)
   let invoiceRpcClient = LndSwaggerInvoiceClient(url, httpClient)
   let baseRpcClient = LndSwaggerBaseClient(url, httpClient)
+
+  member val InvoiceRpcClient = invoiceRpcClient with get
+  member val BaseRpcClient = baseRpcClient with get
+
   member private this.GetPaymentPreimage(paymentHash: string) = task {
     let! p = baseRpcClient.ListPaymentsAsync().ConfigureAwait false
     return
@@ -152,6 +156,7 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
     }
 
     member this.QueryRoutes(nodeId, amount) = task {
+      printfn $"\n\nquerying the routes with amount_satoshi: {amount.Satoshi.ToString()}\n\n"
       let! resp = baseRpcClient.QueryRoutesAsync(nodeId.ToHex(), amount.Satoshi.ToString()).ConfigureAwait false
       let hops =
         resp.Routes
@@ -159,7 +164,7 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
         |> fun x -> x.Hops
         |> Seq.map(fun (hop: LnrpcHop) -> {
           RouteHop.PubKey = hop.Pub_key |> PubKey
-          ShortChannelId = hop.Chan_id |> ShortChannelId.ParseUnsafe
+          ShortChannelId = hop.Chan_id |> UInt64.Parse |> ShortChannelId.FromUInt64
           Fee = hop.Fee |> int64 |> LNMoney.MilliSatoshis
           CLTVExpiryDelta =
             hop.Expiry
@@ -170,4 +175,16 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
         |> List.ofSeq
 
       return Route hops
+    }
+
+    member this.ListChannels() = task {
+      let! c = baseRpcClient.ListChannelsAsync()
+      return
+        c.Channels
+        |> Seq.map(fun ch -> {
+            Id = ch.Chan_id |> UInt64.Parse |> ShortChannelId.FromUInt64
+            Cap = ch.Capacity |> Int64.Parse |> Money.Satoshis
+            LocalBalance = ch.Local_balance |> Int64.Parse |> Money.Satoshis
+          })
+        |> Seq.toList
     }

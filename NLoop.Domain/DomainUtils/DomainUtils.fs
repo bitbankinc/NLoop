@@ -128,7 +128,7 @@ type Serializer<'TEvent> = {
   BytesToEvents: byte[] -> Result<'TEvent, string>
 }
 
-type Event<'TEvent> = {
+type ESEvent<'TEvent> = {
   Type: EventType
   Data: 'TEvent
   Meta: EventMeta
@@ -187,7 +187,7 @@ type RecordedEvent<'TEvent> = {
   with
   member this.AsEvent =
     {
-      Event.Data = this.Data
+      ESEvent.Data = this.Data
       Type = this.Type
       Meta = this.Meta
     }
@@ -230,10 +230,10 @@ type ESCommand<'DomainCommand> =
 type Aggregate<'TState, 'TCommand, 'TEvent, 'TError,'T when 'T : comparison> = {
   Zero: 'TState
   Filter: RecordedEvent<'TEvent> list -> RecordedEvent<'TEvent> list
-  Enrich: Event<'TEvent> list -> Event<'TEvent> list
-  SortBy: Event<'TEvent> -> 'T
+  Enrich: ESEvent<'TEvent> list -> ESEvent<'TEvent> list
+  SortBy: ESEvent<'TEvent> -> 'T
   Apply: 'TState -> 'TEvent -> 'TState
-  Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list, 'TError>>
+  Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<ESEvent<'TEvent> list, 'TError>>
 }
 
 type ExpectedVersionUnion =
@@ -260,7 +260,7 @@ type Store = {
 type Repository<'TEvent, 'TEntityId> = {
   Version: 'TEntityId -> Task<Result<ExpectedVersionUnion, StoreError>>
   Load: 'TEntityId -> Task<Result<RecordedEvent<'TEvent> list, StoreError>>
-  Commit: 'TEntityId -> ExpectedVersionUnion -> Event<'TEvent> list -> Task<Result<unit, StoreError>>
+  Commit: 'TEntityId -> ExpectedVersionUnion -> ESEvent<'TEvent> list -> Task<Result<unit, StoreError>>
 }
   with
   static member Create(store: Store) (serializer: Serializer<'TEvent>)(entityType: string): Repository<'TEvent,'TEntityId> =
@@ -284,7 +284,7 @@ type Repository<'TEvent, 'TEntityId> = {
         |> List.sequenceResultM
         |> Result.mapError(StoreError)
     }
-    let commit (entityId: 'TEntityId) expectedVersion (events: Event<'TEvent> list) =
+    let commit (entityId: 'TEntityId) expectedVersion (events: ESEvent<'TEvent> list) =
       let streamId =
         entityId
         |> StreamId.Create entityType
@@ -300,9 +300,9 @@ type Repository<'TEvent, 'TEntityId> = {
     }
 
 type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
-  Replay: 'TEntityId -> ObservationDate -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
-  Reconstitute: Event<'TEvent> list -> 'TState
-  Execute: 'TEntityId -> ESCommand<'TCommand> -> Task<Result<Event<'TEvent> list, EventSourcingError<'TError>>>
+  Replay: 'TEntityId -> ObservationDate -> Task<Result<ESEvent<'TEvent> list, EventSourcingError<'TError>>>
+  Reconstitute: ESEvent<'TEvent> list -> 'TState
+  Execute: 'TEntityId -> ESCommand<'TCommand> -> Task<Result<ESEvent<'TEvent> list, EventSourcingError<'TError>>>
 }
   with
   static member Create
@@ -329,8 +329,8 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
     }
 
     let reconstitute
-      (events: Event<'TEvent> list) =
-      let folder (acc) (event: Event<'TEvent>) =
+      (events: ESEvent<'TEvent> list) =
+      let folder (acc) (event: ESEvent<'TEvent>) =
         // we do not have to perform side effects when reconstituting the state
         let nextState = aggregate.Apply acc event.Data
         nextState
