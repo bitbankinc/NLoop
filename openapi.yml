@@ -86,12 +86,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetSwapStatusResponse"
 
-  /v1/{cryptoCode}/loop/out:
+  /v1/loop/out:
     post:
       tags:
         - swap
-      parameters:
-        - $ref: '#/components/parameters/cryptoCode'
       requestBody:
         content:
           application/json:
@@ -120,12 +118,10 @@ paths:
                     items:
                       type: string
 
-  /v1/{cryptoCode}/loop/in:
+  /v1/loop/in:
     post:
       tags:
         - swap
-      parameters:
-        - $ref:  "#/components/parameters/cryptoCode"
       requestBody:
         content:
           application/json:
@@ -158,12 +154,6 @@ components:
       type: apiKey
       name: Cookie
       in: cookie
-  parameters:
-    cryptoCode:
-      in: path
-      name: cryptoCode
-      required: true
-      $ref: '#/components/schemas/cryptoCode'
   schemas:
     cryptoCode:
       description: Symbol name for the currency.
@@ -171,6 +161,12 @@ components:
       enum:
         - BTC
         - LTC
+    pairId:
+      description: Pair of cryptoCode
+      type: string
+      example:
+        - "BTC/LTC"
+        - "BTC/BTC"
     # ----- Primitive objects
     PubKey:
       description: Bitcoin public key in 33 bytes length
@@ -223,11 +219,11 @@ components:
             ShortChannelId for the one you want to get inbound liquidity.
             default is the one it has least.
           nullable: true
-        counter_party_pair:
-          $ref: '#/components/schemas/cryptoCode'
+        pair_id:
+          $ref: '#/components/schemas/pairId'
           description: <
-            counterparty's cryptoCode to swap against.
-            default is the same cryptocurrency with the one you pay.
+            currency pair to perform the swap.
+            Default is BTC/BTC.
           nullable: true
         address:
           $ref: '#/components/schemas/BitcoinAddressNonMalleable'
@@ -262,11 +258,11 @@ components:
         channel_id:
           $ref: '#/components/schemas/ShortChannelId'
           description: <
-            ShortChannelId for the one you want to get inbound liquidity.
-            default is the one it has least.
+            currency pair to perform the swap.
+            Default is BTC/BTC.
           nullable: true
-        counter_party_pair:
-          $ref: '#/components/schemas/cryptoCode'
+        pair_id:
+          $ref: '#/components/schemas/pairId'
           description: <
             counterparty's cryptoCode to swap against.
             default is the same cryptocurrency with the one you pay.

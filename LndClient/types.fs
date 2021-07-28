@@ -50,6 +50,7 @@ type HttpClientExtensions =
     httpRequestMessage.Headers.AddLndAuthentication(lndAuth)
 
 open FsToolkit.ErrorHandling
+open System.Net
 [<AutoOpen>]
 module private Helpers =
   let parseUri str =
@@ -134,6 +135,24 @@ type ILightningInvoiceListener =
   inherit IDisposable
   abstract member WaitInvoice: ct : CancellationToken -> Task<PaymentRequest>
 
+type LndOpenChannelRequest = {
+  Private: bool option
+  CloseAddress: string option
+  NodeId: PubKey
+  Amount: LNMoney
+}
+
+type LndOpenChannelError = {
+  StatusCode: int option
+  Message: string
+}
+
+
+type ListChannelResponse = {
+  Id: ShortChannelId
+  Cap: Money
+  LocalBalance: Money
+}
 type INLoopLightningClient =
   abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -150,4 +169,7 @@ type INLoopLightningClient =
   abstract member Offer: invoice: PaymentRequest -> Task<Result<Primitives.PaymentPreimage, string>>
   abstract member Listen: unit -> Task<ILightningInvoiceListener>
   abstract member GetInfo: unit -> Task<obj>
-  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * numRoutes: int -> Task<Route>
+  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney -> Task<Route>
+  abstract member OpenChannel: request: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
+  abstract member ConnectPeer: nodeId: PubKey * host: string -> Task
+  abstract member ListChannels: unit -> Task<ListChannelResponse list>

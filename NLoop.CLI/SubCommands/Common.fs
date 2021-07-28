@@ -40,25 +40,13 @@ module Helpers =
       this.AddOption(o)
       this
 
-    member this.AddCryptoCodeOption() =
-      let o = Option<CryptoCode>([|"--crypto"; "--cryptocode"; "-cc"|], "The cryptocode for our currency (default: BTC)")
-      o.Name <- "crypto_code"
+    member this.AddPairIdOption() =
+      let o = Option<string>([|"--pair"; "--pair-id"; "-p"|], "The cryptocode pair (e.g. \"BTC/BTC\")")
+      o.Name <- "pair_id"
       o.Argument <-
-        let a = Argument<CryptoCode>()
+        let a = Argument<string>()
         a.Arity <- ArgumentArity.ZeroOrOne
-        a.SetDefaultValue(CryptoCode.BTC)
-        a
-      o.IsRequired <- false
-      this.AddOption(o)
-      this
-
-    member this.AddCounterPartyPairOption() =
-      let o = Option<CryptoCode>([|"--counterparty-cryptocode"; "-ccc"|], "The cryptocode for counterparty currency (default: BTC)")
-      o.Name <- "counter_party_pair"
-      o.Argument <-
-        let a = Argument<CryptoCode>()
-        a.Arity <- ArgumentArity.ZeroOrOne
-        a.SetDefaultValue(CryptoCode.BTC)
+        a.SetDefaultValue("BTC/BTC")
         a
       o.IsRequired <- false
       this.AddOption(o)

@@ -3,6 +3,8 @@ namespace NLoop.CLI.SubCommands
 open System
 open System.CommandLine
 open System.CommandLine.Invocation
+open System.CommandLine.Parsing
+open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
@@ -18,11 +20,18 @@ module LoopIn =
       let cli = host.Services.GetRequiredService<NLoopClient>()
       let conf = host.Services.GetRequiredService<IConfiguration>()
       let cryptoCode = conf.GetValue<CryptoCode>("cryptocode")
-      let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
       let opts = host.Services.GetRequiredService<IOptions<NLoop.Server.NLoopOptions>>()
       cli.Configure(opts.Value)
       try
-        return! cli.InAsync(cryptoCode, req)
+        let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
+        let pr = host.Services.GetRequiredService<ParseResult>()
+        req.Pair_id <- pr.ValueForOption<string>("pair_id")
+        req.Amount <- pr.ValueForOption<int64>("amount")
+        req.Channel_id <-
+          pr.ValueForOption<uint64>("channel_id")
+          |> ShortChannelId.FromUInt64
+          |> fun cid -> cid.ToString()
+        return! cli.InAsync(req)
       with
       | :? ApiException<Response> as ex ->
         let str =
@@ -36,8 +45,7 @@ module LoopIn =
     command
       .AddAmountOption()
       .AddChannelOption()
-      .AddCounterPartyPairOption()
-      .AddCryptoCodeOption()
+      .AddPairIdOption()
       .AddLabelOption()
       |> ignore
     command.Handler <- handler

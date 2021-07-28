@@ -46,7 +46,7 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOp
     let httpClient = httpClientFactory.CreateClient()
     httpClient.Timeout <- TimeSpan.FromDays(3.)
     let cli =
-      LndTypeProviderClient(opts.Value.GetNetwork(c), settings, httpClient)
+      LndNSwagClient(opts.Value.GetNetwork(c), settings, httpClient)
       :> INLoopLightningClient
     clients.Add(c, cli)
     try

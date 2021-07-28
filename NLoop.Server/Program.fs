@@ -50,26 +50,23 @@ module App =
 
   let webApp =
     choose [
-      subRoutef "/v1/%s" (fun cryptoCode ->
-        choose [
-          POST >=>
-            route "/loop/out" >=> mustAuthenticate >=>
-              (bindJsonWithCryptoCode<LoopOutRequest> cryptoCode handleLoopOut)
-            route "/loop/in" >=> mustAuthenticate >=>
-              (bindJsonWithCryptoCode<LoopInRequest> cryptoCode handleLoopIn)
-      ])
       subRoute "/v1" (choose [
         GET >=>
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
           route "/events" >=> QueryHandlers.handleListenEvent
-          subRoute "/swaps" (choose [
-            GET >=>
-              route "/history" >=> QueryHandlers.handleGetSwapHistory
-              route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
-              routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
-          ])
+        subRoute "/loop" (choose [
+          POST >=>
+            route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
+            route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> handleLoopIn
         ])
+        subRoute "/swaps" (choose [
+          GET >=>
+            route "/history" >=> QueryHandlers.handleGetSwapHistory
+            route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
+            routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+        ])
+      ])
       setStatusCode 404 >=> text "Not Found"
     ]
 

@@ -21,15 +21,13 @@ open NLoop.CLI
 let private handle (host: IHost) =
   task {
     let cli = host.Services.GetRequiredService<NLoopClient>()
-    let conf = host.Services.GetRequiredService<IConfiguration>()
-    let cryptoCode = conf.GetValue<CryptoCode>("cryptocode")
     let opts = host.Services.GetRequiredService<IOptions<NLoopOptions>>().Value
     cli.Configure(opts)
     let pr = host.Services.GetRequiredService<ParseResult>()
     let req =
       let r = LoopOutRequest()
       r.Channel_id <- pr.ValueForOption<string>("channel")
-      r.Counter_party_pair <- pr.ValueForOption<CryptoCode>("counterparty-cryptocode")
+      r.Pair_id <- pr.ValueForOption<string>("pair_id")
       r.Address <- pr.ValueForOption<string>("address")
       r.Amount <- pr.ValueForOption<int64>("amount")
       r.Conf_target <- pr.ValueForOption<int>("conf-target")
@@ -37,7 +35,8 @@ let private handle (host: IHost) =
       r
 
     try
-      return! cli.OutAsync(cryptoCode, req)
+      let! resp = cli.OutAsync(req)
+      printfn $"{resp.ToJson()}"
     with
     | :? ApiException<Response> as ex ->
       let str =
@@ -50,7 +49,7 @@ let command: Command =
   let command = Command("out", "Perform Reverse submarine swap and get inbound liquidity")
   command
     .AddChannelOption()
-    .AddCounterPartyPairOption()
+    .AddPairIdOption()
     .AddAddressOption()
     .AddAmountOption()
     .AddConfTargetOption()

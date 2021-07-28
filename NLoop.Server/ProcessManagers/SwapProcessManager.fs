@@ -61,7 +61,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           | Swap.Event.FinishedSuccessfully swapId
           | Swap.Event.FinishedByRefund swapId
           | Swap.Event.FinishedByError (swapId, _) ->
-            logger.LogDebug($"Removing new Swap {swapId}")
+            logger.LogDebug($"Removing Finished Swap {swapId}")
             for l in listeners do
               l.RemoveSwap swapId
           | _ -> ()

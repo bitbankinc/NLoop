@@ -8,14 +8,14 @@ env:
   COMPOSE_DOCKER_CLI_BUILD: 1
   DOCKER_BUILDKIT: 1
 jobs:
-  build:
+  build_and_test:
     name: "Build and Test on os: ${{ matrix.os }}. dotnet SDK version: ${{ matrix.dotnet }}"
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-18.04, windows-latest, macos-latest]
-        dotnet: ['5.0.202'] # global.json does not support wildcard, so we must be specific
+        dotnet: ['5.0.302'] # global.json does not support wildcard, so we must be specific
       fail-fast: true
     steps:
       - uses: actions/checkout@v2
