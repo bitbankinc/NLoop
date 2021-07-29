@@ -63,7 +63,7 @@ module App =
         subRoute "/swaps" (choose [
           GET >=>
             route "/history" >=> QueryHandlers.handleGetSwapHistory
-            route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
+            route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
             routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
         ])
       ])

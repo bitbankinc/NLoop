@@ -17,10 +17,7 @@ open NLoop.CLI
 module LoopIn =
   let handle (host: IHost) =
     task {
-      let cli = host.Services.GetRequiredService<NLoopClient>()
-      let conf = host.Services.GetRequiredService<IConfiguration>()
-      let opts = host.Services.GetRequiredService<IOptions<NLoop.Server.NLoopOptions>>()
-      cli.Configure(opts.Value)
+      let cli = host.Services.GetNLoopClient()
       let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
       let pr = host.Services.GetRequiredService<ParseResult>()
       req.Pair_id <- pr.ValueForOption<string>("pair_id")

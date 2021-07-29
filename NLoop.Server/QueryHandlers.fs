@@ -13,6 +13,7 @@ open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open FSharp.Control.Reactive
 open NLoop.Server.Projections
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
 module QueryHandlers =
@@ -45,13 +46,42 @@ module QueryHandlers =
   let handleGetSwapHistory =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
       let state = ctx.GetService<SwapStateProjection>().State
-      return! json state next ctx
+      let resp: GetSwapHistoryResponse =
+        state
+        |> Map.toSeq
+        |> Seq.choose(fun (streamId, v) ->
+          let r =
+            match v with
+            | Swap.State.HasNotStarted -> None
+            | Swap.State.Out(_height, _)
+            | Swap.State.In(_height, _) ->
+              (streamId.Value, ShortSwapSummary.OnGoing) |> Some
+            | Swap.State.Finished x ->
+              (streamId.Value, ShortSwapSummary.FromDomainState x) |> Some
+          r
+          |> Option.map(fun (streamId, s) ->
+            if (streamId.StartsWith("swap-", StringComparison.OrdinalIgnoreCase)) then
+              (streamId.Substring("swap-".Length), s)
+            else
+              (streamId, s)
+          )
+        )
+        |> Map.ofSeq
+      printfn $"Returning \n {resp} \nin json"
+      return! json resp next ctx
     }
 
-  let handleGetSwapStatus =
+  let handleGetOngoingSwap =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
       let state = ctx.GetService<SwapStateProjection>().State
-      return! json state next ctx
+      let resp: GetOngoingSwapResponse =
+        state
+        |> Map.toList
+        |> List.choose(fun (_, v) ->
+          match v with
+          | Swap.State.Finished _ | Swap.State.HasNotStarted -> None
+          | x -> Some x)
+      return! json resp next ctx
     }
 
   let handleListenEvent =
@@ -61,7 +91,7 @@ module QueryHandlers =
         ctx.Response.Headers.Add("Content-Type", "text/event-stream" |> StringValues)
         do! ctx.Response.Body.FlushAsync()
 
-        let e = ctx.GetService<IEventAggregator>().GetObservable<Swap.Event>()
+        let e = ctx.GetService<IEventAggregator>().GetObservable<SwapEventWithId>()
         e
           |> Observable.flatmapTask(fun data -> task {
             do! ctx.Response.WriteAsJsonAsync({ SSEEvent.Data = data

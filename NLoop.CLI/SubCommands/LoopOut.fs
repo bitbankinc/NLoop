@@ -20,9 +20,7 @@ open NLoop.CLI
 
 let private handle (host: IHost) =
   task {
-    let cli = host.Services.GetRequiredService<NLoopClient>()
-    let opts = host.Services.GetRequiredService<IOptions<NLoopOptions>>().Value
-    cli.Configure(opts)
+    let cli = host.Services.GetNLoopClient()
     let pr = host.Services.GetRequiredService<ParseResult>()
     let req =
       let r = LoopOutRequest()

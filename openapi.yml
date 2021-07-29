@@ -84,7 +84,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GetSwapStatusResponse"
+                $ref: "#/components/schemas/GetOngoingSwapResponse"
 
   /v1/loop/out:
     post:
@@ -297,15 +297,38 @@ components:
       required:
         - version
         - supported_coins
-        -
+
     GetSwapResponse:
       type: object
 
+    ShortSwapSummary:
+      type: object
+      properties:
+        "type":
+          type: string
+          enum:
+            - SuccessfullyFinished
+            - FinishedByError
+            - FinishedByRefund
+            - OnGoing
+        error_msg:
+          type: string
+        refund_txid:
+          type: string
+      required:
+        - "type"
+
     GetSwapHistoryResponse:
       type: object
+      additionalProperties:
+        $ref: "#/components/schemas/ShortSwapSummary"
 
-    GetSwapStatusResponse:
-      type: object
+
+    GetOngoingSwapResponse:
+      type: array
+      description: list of swap
+      items:
+        type: object
 
     LoopOutResponse:
       type: object

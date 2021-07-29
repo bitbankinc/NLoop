@@ -36,12 +36,12 @@ namespace NLoopClient
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<GetSwapHistoryResponse> HistoryAsync(System.DateTimeOffset? since = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<System.Collections.Generic.IDictionary<string, ShortSwapSummary>> HistoryAsync(System.DateTimeOffset? since = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<GetSwapStatusResponse> OngoingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<System.Collections.Generic.ICollection<object>> OngoingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
@@ -293,7 +293,7 @@ namespace NLoopClient
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<GetSwapHistoryResponse> HistoryAsync(System.DateTimeOffset? since = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<System.Collections.Generic.IDictionary<string, ShortSwapSummary>> HistoryAsync(System.DateTimeOffset? since = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var urlBuilder_ = new System.Text.StringBuilder();
             urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/swaps/history?");
@@ -335,7 +335,7 @@ namespace NLoopClient
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<GetSwapHistoryResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<System.Collections.Generic.IDictionary<string, ShortSwapSummary>>(response_, headers_, cancellationToken).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new ApiException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -365,7 +365,7 @@ namespace NLoopClient
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<GetSwapStatusResponse> OngoingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<System.Collections.Generic.ICollection<object>> OngoingAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
             var urlBuilder_ = new System.Text.StringBuilder();
             urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/swaps/ongoing");
@@ -402,7 +402,7 @@ namespace NLoopClient
                         var status_ = (int)response_.StatusCode;
                         if (status_ == 200)
                         {
-                            var objectResponse_ = await ReadObjectResponseAsync<GetSwapStatusResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            var objectResponse_ = await ReadObjectResponseAsync<System.Collections.Generic.ICollection<object>>(response_, headers_, cancellationToken).ConfigureAwait(false);
                             if (objectResponse_.Object == null)
                             {
                                 throw new ApiException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
@@ -880,8 +880,19 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public partial class GetSwapHistoryResponse 
+    public partial class ShortSwapSummary 
     {
+        [Newtonsoft.Json.JsonProperty("type", Required = Newtonsoft.Json.Required.Always)]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public ShortSwapSummaryType Type { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("error_msg", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Error_msg { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("refund_txid", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Refund_txid { get; set; }
+    
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
         [Newtonsoft.Json.JsonExtensionData]
@@ -891,6 +902,21 @@ namespace NLoopClient
             set { _additionalProperties = value; }
         }
     
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static ShortSwapSummary FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<ShortSwapSummary>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class GetSwapHistoryResponse : System.Collections.Generic.Dictionary<string, ShortSwapSummary>
+    {
         public string ToJson() 
         {
             return Newtonsoft.Json.JsonConvert.SerializeObject(this);
@@ -903,26 +929,18 @@ namespace NLoopClient
     
     }
     
+    /// <summary>list of swap</summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public partial class GetSwapStatusResponse 
+    public partial class GetOngoingSwapResponse : System.Collections.ObjectModel.Collection<object>
     {
-        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
-    
-        [Newtonsoft.Json.JsonExtensionData]
-        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
-        {
-            get { return _additionalProperties; }
-            set { _additionalProperties = value; }
-        }
-    
         public string ToJson() 
         {
             return Newtonsoft.Json.JsonConvert.SerializeObject(this);
         }
     
-        public static GetSwapStatusResponse FromJson(string data)
+        public static GetOngoingSwapResponse FromJson(string data)
         {
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<GetSwapStatusResponse>(data);
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<GetOngoingSwapResponse>(data);
         }
     
     }
@@ -1084,6 +1102,23 @@ namespace NLoopClient
         {
             return Newtonsoft.Json.JsonConvert.DeserializeObject<Supported_coins>(data);
         }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public enum ShortSwapSummaryType
+    {
+        [System.Runtime.Serialization.EnumMember(Value = @"SuccessfullyFinished")]
+        SuccessfullyFinished = 0,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"FinishedByError")]
+        FinishedByError = 1,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"FinishedByRefund")]
+        FinishedByRefund = 2,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"OnGoing")]
+        OnGoing = 3,
     
     }
 

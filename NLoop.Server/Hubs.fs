@@ -8,9 +8,10 @@ open Microsoft.AspNetCore.SignalR
 open NLoop.Domain
 open FSharp.Control.Tasks.Affine
 open FSharp.Control.Reactive
+open NLoop.Server.Actors
 
 type IEventClient =
-  abstract member HandleSwapEvent: Swap.Event -> Task
+  abstract member HandleSwapEvent: SwapEventWithId -> Task
 
 type EventHub(eventAggregator: IEventAggregator) =
   inherit Hub<IEventClient>()
@@ -18,23 +19,23 @@ type EventHub(eventAggregator: IEventAggregator) =
   let mutable subscription = None
 
   override this.OnConnectedAsync() =
-    let publish (e: Swap.Event) = unitTask {
+    let publish (e: SwapEventWithId) = unitTask {
         do! this.Clients.All.HandleSwapEvent(e)
       }
 
     subscription <-
-      eventAggregator.GetObservable<Swap.Event>()
+      eventAggregator.GetObservable<SwapEventWithId>()
       |> Observable.subscribe(publish >> ignore)
       |> Some
     Task.CompletedTask
 
-  member this.ListenSwapEvents(): ChannelReader<Swap.Event> =
+  member this.ListenSwapEvents(): ChannelReader<SwapEventWithId> =
     let channel =
       let opts = BoundedChannelOptions(2)
       opts
-      |> Channel.CreateBounded<Swap.Event>
+      |> Channel.CreateBounded<SwapEventWithId>
     let s =
-      eventAggregator.GetObservable<Swap.Event>()
+      eventAggregator.GetObservable<SwapEventWithId>()
       |> Observable.subscribe(fun e ->
         let t = unitTask {
           let! shouldContinue = channel.Writer.WaitToWriteAsync()

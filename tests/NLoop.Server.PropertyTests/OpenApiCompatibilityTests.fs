@@ -7,6 +7,7 @@ open System.Text.Json.Serialization
 open NBitcoin
 open NLoop.Server.DTOs
 open Generators
+open NLoop.Server.RPCDTOs
 open Newtonsoft.Json
 open System.Text.Json
 open Expecto
@@ -28,22 +29,31 @@ let checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
   JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
   |> ignore
 
+let testProp testName = testPropertyWithConfig propConfig testName
+let ftestProp testName = ftestPropertyWithConfig propConfig testName
+let ptestProp testName = ptestPropertyWithConfig propConfig testName
+
 [<Tests>]
 let tests =
   testList "Compatibility (Server defined <----> NSwag generated)" [
-    testPropertyWithConfig propConfig "LoopOutRequest" <| fun (serverDto: LoopOutRequest) ->
+    testProp "LoopOutRequest" <| fun (serverDto: LoopOutRequest) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LoopOutRequest, LoopOutRequest>
 
-    testPropertyWithConfig propConfig "LoopOutResponse" <| fun (serverDto: LoopOutResponse) ->
+    testProp "LoopOutResponse" <| fun (serverDto: LoopOutResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LoopOutResponse, LoopOutResponse>
 
-    testPropertyWithConfig propConfig "LoopInRequest" <| fun (serverDto: LoopInRequest) ->
+    testProp "LoopInRequest" <| fun (serverDto: LoopInRequest) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LoopInRequest, LoopInRequest>
 
-    testPropertyWithConfig propConfig "LoopInResponse" <| fun (serverDto: LoopInResponse) ->
+    testProp "LoopInResponse" <| fun (serverDto: LoopInResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LoopInResponse, LoopInResponse>
 
-    testPropertyWithConfig propConfig "GetInfoResponse" <| fun (serverDto: GetInfoResponse) ->
+    testProp "GetInfoResponse" <| fun (serverDto: GetInfoResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.GetInfoResponse, GetInfoResponse>
+
+    testProp "OngoingSwap" <| fun (serverDto: GetOngoingSwapResponse) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.GetOngoingSwapResponse, GetOngoingSwapResponse>
+    testProp "SwapHistory" <| fun (serverDto: GetSwapHistoryResponse) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.GetSwapHistoryResponse, GetSwapHistoryResponse>
   ]
 

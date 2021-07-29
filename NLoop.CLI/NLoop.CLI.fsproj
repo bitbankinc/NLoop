@@ -13,6 +13,7 @@
         <Compile Include="SubCommands\GetInfo.fs" />
         <Compile Include="SubCommands\LoopIn.fs" />
         <Compile Include="SubCommands\LoopOut.fs" />
+        <Compile Include="SubCommands\Swap.fs" />
         <Compile Include="CommandLine.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
