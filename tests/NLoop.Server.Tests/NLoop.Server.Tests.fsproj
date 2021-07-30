@@ -36,7 +36,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
-    <ProjectReference Include="..\DockerComposeFixture\DockerComposeFixture\DockerComposeFixture.csproj" />
     <ProjectReference Include="..\NLoop.Server.PropertyTests\NLoop.Server.PropertyTests.fsproj" />
   </ItemGroup>
 

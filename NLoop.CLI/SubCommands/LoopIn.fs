@@ -17,21 +17,20 @@ open NLoop.CLI
 module LoopIn =
   let handle (host: IHost) =
     task {
-      let cli = host.Services.GetRequiredService<NLoopClient>()
-      let conf = host.Services.GetRequiredService<IConfiguration>()
-      let cryptoCode = conf.GetValue<CryptoCode>("cryptocode")
-      let opts = host.Services.GetRequiredService<IOptions<NLoop.Server.NLoopOptions>>()
-      cli.Configure(opts.Value)
+      let cli = host.Services.GetNLoopClient()
+      let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
+      let pr = host.Services.GetRequiredService<ParseResult>()
+      req.Pair_id <- pr.ValueForOption<string>("pair_id")
+      req.Amount <- pr.ValueForOption<int64>("amount")
+      req.Channel_id <-
+        pr.ValueForOption<uint64>("channel_id")
+        |> ShortChannelId.FromUInt64
+        |> fun cid -> cid.ToString()
+      req.Label <-
+        pr.ValueForOption<string>("label")
       try
-        let req = host.Services.GetRequiredService<IOptions<LoopInRequest>>().Value
-        let pr = host.Services.GetRequiredService<ParseResult>()
-        req.Pair_id <- pr.ValueForOption<string>("pair_id")
-        req.Amount <- pr.ValueForOption<int64>("amount")
-        req.Channel_id <-
-          pr.ValueForOption<uint64>("channel_id")
-          |> ShortChannelId.FromUInt64
-          |> fun cid -> cid.ToString()
-        return! cli.InAsync(req)
+        let! resp = cli.InAsync(req)
+        printfn $"{resp.ToJson()}"
       with
       | :? ApiException<Response> as ex ->
         let str =

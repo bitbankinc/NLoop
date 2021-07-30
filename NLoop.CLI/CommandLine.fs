@@ -31,4 +31,5 @@ module NLoopCLICommandLine =
     rc.AddCommand(LoopOut.command)
     rc.AddCommand(LoopIn.command)
     rc.AddCommand(GetInfo.command)
+    rc.AddCommand(Swap.command)
     rc

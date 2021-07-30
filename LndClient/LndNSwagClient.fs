@@ -156,7 +156,6 @@ type LndNSwagClient(network: Network, restSettings: LndRestSettings, ?defaultHtt
     }
 
     member this.QueryRoutes(nodeId, amount) = task {
-      printfn $"\n\nquerying the routes with amount_satoshi: {amount.Satoshi.ToString()}\n\n"
       let! resp = baseRpcClient.QueryRoutesAsync(nodeId.ToHex(), amount.Satoshi.ToString()).ConfigureAwait false
       let hops =
         resp.Routes

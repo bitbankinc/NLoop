@@ -49,6 +49,10 @@ curl http://localhost:5000/v1/info
 
 Check out our [`openapi.yml`](./openapi.yml) for the REST API specification.
 
+There is a one endpoint which is not included in the spec.
+That is a WebSocket endpoint for listening to events.
+* `/v1/events`
+
 ## Why use NLoop?
 
 ### Event Sourcing

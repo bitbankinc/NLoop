@@ -105,10 +105,11 @@ module Swap =
       | RefundTxPublished _-> 256us + 2us
 
       | NewTipReceived _ -> 512us + 0us
-      | FinishedByError _ -> 512us + 1us
 
       | FinishedSuccessfully _ -> 1024us + 0us
       | FinishedByRefund _ -> 1024us + 1us
+      | FinishedByError _ -> 1024us + 2us
+
       | UnknownTagEvent (t, _) -> t
 
     member this.Type =
@@ -124,9 +125,10 @@ module Swap =
 
       | NewTipReceived _ -> "new_tip_received"
 
-      | FinishedByError _ -> "finished_by_error"
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
+      | FinishedByError _ -> "finished_by_error"
+
       | UnknownTagEvent _ -> "unknown_version_event"
     member this.ToEventSourcingEvent effectiveDate source : ESEvent<Event> =
       {
@@ -134,8 +136,6 @@ module Swap =
         Type = (entityType + "-" + this.Type) |> EventType.EventType
         Data = this
       }
-
-  let KnownEventVersions = [|0uy|]
 
   type Error =
     | TransactionError of string
@@ -170,8 +170,8 @@ module Swap =
             match Utils.ToUInt16(b.[0..1], false) with
             | 0us | 1us | 2us | 3us
             | 256us | 257us | 258us
-            | 512us | 513us
-            | 1024us | 1025us ->
+            | 512us
+            | 1024us | 1025us | 1026us ->
               JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[2..], jsonConverterOpts)
             | v ->
               UnknownTagEvent(v, b.[2..])
@@ -243,12 +243,12 @@ module Swap =
             let! claimTx =
               Transactions.createClaimTx
                 (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.OurNetwork))
-                (loopOut.ClaimKey)
-                (loopOut.Preimage)
-                (loopOut.RedeemScript)
-                (feeRate)
-                (lockupTx.Tx)
-                (loopOut.OurNetwork)
+                loopOut.ClaimKey
+                loopOut.Preimage
+                loopOut.RedeemScript
+                feeRate
+                lockupTx.Tx
+                loopOut.OurNetwork
               |> expectTxError "claim tx"
             do!
               broadcaster.BroadcastTx(claimTx, counterPartyCryptoCode)
@@ -267,7 +267,7 @@ module Swap =
         | SwapUpdate u, In(_height, loopIn) ->
           match u.SwapStatus with
           | SwapStatusType.InvoiceSet ->
-            let (struct (_ourCryptoCode, counterPartyCryptoCode)) = loopIn.PairId
+            let struct (_ourCryptoCode, counterPartyCryptoCode) = loopIn.PairId
             let! utxos =
               utxoProvider.GetUTXOs(loopIn.ExpectedAmount, counterPartyCryptoCode)
               |> TaskResult.mapError(UTXOProviderError)
@@ -278,17 +278,17 @@ module Swap =
               |> TaskResult.mapError(FailedToGetAddress)
             let psbt =
               Transactions.createSwapPSBT
-                (utxos)
+                utxos
                 loopIn.RedeemScript
-                (loopIn.ExpectedAmount)
+                loopIn.ExpectedAmount
                 feeRate
                 change
                 loopIn.TheirNetwork
-              |> function | Ok x -> x | Error e -> failwithf "%A" e
+              |> function | Ok x -> x | Error e -> failwith $"%A{e}"
             let! psbt = utxoProvider.SignSwapTxPSBT(psbt, counterPartyCryptoCode)
             match psbt.TryFinalize() with
             | false, e ->
-              return raise <| Exception(sprintf "%A" (e |> Seq.toList))
+              return raise <| Exception $"%A{e |> Seq.toList}"
             | true, _ ->
               let tx = psbt.ExtractTransaction()
               do! broadcaster.BroadcastTx(tx, counterPartyCryptoCode)
@@ -332,13 +332,13 @@ module Swap =
               feeEstimator.Estimate(theirCC)
             let! refundTx =
               Transactions.createRefundTx
-                (loopIn.LockupTransactionHex.Value)
-                (loopIn.RedeemScript)
+                loopIn.LockupTransactionHex.Value
+                loopIn.RedeemScript
                 fee
-                (refundAddress)
-                (loopIn.RefundPrivateKey)
-                (loopIn.TimeoutBlockHeight)
-                (loopIn.TheirNetwork)
+                refundAddress
+                loopIn.RefundPrivateKey
+                loopIn.TimeoutBlockHeight
+                loopIn.TheirNetwork
               |> expectTxError "refund tx"
 
             do! broadcaster.BroadcastTx(refundTx, theirCC)
@@ -362,15 +362,15 @@ module Swap =
     match event, state with
     | NewLoopOutAdded(h, x), HasNotStarted ->
       Out (h, x)
-    | ClaimTxPublished (txid), Out(h, x) ->
+    | ClaimTxPublished txid, Out(h, x) ->
       Out (h, { x with ClaimTransactionId = Some txid })
     | OffChainOfferResolved(preimage), Out(h, x) ->
       Out(h, { x with Preimage = preimage })
 
     | NewLoopInAdded(h, x), HasNotStarted ->
       In (h, x)
-    | SwapTxPublished (tx), In(h, x) ->
-      In (h, { x with LockupTransactionHex = Some(tx) })
+    | SwapTxPublished tx, In(h, x) ->
+      In (h, { x with LockupTransactionHex = Some tx })
     | RefundTxPublished txid, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
 

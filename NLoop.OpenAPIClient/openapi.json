@@ -126,7 +126,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GetSwapStatusResponse"
+                  "$ref": "#/components/schemas/GetOngoingSwapResponse"
                 }
               }
             }
@@ -373,8 +373,7 @@
         "type": "object",
         "required": [
           "version",
-          "supported_coins",
-          null
+          "supported_coins"
         ],
         "properties": {
           "version": {
@@ -402,11 +401,43 @@
       "GetSwapResponse": {
         "type": "object"
       },
-      "GetSwapHistoryResponse": {
-        "type": "object"
+      "ShortSwapSummary": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "SuccessfullyFinished",
+              "FinishedByError",
+              "FinishedByRefund",
+              "OnGoing"
+            ]
+          },
+          "error_msg": {
+            "type": "string",
+            "nullable": true
+          },
+          "refund_txid": {
+            "type": "string",
+            "nullable": true
+          }
+        }
       },
-      "GetSwapStatusResponse": {
-        "type": "object"
+      "GetSwapHistoryResponse": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ShortSwapSummary"
+        }
+      },
+      "GetOngoingSwapResponse": {
+        "type": "array",
+        "description": "list of swap",
+        "items": {
+          "type": "object"
+        }
       },
       "LoopOutResponse": {
         "type": "object",

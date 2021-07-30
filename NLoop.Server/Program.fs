@@ -54,7 +54,6 @@ module App =
         GET >=>
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
-          route "/events" >=> QueryHandlers.handleListenEvent
         subRoute "/loop" (choose [
           POST >=>
             route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
@@ -63,7 +62,7 @@ module App =
         subRoute "/swaps" (choose [
           GET >=>
             route "/history" >=> QueryHandlers.handleGetSwapHistory
-            route "/ongoing" >=> QueryHandlers.handleGetSwapStatus
+            route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
             routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
         ])
       ])
@@ -90,8 +89,7 @@ module App =
          |> ignore
 
   let configureSignalR(endpoints: IEndpointRouteBuilder) =
-      endpoints.MapHub<_>("/v1/events") |> ignore
-      ()
+      endpoints.MapHub<EventHub>("/v1/events") |> ignore
 
   let configureApp (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IWebHostEnvironment>()

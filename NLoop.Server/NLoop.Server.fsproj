@@ -29,6 +29,7 @@
     <Compile Include="RPCDTOs\Client.fs" />
     <Compile Include="RPCDTOs\Common.fs" />
     <Compile Include="RPCDTOs\LoopInOut.fs" />
+    <Compile Include="RPCDTOs\Query.fs" />
     <Compile Include="BoltzRequestResponse.fs" />
     <Compile Include="EventAggregator.fs" />
     <Compile Include="LightningClientProvider.fs" />
