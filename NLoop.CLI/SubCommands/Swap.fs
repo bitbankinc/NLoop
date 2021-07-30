@@ -4,13 +4,18 @@ open System
 open System.CommandLine
 open System.CommandLine.Invocation
 
+open System.Text.Json
 open System.Threading
 open FSharp.Control.Tasks.Affine
 
 open Microsoft.Extensions.Hosting
 
+open Microsoft.Extensions.Options
+open NLoop.Server
 open NLoopClient
 open NLoop.CLI
+open Microsoft.Extensions.DependencyInjection
+open NLoop.Domain.IO
 
 [<RequireQualifiedAccess>]
 module OnGoing =
@@ -58,9 +63,15 @@ module Listen =
             cli.ListenToEventsAsync(ct)
             |> AsyncSeq.ofAsyncEnum
           printfn "Start Listening"
+          let j = JsonSerializerOptions()
+          j.AddNLoopJsonConverters()
+          j.WriteIndented <- true
           do!
             ae
-              |> AsyncSeq.iter(fun ev -> printfn $"{ev}")
+            |> AsyncSeq.iter(fun ev ->
+              let v = JsonSerializer.Serialize(ev, j)
+              printfn $"{v}"
+            )
         with
         | :? TaskCanceledException as _ex ->
           printfn "Cancelled"

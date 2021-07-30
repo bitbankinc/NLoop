@@ -54,7 +54,6 @@ module App =
         GET >=>
           route "/info" >=> QueryHandlers.handleGetInfo
           route "/version" >=> json Constants.AssemblyVersion
-          route "/events" >=> QueryHandlers.handleListenEvent
         subRoute "/loop" (choose [
           POST >=>
             route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
