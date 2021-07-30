@@ -23,6 +23,7 @@ type SwapEventWithId = {
   Id: SwapId
   Data: Swap.Event
 }
+
 type SwapErrorWithId = {
   Id: SwapId
   Error: EventSourcingError<Swap.Error>

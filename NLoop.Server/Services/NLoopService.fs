@@ -76,7 +76,12 @@ type NLoopExtensions() =
             u.Uri
         )
         |> ignore
-      this.AddSignalR() |> ignore
+      this
+        .AddSignalR()
+        .AddJsonProtocol(fun opts ->
+          opts.PayloadSerializerOptions.AddNLoopJsonConverters()
+        )
+        |> ignore
 
       this
         .AddHostedService<SwapProcessManager>()

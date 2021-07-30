@@ -4,10 +4,10 @@ open System
 open System.CommandLine
 open System.CommandLine.Invocation
 
+open System.Threading
 open FSharp.Control.Tasks.Affine
 
 open Microsoft.Extensions.Hosting
-open Microsoft.Extensions.DependencyInjection
 
 open NLoopClient
 open NLoop.CLI
@@ -44,8 +44,55 @@ module History =
     command
 
 
+open FSharp.Control
+open System.Threading.Tasks
+
+[<RequireQualifiedAccess>]
+module Listen =
+  let private handle (host: IHost) =
+    let a ct =
+      asyncSeq {
+        let cli = host.Services.GetNLoopClient()
+        try
+          let ae =
+            cli.ListenToEventsAsync(ct)
+            |> AsyncSeq.ofAsyncEnum
+          printfn "Start Listening"
+          do!
+            ae
+              |> AsyncSeq.iter(fun ev -> printfn $"{ev}")
+        with
+        | :? TaskCanceledException as _ex ->
+          printfn "Cancelled"
+          return ()
+        | :? ApiException<Response> as ex ->
+          let str =
+            let errors = ex.Result.Errors |> List.ofSeq
+            $"\n{ex.Message}.\nStatusCode: {ex.StatusCode}.\nerrors: {errors}"
+          return failwith str
+      }
+    let cts = new CancellationTokenSource()
+    Console.CancelKeyPress.Add(fun _e ->
+      cts.Cancel()
+    )
+    try
+      a cts.Token
+      |> AsyncSeq.toListAsync
+      |> Async.StartAsTask
+      :> Task
+    with
+    | :? TaskCanceledException as _ex ->
+      Task.CompletedTask
+
+  let command: Command =
+    let command = Command("listen", "Listen to events")
+    command.Handler <-
+      CommandHandler.Create(Func<IHost,_>(handle))
+    command
+
 let command: Command =
   let command = Command("swap", "Query swaps")
   command.AddCommand(OnGoing.command)
   command.AddCommand(History.command)
+  command.AddCommand(Listen.command)
   command

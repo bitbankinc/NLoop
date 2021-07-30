@@ -35,7 +35,7 @@ module LoopHandlers =
         let n = opts.Value.GetNetwork(ourCryptoCode)
         let repo = ctx.GetService<IRepositoryProvider>().GetRepository ourCryptoCode
         let boltzCli = ctx.GetService<BoltzClient>()
-        use! claimKey = repo.NewPrivateKey()
+        let! claimKey = repo.NewPrivateKey()
         let! preimage = repo.NewPreimage()
         let preimageHash = preimage.Hash
 
@@ -93,8 +93,8 @@ module LoopHandlers =
                 .GetService<IEventAggregator>()
                 .GetObservable<SwapEventWithId, SwapErrorWithId>()
                 |> Observable.filter(function
-                                     | Choice1Of2 re -> re.Id.Value = outResponse.Id
-                                     | Choice2Of2 re -> re.Id.Value = outResponse.Id)
+                                     | Choice1Of2 { Id = swapId }
+                                     | Choice2Of2 { Id = swapId } -> swapId.Value = outResponse.Id)
 
             do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
             let! firstErrorOrTxId =

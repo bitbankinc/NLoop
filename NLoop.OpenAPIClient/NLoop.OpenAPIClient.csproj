@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
+    <ProjectReference Include="..\NLoop.Server\NLoop.Server.fsproj" />
   </ItemGroup>
 
   <Target Name="GenerateNSwagClient">

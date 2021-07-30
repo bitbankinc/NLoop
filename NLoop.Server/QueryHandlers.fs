@@ -14,7 +14,6 @@ open NLoop.Server.DTOs
 open FSharp.Control.Reactive
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
-open NLoop.Server.Services
 
 module QueryHandlers =
 

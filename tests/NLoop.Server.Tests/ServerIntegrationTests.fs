@@ -13,6 +13,7 @@ open LndClient
 open NBitcoin
 open NBitcoin.Crypto
 open NLoop.Domain
+open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server
 open NLoop.Server.Services
@@ -149,6 +150,9 @@ type ServerIntegrationTestsClass(dockerFixture: DockerFixture, output: ITestOutp
       let! _ = reader.MoveNextAsync()
       let i = reader.Current
       Assert.NotNull(i)
-      do i |> function | Swap.Event.NewLoopOutAdded _ -> () | e -> failwithf "Unexpected event %A" e
+      do i
+      |> function
+        | { SwapEventWithId.Data = Swap.Event.NewLoopOutAdded _ } -> ()
+        | e -> failwithf "Unexpected event %A" e
       ()
     }

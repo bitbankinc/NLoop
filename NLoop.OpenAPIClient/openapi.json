@@ -403,9 +403,6 @@
       },
       "ShortSwapSummary": {
         "type": "object",
-        "required": [
-          "type"
-        ],
         "properties": {
           "type": {
             "type": "string",
@@ -417,10 +414,12 @@
             ]
           },
           "error_msg": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "refund_txid": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           }
         }
       },

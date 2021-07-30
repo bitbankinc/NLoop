@@ -22,6 +22,10 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
   let mutable subsc1 = null
   let mutable subsc2 = null
 
+  let handleError swapId msg  = unitTask {
+    logger.LogError($"{msg}")
+    do! actor.Execute(swapId, Swap.Command.SetValidationError msg, nameof(SwapProcessManager))
+  }
   interface IHostedService with
     member this.StartAsync(_ct) =
       subsc1 <-
@@ -38,12 +42,10 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
               | Ok p ->
                 do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
               | Error e ->
-                logger.LogError(e)
-                do! actor.Execute(swapId, Swap.Command.SetValidationError(e))
+                do! handleError swapId e
             with
             | ex ->
-              logger.LogError($"{ex}")
-              do! actor.Execute(swapId, Swap.Command.SetValidationError(ex.Message))
+                do! handleError swapId (ex.Message)
           })
         |> Observable.subscribe(id)
 

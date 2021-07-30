@@ -313,8 +313,10 @@ components:
             - OnGoing
         error_msg:
           type: string
+          nullable: true
         refund_txid:
           type: string
+          nullable: true
       required:
         - "type"
 

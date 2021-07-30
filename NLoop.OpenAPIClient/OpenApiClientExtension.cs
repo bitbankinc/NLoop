@@ -6,26 +6,39 @@ using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.FSharp.Core;
+using NBitcoin;
 using NLoop.Domain;
+using NLoop.Domain.IO;
+using NLoop.Server.Actors;
 
 namespace NLoopClient
 {
   public partial class NLoopClient
   {
-    HubConnection? _connection;
-    public IAsyncEnumerable<Swap.Event> ListenToEventsAsync(CancellationToken cancellationToken = default)
+    HubConnection? connection;
+    public async IAsyncEnumerable<SwapEventWithId> ListenToEventsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-      var urlBuilder = new System.Text.StringBuilder();
-      urlBuilder.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/events");
-      var uri = new Uri(urlBuilder.ToString(), UriKind.RelativeOrAbsolute);
+      var sb = new System.Text.StringBuilder();
+      sb.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/events");
+      var uri = new Uri(sb.ToString(), UriKind.RelativeOrAbsolute);
 
-      _connection =
+      connection =
         new HubConnectionBuilder()
           .WithUrl(uri)
           .WithAutomaticReconnect()
+          .AddJsonProtocol(p =>
+          {
+            p.PayloadSerializerOptions.AddNLoopJsonConverters(FSharpOption<Network>.None);
+          })
           .Build();
-      var s = _connection.StreamAsync<Swap.Event>("ListenSwapEvents", cancellationToken);
-      return s;
+      await connection.StartAsync(cancellationToken);
+      var s = connection.StreamAsync<SwapEventWithId>("ListenSwapEvents", cancellationToken);
+      await foreach (var e in s.WithCancellation(cancellationToken))
+      {
+        yield return e;
+      }
     }
   }
 }

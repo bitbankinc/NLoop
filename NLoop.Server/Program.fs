@@ -90,8 +90,7 @@ module App =
          |> ignore
 
   let configureSignalR(endpoints: IEndpointRouteBuilder) =
-      endpoints.MapHub<_>("/v1/events") |> ignore
-      ()
+      endpoints.MapHub<EventHub>("/v1/events") |> ignore
 
   let configureApp (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
