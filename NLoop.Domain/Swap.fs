@@ -410,6 +410,16 @@ module Swap =
       serializer
       entityType
 
+  type EventWithId = {
+    Id: SwapId
+    Event: Event
+  }
+
+  type ErrorWithId = {
+    Id: SwapId
+    Error: EventSourcingError<Error>
+  }
+
   let getHandler aggr eventStoreUri =
     getRepository eventStoreUri
     |> Handler.Create aggr

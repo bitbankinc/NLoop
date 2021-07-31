@@ -11,14 +11,13 @@ using Microsoft.FSharp.Core;
 using NBitcoin;
 using NLoop.Domain;
 using NLoop.Domain.IO;
-using NLoop.Server.Actors;
 
 namespace NLoopClient
 {
   public partial class NLoopClient
   {
     HubConnection? connection;
-    public async IAsyncEnumerable<SwapEventWithId> ListenToEventsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Swap.EventWithId> ListenToEventsAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
       var sb = new System.Text.StringBuilder();
       sb.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/events");
@@ -34,7 +33,7 @@ namespace NLoopClient
           })
           .Build();
       await connection.StartAsync(cancellationToken);
-      var s = connection.StreamAsync<SwapEventWithId>("ListenSwapEvents", cancellationToken);
+      var s = connection.StreamAsync<Swap.EventWithId>("ListenSwapEvents", cancellationToken);
       await foreach (var e in s.WithCancellation(cancellationToken))
       {
         yield return e;

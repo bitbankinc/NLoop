@@ -140,7 +140,7 @@ module App =
       services.AddGiraffe() |> ignore
 
 
-type Startup(conf: IConfiguration, env: IHostEnvironment) =
+type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
     App.configureApp(appBuilder)
 
@@ -195,7 +195,7 @@ module Main =
               | _ ->
                 ipAddresses.Add(IPAddress.IPv6Any)
 
-              if (opts.NoHttps) then
+              if opts.NoHttps then
                 for ip in ipAddresses do
                   logger.LogInformation($"Binding to http://{ip}")
                   kestrelOpts.Listen(ip, port = opts.RPCPort, configure=fun (s: ListenOptions) -> s.UseConnectionLogging() |> ignore)

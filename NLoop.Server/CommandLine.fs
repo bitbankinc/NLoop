@@ -17,7 +17,7 @@ module NLoopServerCommandLine =
   module Validators =
     let getValidators =
       seq [
-        let cryptoCodeValidator = ValidateSymbol(fun (r: CommandResult) ->
+        let _cryptoCodeValidator = ValidateSymbol(fun (r: CommandResult) ->
           let onChainArgName = nameof(NLoopOptions.Instance.OnChainCrypto)
           let onChain = r.GetArgumentValueOrDefault<SupportedCryptoCode[]>($"--{onChainArgName}")
           let offChainArgName = nameof(NLoopOptions.Instance.OffChainCrypto)

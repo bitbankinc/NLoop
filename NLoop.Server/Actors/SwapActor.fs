@@ -19,16 +19,6 @@ module private Helpers =
       Swap.Deps.GetChangeAddress = g
       Swap.Deps.GetRefundAddress = g }
 
-type SwapEventWithId = {
-  Id: SwapId
-  Data: Swap.Event
-}
-
-type SwapErrorWithId = {
-  Id: SwapId
-  Error: EventSourcingError<Swap.Error>
-}
-
 type SwapActor(broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
@@ -60,9 +50,9 @@ type SwapActor(broadcaster: IBroadcaster,
       |> List.iter(fun e ->
         eventAggregator.Publish e
         eventAggregator.Publish e.Data
-        eventAggregator.Publish({ Id = swapId; Data = e.Data })
+        eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
       )
     | Error s ->
       logger.LogError($"Error when executing swap handler %A{s}")
-      eventAggregator.Publish({ Id = swapId; Error = s })
+      eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }

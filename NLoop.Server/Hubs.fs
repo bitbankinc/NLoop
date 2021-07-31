@@ -13,20 +13,20 @@ open FSharp.Control.Reactive
 open NLoop.Server.Actors
 
 type IEventClient =
-  abstract member HandleSwapEvent: SwapEventWithId -> Task
+  abstract member HandleSwapEvent: Swap.EventWithId -> Task
 
 type EventHub(eventAggregator: IEventAggregator) =
   inherit Hub()
 
   let mutable subscription = null
 
-  member this.ListenSwapEvents([<EnumeratorCancellation>] ct: CancellationToken): IAsyncEnumerable<SwapEventWithId> =
+  member this.ListenSwapEvents([<EnumeratorCancellation>] ct: CancellationToken): IAsyncEnumerable<Swap.EventWithId> =
     let channel =
       let opts = BoundedChannelOptions(2)
       opts
-      |> Channel.CreateBounded<SwapEventWithId>
+      |> Channel.CreateBounded<Swap.EventWithId>
     subscription <-
-      eventAggregator.GetObservable<SwapEventWithId>()
+      eventAggregator.GetObservable<Swap.EventWithId>()
       |> Observable.flatmapTask(fun e ->
         task {
           let! shouldContinue = channel.Writer.WaitToWriteAsync(ct)

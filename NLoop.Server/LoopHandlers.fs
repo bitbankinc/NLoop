@@ -91,7 +91,7 @@ module LoopHandlers =
             let obs =
               ctx
                 .GetService<IEventAggregator>()
-                .GetObservable<SwapEventWithId, SwapErrorWithId>()
+                .GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
                 |> Observable.filter(function
                                      | Choice1Of2 { Id = swapId }
                                      | Choice2Of2 { Id = swapId } -> swapId.Value = outResponse.Id)
@@ -101,8 +101,8 @@ module LoopHandlers =
               obs
               |> Observable.choose(
                 function
-                | Choice1Of2({ Data = Swap.Event.ClaimTxPublished txId }) -> txId |> box |> Some
-                | Choice1Of2( { Data = Swap.Event.FinishedByError(_id, err) }) -> err |> box |> Some
+                | Choice1Of2({ Event = Swap.Event.ClaimTxPublished txId }) -> txId |> box |> Some
+                | Choice1Of2( { Event = Swap.Event.FinishedByError(_id, err) }) -> err |> box |> Some
                 | Choice2Of2({ Error = e }) -> e.ToString() |> box |> Some
                 | _ -> None
                 )
