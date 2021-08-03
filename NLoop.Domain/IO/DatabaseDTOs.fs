@@ -79,3 +79,21 @@ type LoopIn = {
   member this.Validate() =
     if this.ExpectedAmount <= Money.Zero then Error ($"LoopIn has non-positive expected amount {this.ExpectedAmount}") else
     Ok()
+
+
+[<Struct>]
+type AutoLoopRule = {
+  Channel: ChannelId
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  IncomingThreshold: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  OutgoingThreshold: Money
+}
+
+/// Parameter for the swap. Which is global across channels.
+type SwapParams = {
+  SweepLimit: FeeRate
+  MaxMinerFee: Money
+}

@@ -19,6 +19,7 @@
     <Compile Include="IO\JsonConverters.fs" />
     <Compile Include="IO\DatabaseDTOs.fs" />
     <Compile Include="Swap.fs" />
+    <Compile Include="AutoLoop.fs" />
   </ItemGroup>
 
   <ItemGroup>

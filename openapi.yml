@@ -89,7 +89,7 @@ paths:
   /v1/loop/out:
     post:
       tags:
-        - swap
+        - loop
       requestBody:
         content:
           application/json:
@@ -121,7 +121,7 @@ paths:
   /v1/loop/in:
     post:
       tags:
-        - swap
+        - loop
       requestBody:
         content:
           application/json:
@@ -134,6 +134,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoopInResponse'
+        '400':
+          description: invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    description: error message
+                    minItems: 1
+                    items:
+                      type: string
+  /v1/loop/rule:
+    post:
+      tags:
+        - loop
+        - autoloop
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetRuleRequest'
+      responses:
+        '200':
+          description: OK
         '400':
           description: invalid request
           content:
@@ -357,3 +383,17 @@ components:
           description: >
             The address of the on-chain HTLC
           $ref:  "#/components/schemas/P2WSH"
+
+    SetRuleRequest:
+      type: object
+      properties:
+        incoming_threshold:
+          type: integer
+          format: int64
+        outgoing_threshold:
+          type: integer
+          format: int64
+        channel_pubkey:
+          $ref: '#/components/schemas/PubKey'
+        short_channel_id:
+          $ref: "#/components/schemas/ShortChannelId"

@@ -11,13 +11,26 @@ open NLoop.Domain
 
 type ChainOptions() =
   static member val Instance = ChainOptions() with get
+  member val CryptoCode = SupportedCryptoCode.BTC with get, set
+
+  // --- on-chain node host ---
   member val RPCHost = "localhost" with get, set
   member val RPCPort = 18332 with get, set
   member val RPCUser = String.Empty with get, set
   member val RPCPassword = String.Empty with get, set
   member val RPCCookieFile = String.Empty with get, set
+  // --- ---
 
-  member val CryptoCode = SupportedCryptoCode.BTC with get, set
+  // --- swap params ---
+
+  /// Confirmation target for the sweep in on-chain swap
+  member val SweepConf = 6 with get, set
+
+
+  // --- ---
+
+
+  // --- properties and methods ---
 
   member this.GetNetwork(chainName: string) =
     this.CryptoCode.ToNetworkSet().GetNetwork(ChainName chainName)
@@ -25,10 +38,6 @@ type ChainOptions() =
   member this.GetRPCClient(chainName: string) =
     RPCClient($"{this.RPCUser}:{this.RPCPassword}", $"{this.RPCHost}:{this.RPCPort}", this.GetNetwork(chainName))
 
-  // --- ln client ---
-  member val LightningConnectionString = String.Empty with get, set
-
-  // --- ---
 
 type NLoopOptions() =
   // -- general --

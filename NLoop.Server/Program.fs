@@ -32,6 +32,7 @@ open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
@@ -58,6 +59,7 @@ module App =
           POST >=>
             route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
             route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> handleLoopIn
+            route "/rule" >=> mustAuthenticate >=> bindJson<SetRuleRequest> AutoLoopHandlers.handleSetRule
         ])
         subRoute "/swaps" (choose [
           GET >=>

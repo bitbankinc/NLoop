@@ -15,7 +15,7 @@ open NLoop.Domain.Utils.EventStore
 [<RequireQualifiedAccess>]
 /// List of ubiquitous languages
 /// * SwapTx (LockupTx) ... On-Chain TX which offers funds with HTLC.
-/// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage
+/// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage. a.k.a "sweep"
 /// * RefundTx ... TX to take funds from SwapTx in case of the timeout.
 /// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient to claim SwapTx.
 /// * Payment ... off-chain payment from counterparty to us.

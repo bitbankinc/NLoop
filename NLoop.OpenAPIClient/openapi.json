@@ -137,7 +137,7 @@
     "/v1/loop/out": {
       "post": {
         "tags": [
-          "swap"
+          "loop"
         ],
         "operationId": "out",
         "requestBody": {
@@ -191,7 +191,7 @@
     "/v1/loop/in": {
       "post": {
         "tags": [
-          "swap"
+          "loop"
         ],
         "operationId": "in",
         "requestBody": {
@@ -213,6 +213,49 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "array",
+                      "description": "error message",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/loop/rule": {
+      "post": {
+        "tags": [
+          "loop",
+          "autoloop"
+        ],
+        "operationId": "rule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRuleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           },
           "400": {
             "description": "invalid request",
@@ -464,6 +507,25 @@
           "address": {
             "description": "The address of the on-chain HTLC\n",
             "$ref": "#/components/schemas/P2WSH"
+          }
+        }
+      },
+      "SetRuleRequest": {
+        "type": "object",
+        "properties": {
+          "incoming_threshold": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "outgoing_threshold": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "channel_pubkey": {
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "short_channel_id": {
+            "$ref": "#/components/schemas/ShortChannelId"
           }
         }
       }
