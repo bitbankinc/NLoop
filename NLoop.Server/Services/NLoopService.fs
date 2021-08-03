@@ -52,10 +52,6 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
-          .AddSingleton<IRepositoryProvider, RepositoryProvider>()
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
-          )
 
           .AddSingleton<ISwapEventListener, BoltzListener>()
           .AddSingleton<ISwapEventListener, BlockchainListener>()
