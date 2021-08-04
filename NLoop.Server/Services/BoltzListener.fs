@@ -1,6 +1,7 @@
 namespace NLoop.Server.Services
 
 
+open System
 open System.Collections.Concurrent
 open System.Threading.Tasks
 open DotNetLightning.Utils
@@ -27,18 +28,21 @@ type BoltzListener(boltzClient: BoltzClient,
         // Just to check the connection on startup.
         let! _boltzVersion = boltzClient.GetVersionAsync(ct).ConfigureAwait(false)
 
-        while true do
+        while not <| ct.IsCancellationRequested do
+          do! Task.Delay 5000
+          ct.ThrowIfCancellationRequested()
           for kv in statuses do
-            do! Async.Sleep 5000
             let swapId = kv.Key
             let! resp = boltzClient.GetSwapStatusAsync(swapId.Value, ct).ConfigureAwait(false)
             let isNoChange = kv.Value.IsSome && resp.SwapStatus = kv.Value.Value
-            if (isNoChange) then () else
+            if isNoChange then () else
             if not <| statuses.TryUpdate(swapId, (resp.SwapStatus |> ValueSome), kv.Value) then
               logger.LogWarning($"Failed to update ({swapId})! Probably already finished?")
             else
               do! actor.Execute(swapId, Swap.Command.SwapUpdate(resp.ToDomain))
       with
+      | :? OperationCanceledException ->
+        ()
       | ex ->
         logger.LogCritical($"Connection to Boltz server {boltzClient.HttpClient.BaseAddress} failed!")
         logger.LogError($"{ex.Message}")

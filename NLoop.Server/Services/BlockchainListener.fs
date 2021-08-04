@@ -1,5 +1,6 @@
 namespace NLoop.Server.Services
 
+open System
 open System.Collections.Concurrent
 open System.Threading.Tasks
 open DotNetLightning.Utils
@@ -29,10 +30,9 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
         |> Seq.distinct
         |> Seq.map(fun x -> (opts.Value.GetRPCClient x, x))
 
-      while true do
+      while not <| ct.IsCancellationRequested do
         do! Task.Delay 5000
-        ct.ThrowIfCancellationRequested()
-        for (cli, cc) in clis do
+        for cli, cc in clis do
           let! info = cli.GetBlockchainInfoAsync()
           let newBlockNum = info.Blocks |> uint32 |> BlockHeight
           let isIBDDone = not <| (info.VerificationProgress < 1.0f)
@@ -44,6 +44,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
             for s in swaps.Keys do
               do! actor.Execute(s, cmd, nameof(BlockchainListener))
     with
+    | :? OperationCanceledException ->
+      ()
     | ex ->
       logger.LogError($"{ex}")
   }
