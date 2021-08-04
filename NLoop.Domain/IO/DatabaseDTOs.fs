@@ -92,8 +92,13 @@ type AutoLoopRule = {
   OutgoingThreshold: Money
 }
 
+[<Measure>] type fee
+[<Measure>] type fee_percentage = fee / fee
+
 /// Parameter for the swap. Which is global across channels.
 type SwapParams = {
   SweepLimit: FeeRate
   MaxMinerFee: Money
+  MaxPrepayFee: float<fee_percentage>
+  Budget: Money
 }
