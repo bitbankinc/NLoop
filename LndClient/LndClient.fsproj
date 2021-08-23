@@ -22,4 +22,8 @@
   <ItemGroup>
     <ProjectReference Include="..\LndSwaggerClient\LndSwaggerClient.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="./lightning.proto" GrpcServices="Client" Link="lightning.proto" />
+  </ItemGroup>
 </Project>
