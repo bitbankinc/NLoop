@@ -45,7 +45,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
               do! actor.Execute(s, cmd, nameof(BlockchainListener))
     with
     | :? OperationCanceledException ->
-      ()
+      logger.LogInformation($"Stopping {nameof(BlockchainListener)}...")
     | ex ->
       logger.LogError($"{ex}")
   }

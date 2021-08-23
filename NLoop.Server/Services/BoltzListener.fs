@@ -42,7 +42,7 @@ type BoltzListener(boltzClient: BoltzClient,
               do! actor.Execute(swapId, Swap.Command.SwapUpdate(resp.ToDomain))
       with
       | :? OperationCanceledException ->
-        ()
+        logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
       | ex ->
         logger.LogCritical($"Connection to Boltz server {boltzClient.HttpClient.BaseAddress} failed!")
         logger.LogError($"{ex.Message}")

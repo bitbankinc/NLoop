@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System
+open System.Linq
 open System.Collections.Generic
 open System.IO
 open System.Net.Http
@@ -17,6 +18,7 @@ open NLoop.Domain
 
 type ILightningClientProvider =
   abstract member TryGetClient: crypto: SupportedCryptoCode -> INLoopLightningClient option
+  abstract member GetAllClients: unit -> INLoopLightningClient seq
 
 [<AbstractClass;Sealed;Extension>]
 type ILightningClientProviderExtensions =
@@ -73,4 +75,7 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOp
       match clients.TryGetValue(crypto) with
       | true, v -> v |> Some
       | _, _ -> None
+
+    member this.GetAllClients() =
+      clients.Values.AsEnumerable()
 

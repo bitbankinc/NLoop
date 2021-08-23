@@ -5,6 +5,7 @@ open System
 open System.Text.Json
 open System.Threading.Tasks
 open DotNetLightning.Utils.Primitives
+open LndClient
 open NBitcoin
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -12,17 +13,15 @@ open FsToolkit.ErrorHandling
 open NLoop.Domain.Utils.EventStore
 
 type State = {
-  KnownChannels: ShortChannelId list
   Rules: Map<ShortChannelId, AutoLoopRule>
 }
   with
   static member Zero = {
-    KnownChannels = []
     Rules = Map.empty
   }
 
 type Command =
-  | SetRule of channelId: ShortChannelId * rule: AutoLoopRule
+  | SetRule of rule: AutoLoopRule
 
 [<Literal>]
 let entityType = "autoloop"
@@ -75,26 +74,50 @@ let serializer : Serializer<Event> = {
 
 type Deps = {
   GetSwapParams: unit -> SwapParams
+  GetAllChannels: unit -> Task<ListChannelResponse list>
 }
 
-type Error = string
+type Error =
+  | ChannelDoesNotExist
 
-let executeCommand (_deps: Deps) (_s: State) (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
+let private enhanceEvents date source (events: Event list) =
+  events |> List.map(fun e -> e.ToEventSourcingEvent date source)
+
+let executeCommand (deps: Deps) (_s: State) (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
+  let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
+  let enhance = enhanceEvents effectiveDate source
   taskResult {
     match cmd.Data with
-    | SetRule(_id, _cmd) ->
-      return failwith "todo"
+    | SetRule({ Channel  = channel; IncomingThreshold = inThreshold; OutgoingThreshold = outThreshold }) ->
+      let! channels = deps.GetAllChannels()
+      let maybeNewRule =
+        channels
+        |> Seq.tryPick(fun c ->
+          if c.Id = channel then
+            Some (c.Id, {
+              AutoLoopRule.Channel = c.Id
+              IncomingThreshold = inThreshold
+              OutgoingThreshold =  outThreshold
+            })
+          else
+            None)
+      match maybeNewRule with
+      | Some (cId, rule) ->
+        return [Event.NewRuleAdded(cId, rule)] |> enhance
+      | _ ->
+        return! ChannelDoesNotExist |> Error
   }
 
 let applyChanges(state: State) (event: Event) =
   match event with
-  | NewRuleAdded(_cId, _r) ->
-    state
+  | NewRuleAdded(cId, rule) ->
+    { state with Rules = state.Rules |> Map.add cId rule }
   | UnknownTagEvent _ ->
     state
 
 type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>
-type Handler = Handler<State, Command, Event, Error, SwapId>
+type EntityId = unit
+type Handler = Handler<State, Command, Event, Error, EntityId>
 let getAggregate deps: Aggregate = {
   Zero = State.Zero
   Exec = executeCommand deps

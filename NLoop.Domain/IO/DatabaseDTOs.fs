@@ -83,7 +83,7 @@ type LoopIn = {
 
 [<Struct>]
 type AutoLoopRule = {
-  Channel: ChannelId
+  Channel: ShortChannelId
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   IncomingThreshold: Money
@@ -92,13 +92,12 @@ type AutoLoopRule = {
   OutgoingThreshold: Money
 }
 
-[<Measure>] type fee
-[<Measure>] type fee_percentage = fee / fee
+[<Measure>] type percent
 
 /// Parameter for the swap. Which is global across channels.
 type SwapParams = {
   SweepLimit: FeeRate
   MaxMinerFee: Money
-  MaxPrepayFee: float<fee_percentage>
+  MaxPrepayFee: float<percent>
   Budget: Money
 }
