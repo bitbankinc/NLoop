@@ -40,3 +40,20 @@ let createHttpClient(settings: LndRestSettings, defaultHttpClient: HttpClient op
     else if settings.Uri.Scheme = "http" then
       raise <| InvalidOperationException("AllowInsecure is set to false, but the URI is not using https")
     new HttpClient(handler)
+
+[<Literal>]
+let DefaultBufferSize: int = 16384 // 1024 * 8
+[<Literal>]
+let MaxBufferSize: int = 5242880 // 1024 * 1024 * 5
+
+let withTrailingSlash(s: string) =
+  if s.EndsWith("/", StringComparison.InvariantCulture) then s else s + "/"
+
+let toWebSocketUri(uri: string) =
+  if uri.StartsWith("https://", StringComparison.OrdinalIgnoreCase) then
+    uri.Replace("https://", "wss://")
+  elif uri.StartsWith("http://", StringComparison.OrdinalIgnoreCase) then
+    uri.Replace("http://", "ws://")
+  else
+    uri
+

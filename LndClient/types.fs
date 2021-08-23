@@ -4,6 +4,8 @@ open System
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
+open System.Threading.Channels
+open DotNetLightning.Channel
 open Macaroons
 open NBitcoin.DataEncoders
 open System.Threading
@@ -135,6 +137,24 @@ type ILightningInvoiceListener =
   inherit IDisposable
   abstract member WaitInvoice: ct : CancellationToken -> Task<PaymentRequest>
 
+
+type ListChannelResponse = {
+  Id: ShortChannelId
+  Cap: Money
+  LocalBalance: Money
+  NodeId: PubKey
+}
+type ChannelEventUpdate =
+  | OpenChannel of ListChannelResponse
+  | PendingOpenChannel of ListChannelResponse
+  | ClosedChannel of  {| Id: ShortChannelId; CloseTxHeight: BlockHeight; TxId: uint256 |}
+  | ActiveChannel of ShortChannelId seq
+  | InActiveChannel of ShortChannelId seq
+
+type ILightningChannelEventsListener =
+  inherit IDisposable
+  abstract member WaitChannelChange: unit -> Task<ChannelEventUpdate>
+
 type LndOpenChannelRequest = {
   Private: bool option
   CloseAddress: string option
@@ -147,29 +167,31 @@ type LndOpenChannelError = {
   Message: string
 }
 
+type IListener<'T> =
+  inherit IDisposable
+  abstract member Reader: ChannelReader<'T>
 
-type ListChannelResponse = {
-  Id: ShortChannelId
-  Cap: Money
-  LocalBalance: Money
-}
 type INLoopLightningClient =
-  abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
+  abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
     paymentHash: Primitives.PaymentHash *
     value: LNMoney *
     expiry: TimeSpan *
-    memo: string
+    memo: string *
+    ?ct: CancellationToken
       -> Task<PaymentRequest>
   abstract member GetInvoice:
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
     expiry: TimeSpan *
-    memo: string -> Task<PaymentRequest>
-  abstract member Offer: invoice: PaymentRequest -> Task<Result<Primitives.PaymentPreimage, string>>
-  abstract member Listen: unit -> Task<ILightningInvoiceListener>
-  abstract member GetInfo: unit -> Task<obj>
-  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney -> Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
-  abstract member ConnectPeer: nodeId: PubKey * host: string -> Task
-  abstract member ListChannels: unit -> Task<ListChannelResponse list>
+    memo: string *
+    ?ct: CancellationToken
+     -> Task<PaymentRequest>
+  abstract member Offer: invoice: PaymentRequest * ?ct: CancellationToken -> Task<Result<Primitives.PaymentPreimage, string>>
+  abstract member Listen: ?ct: CancellationToken  -> Task<ILightningInvoiceListener>
+  abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
+  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?ct: CancellationToken -> Task<Route>
+  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<unit, LndOpenChannelError>>
+  abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
+  abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
+  abstract member SubscribeChannelChange: ?ct: CancellationToken -> Task<IListener<ChannelEventUpdate>>
