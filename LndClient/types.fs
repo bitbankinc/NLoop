@@ -1,6 +1,7 @@
 ﻿namespace LndClient
 
 open System
+open System.Collections.Generic
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
@@ -52,7 +53,6 @@ type HttpClientExtensions =
     httpRequestMessage.Headers.AddLndAuthentication(lndAuth)
 
 open FsToolkit.ErrorHandling
-open System.Net
 [<AutoOpen>]
 module private Helpers =
   let parseUri str =
@@ -73,6 +73,30 @@ module private Helpers =
     | ex ->
       Error($"{ex}")
 
+  let hex = HexEncoder()
+[<Extension;AbstractClass;Sealed>]
+type GrpcTypeExt =
+  [<Extension>]
+  static member ToOutPoint(a: Lnrpc.ChannelPoint) =
+    let o = OutPoint()
+    o.Hash <-
+      if a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.FundingTxidBytes then
+        a.FundingTxidBytes.ToByteArray() |> uint256
+      elif a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.FundingTxidStr then
+        a.FundingTxidStr |> uint256.Parse
+      else
+        assert(a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.None)
+        null
+    o.N <- a.OutputIndex
+    o
+  [<Extension>]
+  static member ToOutPoint(a: Lnrpc.PendingUpdate) =
+    let o = OutPoint()
+    o.Hash <-
+      a.Txid.ToByteArray() |> uint256
+    o.N <-
+      a.OutputIndex
+    o
 
 type LndRestSettings = internal {
   Uri: Uri
@@ -133,10 +157,6 @@ type LndRestSettings = internal {
     | _ ->
       LndAuth.Null
 
-type ILightningInvoiceListener =
-  inherit IDisposable
-  abstract member WaitInvoice: ct : CancellationToken -> Task<PaymentRequest>
-
 
 type ListChannelResponse = {
   Id: ShortChannelId
@@ -144,12 +164,47 @@ type ListChannelResponse = {
   LocalBalance: Money
   NodeId: PubKey
 }
+  with
+  static member FromGrpcType(o: Lnrpc.Channel) =
+      {
+        ListChannelResponse.Id = o.ChanId |> ShortChannelId.FromUInt64
+        Cap = o.Capacity |> Money.Satoshis
+        LocalBalance = o.LocalBalance |> Money.Satoshis
+        NodeId = o.RemotePubkey |> PubKey }
 type ChannelEventUpdate =
   | OpenChannel of ListChannelResponse
-  | PendingOpenChannel of ListChannelResponse
+  | PendingOpenChannel of OutPoint
   | ClosedChannel of  {| Id: ShortChannelId; CloseTxHeight: BlockHeight; TxId: uint256 |}
-  | ActiveChannel of ShortChannelId seq
-  | InActiveChannel of ShortChannelId seq
+  | ActiveChannel of OutPoint
+  | InActiveChannel of OutPoint
+  | FullyResolvedChannel of OutPoint
+  static member FromGrpcType(r: Lnrpc.ChannelEventUpdate) =
+    match r.Type with
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.ActiveChannel ->
+      r.ActiveChannel.ToOutPoint()
+      |> ChannelEventUpdate.ActiveChannel
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.InactiveChannel ->
+      r.InactiveChannel.ToOutPoint()
+      |> ChannelEventUpdate.InActiveChannel
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.OpenChannel ->
+      r.OpenChannel
+      |> ListChannelResponse.FromGrpcType
+      |> OpenChannel
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.PendingOpenChannel ->
+      r.PendingOpenChannel.ToOutPoint()
+      |> PendingOpenChannel
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.ClosedChannel ->
+      let c = r.ClosedChannel
+      {|
+        Id = c.ChanId |> ShortChannelId.FromUInt64
+        CloseTxHeight = c.CloseHeight |> BlockHeight
+        TxId = c.ClosingTxHash |> hex.DecodeData |> uint256
+      |}
+      |> ClosedChannel
+    | Lnrpc.ChannelEventUpdate.Types.UpdateType.FullyResolvedChannel ->
+      r.FullyResolvedChannel.ToOutPoint()
+      |> FullyResolvedChannel
+    | x -> failwith $"Unreachable! Unknown type {x}"
 
 type ILightningChannelEventsListener =
   inherit IDisposable
@@ -166,10 +221,6 @@ type LndOpenChannelError = {
   StatusCode: int option
   Message: string
 }
-
-type IListener<'T> =
-  inherit IDisposable
-  abstract member Reader: ChannelReader<'T>
 
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
@@ -188,10 +239,9 @@ type INLoopLightningClient =
     ?ct: CancellationToken
      -> Task<PaymentRequest>
   abstract member Offer: invoice: PaymentRequest * ?ct: CancellationToken -> Task<Result<Primitives.PaymentPreimage, string>>
-  abstract member Listen: ?ct: CancellationToken  -> Task<ILightningInvoiceListener>
   abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?ct: CancellationToken -> Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<unit, LndOpenChannelError>>
+  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
-  abstract member SubscribeChannelChange: ?ct: CancellationToken -> Task<IListener<ChannelEventUpdate>>
+  abstract member SubscribeChannelChange: ?ct: CancellationToken -> Task<IAsyncEnumerable<ChannelEventUpdate>>

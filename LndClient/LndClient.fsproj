@@ -9,9 +9,7 @@
     <Compile Include="FSharp.Control.WebSockets.fs" />
     <Compile Include="types.fs" />
     <Compile Include="Helpers.fs" />
-    <Compile Include="WebSocketHelper.fs" />
-    <Compile Include="LndNSwagClient.fs" />
-    <Compile Include="LndNSwagClient.WebSocket.fs" />
+    <Compile Include="LndGrpcClient.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,9 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LndSwaggerClient\LndSwaggerClient.csproj" />
+    <ProjectReference Include="..\LndGrpcClient\LndGrpcClient.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Protobuf Include="./lightning.proto" GrpcServices="Client" Link="lightning.proto" />
-  </ItemGroup>
 </Project>
