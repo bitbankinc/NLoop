@@ -9,6 +9,7 @@
     <PackageReference Include="DotNetLightning" Version="1.1.2-date20210425-1044-git-40e7e2c" />
     <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
     <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
+    <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.0.3" />
   </ItemGroup>
 
   <PropertyGroup>
