@@ -15,7 +15,8 @@ type AutoLoopActor(
   )  =
 
   let aggr =
-    { AutoLoop.GetSwapParams = fun () -> failwith "todo" }
+    { AutoLoop.GetSwapParams = fun () -> failwith "todo"
+      AutoLoop.GetAllChannels = failwith "todo" }
     |> AutoLoop.getAggregate
   let handler =
     AutoLoop.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
@@ -36,10 +37,8 @@ type AutoLoopActor(
       |> List.iter(fun e ->
         eventAggregator.Publish e
         eventAggregator.Publish e.Data
-        eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
       )
     | Error s ->
       logger.LogError($"Error when executing swap handler %A{s}")
-      eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }
 

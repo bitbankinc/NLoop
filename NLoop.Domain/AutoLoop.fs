@@ -5,12 +5,19 @@ open System
 open System.Text.Json
 open System.Threading.Tasks
 open DotNetLightning.Utils.Primitives
-open LndClient
 open NBitcoin
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open FsToolkit.ErrorHandling
 open NLoop.Domain.Utils.EventStore
+
+module Data =
+  type ListChannelResponse = {
+    Id: ShortChannelId
+    Cap: Money
+    LocalBalance: Money
+    NodeId: PubKey
+  }
 
 type State = {
   Rules: Map<ShortChannelId, AutoLoopRule>
@@ -74,7 +81,7 @@ let serializer : Serializer<Event> = {
 
 type Deps = {
   GetSwapParams: unit -> SwapParams
-  GetAllChannels: unit -> Task<ListChannelResponse list>
+  GetAllChannels: unit -> Task<Data.ListChannelResponse list>
 }
 
 type Error =
@@ -134,16 +141,6 @@ let getRepository eventStoreUri =
     store
     serializer
     entityType
-
-type EventWithId = {
-  Id: SwapId
-  Event: Event
-}
-
-type ErrorWithId = {
-  Id: SwapId
-  Error: EventSourcingError<Error>
-}
 
 let getHandler aggr eventStoreUri =
   getRepository eventStoreUri

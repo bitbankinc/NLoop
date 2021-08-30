@@ -230,8 +230,8 @@ module NLoopServerCommandLine =
       o
       // --- lnd ---
 
-      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCertThumbprint).ToLowerInvariant()}",
-                             "hex-encoded sha256 thumbnail of the lnd certificate")
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCert).ToLowerInvariant()}",
+                             "Path to the TLS certification of the LND")
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ZeroOrOne
@@ -254,7 +254,7 @@ module NLoopServerCommandLine =
         a
       o
 
-      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndServer).ToLowerInvariant()}",
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndGrpcServer).ToLowerInvariant()}",
                              "Host Url for the lnd")
       o.Argument <-
         let a = Argument<string>()

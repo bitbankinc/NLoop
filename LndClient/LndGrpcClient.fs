@@ -1,4 +1,4 @@
-namespace LndClient.LndGrpcClient
+namespace LndClient
 
 open System
 open System.IO
@@ -7,25 +7,75 @@ open System.Runtime.CompilerServices
 open System.Threading
 open DotNetLightning.Payment
 open DotNetLightning.Utils
-open DotNetLightning.Utils.Primitives
 open FSharp.Control
 open Google.Protobuf
 open Grpc.Core
 open Grpc.Net.Client
 open LndClient
-open LndGrpcClient
 open Lnrpc
 open FSharp.Control.Tasks
 open NBitcoin
-
-module private Helpers =
-  do System.Environment.SetEnvironmentVariable("GRPC_SSL_CIPHER_SUITES", "HIGH+ECDSA");
-
+open NBitcoin.DataEncoders
+open FsToolkit.ErrorHandling
 
 type LndGrpcSettings = {
   TlsCertLocation: string option
   Url: Uri
+  Macaroon: MacaroonInfo
 }
+  with
+  static member Create(uriStr: string, tlsCertPath: string option, macaroon: string option, macaroonFile: string option) = result {
+    let! uri = uriStr |> parseUri
+    let! macaroonInfo =
+      match macaroon, macaroonFile with
+      | Some _, Some _ ->
+        Error "You cannot specify both raw macaroon and macaroon file"
+      | Some x, _ ->
+        x
+        |> parseMacaroon
+        |> Result.map(MacaroonInfo.Raw)
+      | _, Some x ->
+        if x.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) |> not then
+          Error $"macaroon file must end with \".macaroon\", it was {x}"
+        else
+          MacaroonInfo.FilePath x
+          |> Ok
+      | None, None ->
+        Error "You must specify either macaroon itself or path to the macaroon file"
+
+    return
+      { Url = uri
+        Macaroon = macaroonInfo
+        TlsCertLocation = tlsCertPath }
+  }
+
+  member this.CreateLndAuth() =
+    match this.Macaroon with
+    | MacaroonInfo.Raw m ->
+      m
+      |> LndAuth.FixedMacaroon
+    | MacaroonInfo.FilePath m when m |> String.IsNullOrEmpty |> not ->
+      m
+      |> LndAuth.MacaroonFile
+    | _ ->
+      LndAuth.Null
+
+[<AbstractClass;Sealed;Extension>]
+type GrpcClientExtensions =
+
+  [<Extension>]
+  static member AddLndAuthentication(this: Metadata, lndAuth: LndAuth) =
+    match lndAuth with
+    | LndAuth.FixedMacaroon macaroon ->
+      let macaroonHex = macaroon.SerializeToBytes() |> Encoders.Hex.EncodeData
+      this.Add("macaroon", macaroonHex)
+    | LndAuth.MacaroonFile filePath ->
+      if not <| filePath.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) then
+        raise <| ArgumentException($"filePath ({filePath}) is not a macaroon file", nameof(filePath))
+      else
+        let macaroonHex = filePath |> File.ReadAllBytes |> Encoders.Hex.EncodeData
+        this.Add("macaroon", macaroonHex)
+    | LndAuth.Null -> ()
 
 type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient: HttpClient) =
   let channel =
@@ -37,15 +87,27 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
       if settings.Url.Scheme <> "https" then
         failwith $"the grpc url must be https. it was {settings.Url.Scheme}"
       else
-        opts.Credentials <-
+        let sslCred =
           File.ReadAllText(certPath)
           |> SslCredentials
+        let callCred =
+          CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
+            settings.CreateLndAuth()
+            |> metadata.AddLndAuthentication
+          })
+        opts.Credentials <- ChannelCredentials.Create(sslCred, callCred)
     )
     GrpcChannel.ForAddress(settings.Url, opts)
   let client = Lightning.LightningClient(channel)
   let invoiceClient = Invoicesrpc.Invoices.InvoicesClient(channel)
-  let defaultHeaders = null
-  let defaultDeadline = Nullable()
+  member this.DefaultHeaders = null
+    //let metadata = Metadata()
+    // metadata.Add()
+    // metadata
+
+  member this.Deadline =
+    Nullable(DateTime.Now + TimeSpan.FromSeconds(20.))
+
   interface INLoopLightningClient with
     member this.ConnectPeer(nodeId, host, ct) =
       let ct = defaultArg ct CancellationToken.None
@@ -56,14 +118,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         addr.Pubkey <- nodeId.ToHex()
         addr
       unitTask {
-        let! m = client.ConnectPeerAsync(r, defaultHeaders, defaultDeadline, ct).ResponseAsync
+        let! m = client.ConnectPeerAsync(r, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
         return m
       }
     member this.GetDepositAddress(ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = NewAddressRequest()
-        let! m = client.NewAddressAsync(req, defaultHeaders, defaultDeadline, ct).ResponseAsync
+        let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
         return BitcoinAddress.Create(m.Address, network)
       }
     member this.GetHodlInvoice(paymentHash, value, expiry, memo, ct) =
@@ -76,14 +138,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         req.Value <- value.Satoshi
         req.Expiry <- expiry.Seconds |> int64
         req.Memo <- memo
-        let! m = invoiceClient.AddHoldInvoiceAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
       }
     member this.GetInfo(ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = GetInfoRequest()
-        let! m = client.GetInfoAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! m = client.GetInfoAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return m |> box
       }
     member this.GetInvoice(paymentPreimage, amount, expiry, memo, ct) =
@@ -94,14 +156,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         req.AmtPaidSat <- amount.Satoshi
         req.Expiry <- expiry.Seconds |> int64
         req.Memo <- memo
-        let! r = client.AddInvoiceAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
       }
     member this.ListChannels(ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = ListChannelsRequest()
-        let! r = client.ListChannelsAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! r = client.ListChannelsAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return
           r.Channels
           |> Seq.map(fun c ->
@@ -117,7 +179,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
       task {
         let req = SendRequest()
         req.PaymentRequest <- invoice.ToString()
-        let! t = client.SendPaymentSyncAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! t = client.SendPaymentSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
         if t.PaymentError |> String.IsNullOrEmpty then
           return t.PaymentPreimage |> PaymentPreimage.Create |> Ok
         else
@@ -132,7 +194,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         req.NodePubkey <- request.NodeId.ToBytes() |> ByteString.CopyFrom
         req.LocalFundingAmount <- request.Amount.Satoshi
         try
-          let! r = client.OpenChannelSyncAsync(req, defaultHeaders, defaultDeadline, ct)
+          let! r = client.OpenChannelSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
           return r.ToOutPoint() |> Ok
         with
         | :? RpcException as e ->
@@ -149,7 +211,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         let req = QueryRoutesRequest()
         req.PubKey <- nodeId.ToHex()
         req.Amt <- amount.Satoshi
-        let! resp = client.QueryRoutesAsync(req, defaultHeaders, defaultDeadline, ct)
+        let! resp = client.QueryRoutesAsync(req, this.DefaultHeaders, this.Deadline, ct)
         let r = resp.Routes.[0]
         return
           r.Hops
@@ -168,7 +230,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
       let req = ChannelEventSubscription()
       return
         client
-          .SubscribeChannelEvents(req, defaultHeaders, defaultDeadline, ct)
+          .SubscribeChannelEvents(req, this.DefaultHeaders, this.Deadline, ct)
           .ResponseStream
           .ReadAllAsync(ct)
         |> AsyncSeq.ofAsyncEnum

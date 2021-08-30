@@ -44,11 +44,11 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOp
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
 
   member private this.CheckClientConnection(c: SupportedCryptoCode) = task {
-    let settings = opts.Value.GetLndRestSettings()
+    let settings = opts.Value.GetLndGrpcSettings()
     let httpClient = httpClientFactory.CreateClient()
     httpClient.Timeout <- TimeSpan.FromDays(3.)
     let cli =
-      LndNSwagClient(opts.Value.GetNetwork(c), settings, httpClient)
+      NLoopLndGrpcClient(settings, opts.Value.GetNetwork(c), httpClient)
       :> INLoopLightningClient
     clients.Add(c, cli)
     try

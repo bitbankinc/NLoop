@@ -25,6 +25,12 @@ let handleSetRule (req: SetRuleRequest): HttpHandler =
               |> Seq.map(fun c -> c.ListChannels())
               |> Task.WhenAll
               |> Task.map(List.concat)
+              |> Task.map(List.map(fun t -> {
+                AutoLoop.Data.Id = t.Id
+                Cap =  t.Cap
+                LocalBalance = t.LocalBalance
+                NodeId = t.NodeId
+              }))
         }
         |> AutoLoop.getAggregate
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
