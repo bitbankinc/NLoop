@@ -52,6 +52,11 @@ type SwapActor(broadcaster: IBroadcaster,
         eventAggregator.Publish e.Data
         eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
       )
+    | Error (EventSourcingError.Store s as e) ->
+      logger.LogError($"Store Error when executing swap handler %A{s}")
+      eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
+      // todo: retry
+      ()
     | Error s ->
       logger.LogError($"Error when executing swap handler %A{s}")
       eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })

@@ -11,6 +11,8 @@ open FSharp.Control
 open Google.Protobuf
 open Grpc.Core
 open Grpc.Net.Client
+open Grpc.Net.Client.Configuration
+open LndClient
 open LndClient
 open Lnrpc
 open FSharp.Control.Tasks
@@ -21,7 +23,7 @@ open FsToolkit.ErrorHandling
 type LndGrpcSettings = {
   TlsCertLocation: string option
   Url: Uri
-  Macaroon: MacaroonInfo
+  Macaroon: MacaroonInfo option
 }
   with
   static member Create(uriStr: string, tlsCertPath: string option, macaroon: string option, macaroonFile: string option) = result {
@@ -33,15 +35,16 @@ type LndGrpcSettings = {
       | Some x, _ ->
         x
         |> parseMacaroon
-        |> Result.map(MacaroonInfo.Raw)
+        |> Result.map(MacaroonInfo.Raw >> Some)
       | _, Some x ->
         if x.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) |> not then
           Error $"macaroon file must end with \".macaroon\", it was {x}"
         else
           MacaroonInfo.FilePath x
+          |> Some
           |> Ok
       | None, None ->
-        Error "You must specify either macaroon itself or path to the macaroon file"
+        None |> Ok
 
     return
       { Url = uri
@@ -51,10 +54,10 @@ type LndGrpcSettings = {
 
   member this.CreateLndAuth() =
     match this.Macaroon with
-    | MacaroonInfo.Raw m ->
+    | Some (MacaroonInfo.Raw m) ->
       m
       |> LndAuth.FixedMacaroon
-    | MacaroonInfo.FilePath m when m |> String.IsNullOrEmpty |> not ->
+    | Some (MacaroonInfo.FilePath m) when m |> String.IsNullOrEmpty |> not ->
       m
       |> LndAuth.MacaroonFile
     | _ ->
@@ -77,28 +80,41 @@ type GrpcClientExtensions =
         this.Add("macaroon", macaroonHex)
     | LndAuth.Null -> ()
 
+
+[<RequireQualifiedAccess>]
+module GrpcChannelOptions =
+  let addCred (certPath: string) (opts: GrpcChannelOptions) =
+    failwith "TODO"
+
+
 type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient: HttpClient) =
   let channel =
     let opts = GrpcChannelOptions()
     httpClient
     |> Option.iter(fun c -> opts.HttpClient <- c)
-    settings.TlsCertLocation
-    |> Option.iter(fun certPath ->
-      if settings.Url.Scheme <> "https" then
-        failwith $"the grpc url must be https. it was {settings.Url.Scheme}"
-      else
-        let sslCred =
-          File.ReadAllText(certPath)
-          |> SslCredentials
-        let callCred =
-          CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
-            settings.CreateLndAuth()
-            |> metadata.AddLndAuthentication
-          })
-        opts.Credentials <- ChannelCredentials.Create(sslCred, callCred)
-    )
+    do
+      match settings.Macaroon, settings.TlsCertLocation with
+      | None, None ->
+        opts.Credentials <- ChannelCredentials.Insecure
+      | Some _macaroon, Some certPath ->
+        if settings.Url.Scheme <> "https" then
+          failwith $"the grpc url must be https. it was {settings.Url.Scheme}"
+        else
+          let sslCred =
+            File.ReadAllText(certPath)
+            |> SslCredentials
+          let callCred =
+            CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
+              settings.CreateLndAuth()
+              |> metadata.AddLndAuthentication
+            })
+          opts.Credentials <- ChannelCredentials.Create(sslCred, callCred)
+      | None, Some _
+      | Some _ , None _ ->
+        failwith $"You must specify both TLS certification and macaroon for lnd. Unless --allowinsecure is on."
     GrpcChannel.ForAddress(settings.Url, opts)
-  let client = Lightning.LightningClient(channel)
+  let client =
+    Lightning.LightningClient(channel)
   let invoiceClient = Invoicesrpc.Invoices.InvoicesClient(channel)
   member this.DefaultHeaders = null
     //let metadata = Metadata()

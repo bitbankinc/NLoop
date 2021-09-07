@@ -1,5 +1,6 @@
 namespace NLoop.Domain.IO
 
+open System
 open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -94,8 +95,31 @@ type AutoLoopRule = {
 
 [<Measure>] type percent
 
+/// minimum incoming and outgoing liquidity threshold
+type ThresholdRule = {
+  MinimumIncoming: int16<percent>
+  MaximumIncoming: int16<percent>
+}
+
 /// Parameter for the swap. Which is global across channels.
 type SwapParams = {
+  // --- params form loop.liquidity.Parameters ---
+  AutoLoop: bool
+  AutoFeeBudget: Money
+  /// max dispatched swap number
+  MaxAutoInFlight: int
+  /// The amount of time we wait before retry when swap fails
+  FailureBackoff: TimeSpan
+
+  SweepConfTarget: BlockHeight
+  /// Fee limit for the swap.
+  FeeLimit: FeeRate
+
+  ClientRestrictions: {| MinimumSwapAmount: Money; MaximumSwapAmount: Money; |}
+  ChannelRules: Map<ShortChannelId, ThresholdRule>
+  PeerRules: Map<NodeId, ThresholdRule>
+
+  // --- params from --setparams ---
   SweepLimit: FeeRate
   MaxMinerFee: Money
   MaxPrepayFee: float<percent>

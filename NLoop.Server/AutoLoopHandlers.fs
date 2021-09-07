@@ -10,6 +10,7 @@ open Microsoft.Extensions.Options
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
+open NLoop.Server.Actors
 open NLoop.Server.RPCDTOs
 open FsToolkit.ErrorHandling
 
@@ -19,7 +20,7 @@ let handleSetRule (req: SetRuleRequest): HttpHandler =
       let aggr =
         { AutoLoop.GetSwapParams =
             fun () -> failwith "todo"
-          AutoLoop.GetAllChannels =
+          AutoLoop.GetAllChannelIds =
             fun () ->
               ctx.GetService<ILightningClientProvider>().GetAllClients()
               |> Seq.map(fun c -> c.ListChannels())
@@ -41,9 +42,19 @@ let handleSetRule (req: SetRuleRequest): HttpHandler =
         Meta = { CommandMeta.Source = "handleSetRule"
                  EffectiveDate = UnixDateTime.UtcNow }
       }
-    match! handler.Execute () cmd with
+    match! handler.Execute req.ShortChannelId cmd with
     | Ok events ->
       ctx.GetService<IEventAggregator>().Publish(events)
+      return! next ctx
+    | Error e ->
+      return! error503 e next ctx
+  }
+let handleSetRule2 (req: SetRuleRequest): HttpHandler =
+  fun (next: HttpFunc) (ctx: HttpContext) -> task {
+    let actor = ctx.GetService<AutoLoopActor>()
+    let cmd = AutoLoop.Command.SetRule(req.AsDomain)
+    match! actor.Execute(req.ShortChannelId, cmd, "handleSetRule") with
+    | Ok _ev ->
       return! next ctx
     | Error e ->
       return! error503 e next ctx

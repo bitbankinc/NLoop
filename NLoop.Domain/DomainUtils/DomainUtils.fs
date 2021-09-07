@@ -70,6 +70,8 @@ type UnixDateTime = private UnixDateTime of DateTime
 /// `AsOf` means as it was or will be on and after that date.
 /// `AsAt` means as it is at that particular time only. It implies there may be changes.
 /// `Latest` means as it currently is. Specifically, include all events in the stream.
+///
+/// We only use `AsAt` in the Handler. But we might want to use `AsOf` for the audit purpose.
 [<Struct>]
 type ObservationDate =
   | Latest
@@ -236,6 +238,13 @@ type Aggregate<'TState, 'TCommand, 'TEvent, 'TError,'T when 'T : comparison> = {
   Exec: 'TState -> ESCommand<'TCommand> -> Task<Result<ESEvent<'TEvent> list, 'TError>>
 }
 
+/// Currently we use only `NoStream` and `Specific`, and don't consider about concurrency check.
+/// This means if someone tries to dispatch more than 1 `Command`s to a same entity(stream) at once,
+/// It may throw `WrongExpectedVersionException`, and abort the later one.
+/// This means every `Aggregate.Exec` operation is guaranteed to be atomic, but it may cause a problem.
+/// i.e. the retry logic must be taken care when the execution is critical for the security or business logic.
+///
+/// See also: https://developers.eventstore.com/clients/dotnet/20.10/appending/optimistic-concurrency-and-idempotence.html
 type ExpectedVersionUnion =
   | Any
   | NoStream

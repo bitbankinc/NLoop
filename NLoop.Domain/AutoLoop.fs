@@ -20,11 +20,13 @@ module Data =
   }
 
 type State = {
-  Rules: Map<ShortChannelId, AutoLoopRule>
+  Rules: AutoLoopRule option
+  OngoingSwap: SwapId option
 }
   with
   static member Zero = {
-    Rules = Map.empty
+    Rules = None
+    OngoingSwap = None
   }
 
 type Command =
@@ -34,7 +36,7 @@ type Command =
 let entityType = "autoloop"
 
 type Event =
-  | NewRuleAdded of channelId: ShortChannelId * rule: AutoLoopRule
+  | NewRuleAdded of rule: AutoLoopRule
   | UnknownTagEvent of tag: uint16 * data: byte[]
   member this.EventTag =
     match this with
@@ -81,11 +83,14 @@ let serializer : Serializer<Event> = {
 
 type Deps = {
   GetSwapParams: unit -> SwapParams
-  GetAllChannels: unit -> Task<Data.ListChannelResponse list>
+  GetAllChannelIds: unit -> Task<Data.ListChannelResponse list>
+  DispatchLoopOut: LoopOut -> Task
+  DispatchLoopIn: LoopIn -> Task
 }
 
 type Error =
   | ChannelDoesNotExist
+  | BogusRule of string
 
 let private enhanceEvents date source (events: Event list) =
   events |> List.map(fun e -> e.ToEventSourcingEvent date source)
@@ -96,12 +101,12 @@ let executeCommand (deps: Deps) (_s: State) (cmd: ESCommand<Command>): Task<Resu
   taskResult {
     match cmd.Data with
     | SetRule({ Channel  = channel; IncomingThreshold = inThreshold; OutgoingThreshold = outThreshold }) ->
-      let! channels = deps.GetAllChannels()
+      let! channels = deps.GetAllChannelIds()
       let maybeNewRule =
         channels
         |> Seq.tryPick(fun c ->
           if c.Id = channel then
-            Some (c.Id, {
+            Some (c, {
               AutoLoopRule.Channel = c.Id
               IncomingThreshold = inThreshold
               OutgoingThreshold =  outThreshold
@@ -109,21 +114,33 @@ let executeCommand (deps: Deps) (_s: State) (cmd: ESCommand<Command>): Task<Resu
           else
             None)
       match maybeNewRule with
-      | Some (cId, rule) ->
-        return [Event.NewRuleAdded(cId, rule)] |> enhance
+      | Some (c, rule) ->
+        let validateRuleIsCompatibleToChannel (c: Data.ListChannelResponse) (rule: AutoLoopRule) =
+          let middle = (c.Cap / 2L)
+          if rule.IncomingThreshold >= middle then
+            $"IncomingThreshold ({rule.IncomingThreshold}) must be smaller than the half of the channel cap ({c.Cap})."
+            |> BogusRule |> Error
+          elif rule.OutgoingThreshold <= middle then
+            $"OutgoingThreshold ({rule.OutgoingThreshold}) must be larger than the half of the channel cap ({c.Cap})."
+            |> BogusRule |> Error
+          else
+            Ok()
+        do! validateRuleIsCompatibleToChannel c rule
+        return [Event.NewRuleAdded(rule)] |> enhance
       | _ ->
         return! ChannelDoesNotExist |> Error
   }
 
 let applyChanges(state: State) (event: Event) =
   match event with
-  | NewRuleAdded(cId, rule) ->
-    { state with Rules = state.Rules |> Map.add cId rule }
+  | NewRuleAdded(rule) ->
+    { state with Rules = Some rule }
   | UnknownTagEvent _ ->
     state
 
 type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>
-type EntityId = unit
+
+type EntityId = ShortChannelId
 type Handler = Handler<State, Command, Event, Error, EntityId>
 let getAggregate deps: Aggregate = {
   Zero = State.Zero
@@ -141,6 +158,16 @@ let getRepository eventStoreUri =
     store
     serializer
     entityType
+
+type EventWithId = {
+  Id: EntityId
+  Event: Event
+}
+
+type ErrorWithId = {
+  Id: EntityId
+  Error: EventSourcingError<Error>
+}
 
 let getHandler aggr eventStoreUri =
   getRepository eventStoreUri

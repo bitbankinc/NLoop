@@ -28,7 +28,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
   let lockObj = obj()
 
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
-    fun (event) -> unitTask {
+    fun event -> unitTask {
       match event.ToRecordedEvent(Swap.serializer) with
       | Error _ -> ()
       | Ok r when not <| r.StreamId.Value.StartsWith(Swap.entityType) -> ()
@@ -41,7 +41,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
               this.State
           )
           |> Map.change
-            (r.StreamId)
+            r.StreamId
             (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
         log.LogTrace($"Publishing RecordedEvent {r}")
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
@@ -61,7 +61,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
   member this.State
     with get(): Map<_,_> = _state
     and set v =
-      lock (lockObj) <| fun () ->
+      lock lockObj <| fun () ->
         _state <- v
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
