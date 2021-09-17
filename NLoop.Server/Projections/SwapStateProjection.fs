@@ -27,6 +27,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
   let mutable _state: Map<StreamId, Swap.State> = Map.empty
   let lockObj = obj()
 
+
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun event -> unitTask {
       match event.ToRecordedEvent(Swap.serializer) with
@@ -63,6 +64,23 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
     and set v =
       lock lockObj <| fun () ->
         _state <- v
+
+  member this.OngoingLoopOuts =
+    this.State
+    |> Seq.choose(fun v ->
+                  match v.Value with
+                  | Swap.State.Out (_height, o) -> Some o
+                  | _ -> None
+                  )
+
+  member this.OngoingLoopIns =
+    this.State
+    |> Seq.choose(fun v ->
+                  match v.Value with
+                  | Swap.State.In (_height, o) -> Some o
+                  | _ -> None
+                  )
+
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let maybeCheckpoint = ValueNone

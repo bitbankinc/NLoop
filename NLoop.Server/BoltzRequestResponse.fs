@@ -189,9 +189,12 @@ type CreateReverseSwapResponse = {
   OnchainAmount: Money
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
+
+  /// The invoice
+  MinerFeeInvoice: PaymentRequest option
 }
   with
-  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, n: Network): Result<_, string> =
+  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, maxPrepay: Money, n: Network): Result<_, string> =
     let mutable addr = null
     let mutable e = null
     try
@@ -205,12 +208,16 @@ type CreateReverseSwapResponse = {
     let actualSpk = addr.ScriptPubKey
     let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
     if (actualSpk <> expectedSpk) then
-      Error ($"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match")
+      Error $"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match"
     else if this.Invoice.PaymentHash <> PaymentHash(preimageHash) then
-      Error ("Payment Hash in invoice does not match preimage hash we specified in request")
+      Error "Payment Hash in invoice does not match preimage hash we specified in request"
     else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
-      Error ($"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay}).")
+      Error $"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay})."
     else
+      match this.MinerFeeInvoice |> Option.bind(fun invoice -> invoice.AmountValue) with
+      | Some amt when amt.Satoshi > maxPrepay.Satoshi ->
+        Error $"The amount specified in invoice ({amt}) was larger than the max we can accept ({maxPrepay})"
+      | _ ->
       let swapServiceFee =
         offChainAmountWePay - this.OnchainAmount
       if maxSwapServiceFee < swapServiceFee then

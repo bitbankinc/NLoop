@@ -22,6 +22,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Constants.fs" />
+    <Compile Include="Labels.fs" />
     <Compile Include="Helpers.fs" />
     <Compile Include="NLoopOptions.fs" />
     <Compile Include="Extensions.fs" />

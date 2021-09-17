@@ -80,13 +80,6 @@ type GrpcClientExtensions =
         this.Add("macaroon", macaroonHex)
     | LndAuth.Null -> ()
 
-
-[<RequireQualifiedAccess>]
-module GrpcChannelOptions =
-  let addCred (certPath: string) (opts: GrpcChannelOptions) =
-    failwith "TODO"
-
-
 type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient: HttpClient) =
   let channel =
     let opts = GrpcChannelOptions()

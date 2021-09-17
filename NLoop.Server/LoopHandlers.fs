@@ -69,10 +69,15 @@ let handleLoopOutCore (req: LoopOutRequest) =
         ClaimTransactionId = None
         PairId = ourCryptoCode, counterpartyCryptoCode
         ChainName = opts.Value.ChainName.ToString()
+        Label = req.Label |> Option.defaultValue String.Empty
+        MinerFeeInvoice =
+          outResponse.MinerFeeInvoice
+          |> Option.map(fun s -> s.ToString())
+          |> Option.defaultValue String.Empty
       }
 
       let actor = ctx.GetService<SwapActor>()
-      match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, n) with
+      match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, opts.Value.MaxPrepay, n) with
       | Error e ->
         do! actor.Execute(loopOut.Id, Swap.Command.SetValidationError(e), "handleLoopOut")
         return! (error503 e) next ctx
@@ -193,6 +198,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
           RefundTransactionId = None
           PairId = pairId
           ChainName = opts.Value.ChainName.ToString()
+          Label = loopIn.Label |> Option.defaultValue String.Empty
         }
         let height = ctx.GetBlockHeight(ourCryptoCode)
         do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))

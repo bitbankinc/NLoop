@@ -43,12 +43,12 @@ type LoopOutRequest = {
   member this.AcceptZeroConf =
     match this.ConfTarget with
     | None
-    | Some(0) -> true
+    | Some 0 -> true
     | _ -> false
 
   member this.Validate(opts: NLoopOptions): Result<unit, string list> =
-    if (this.Amount.Satoshi < opts.MinimumSwapAmountSatoshis) then
-      Error([$"Swap amount must be larger than {opts.MinimumSwapAmountSatoshis} satoshis. It was {this.Amount.Satoshi} satoshi"])
+    if this.Amount.Satoshi < opts.MinimumSwapAmountSats then
+      Error([$"Swap amount must be larger than {opts.MinimumSwapAmountSats} satoshis. It was {this.Amount.Satoshi} satoshi"])
     else
       Ok()
 

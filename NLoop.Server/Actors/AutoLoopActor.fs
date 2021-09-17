@@ -32,7 +32,8 @@ type AutoLoopActor(
             LocalBalance = t.LocalBalance
             NodeId = t.NodeId
           }))
-    }
+      AutoLoop.DispatchLoopOut = failwith "todo"
+      AutoLoop.DispatchLoopIn = failwith "todo" }
     |> AutoLoop.getAggregate
   let handler =
     AutoLoop.getHandler aggr (opts.Value.EventStoreUrl |> Uri)

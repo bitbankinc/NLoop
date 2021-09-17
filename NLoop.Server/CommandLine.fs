@@ -166,18 +166,29 @@ module NLoopServerCommandLine =
         a
       o
 
+      // -- swap fee limitations --
       let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MaxAcceptableSwapFee).ToLowerInvariant()}")
       o.Argument <-
         let a = Argument<int64>()
         a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
-      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MinimumSwapAmountSatoshis).ToLowerInvariant()}", $"Minimum Swap amount we can perform. (default: {NLoopOptions.Instance.MinimumSwapAmountSatoshis})")
+      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MinimumSwapAmountSats).ToLowerInvariant()}", $"Minimum Swap amount we can perform. (default: {NLoopOptions.Instance.MinimumSwapAmountSats})")
       o.Argument <-
         let a = Argument<int64>()
         a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
+
+      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MaxPrepaySats).ToLowerInvariant()}", $"Maximum amount you accept as an prepay fee for loop out.")
+      o.Argument <-
+        let a = Argument<int64>()
+        a.Arity <- ArgumentArity.ZeroOrOne
+        a
+      o
+      // -- --
+
+
       let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
       o.Argument <-
         let a = Argument<bool>()

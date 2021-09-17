@@ -27,6 +27,12 @@ module Swap =
     | Refunded of uint256
     /// Counterparty gave us bogus msg. Swap did not start.
     | Errored of msg: string
+
+  [<Struct>]
+  type Category =
+    | In
+    | Out
+
   type State =
     | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
@@ -189,6 +195,9 @@ module Swap =
     UTXOProvider: IUTXOProvider
     GetChangeAddress: GetAddress
     GetRefundAddress: GetAddress
+    /// Used for pre-paying miner fee.
+    /// This is not for paying an actual swap invoice, since we cannot expect it to get finished immediately.
+    PayInvoice: Network -> PaymentRequest -> Task
   }
 
   // ----- aggregates ----
@@ -200,7 +209,7 @@ module Swap =
 
   let executeCommand
     { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-      GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress }
+      GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress; PayInvoice = payInvoice }
     (s: State)
     (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
     taskResult {
@@ -217,6 +226,12 @@ module Swap =
         // --- loop out ---
         | NewLoopOut (h, loopOut), HasNotStarted ->
           do! loopOut.Validate() |> expectInputError
+          if loopOut.MinerFeeInvoice |> String.IsNullOrEmpty |> not then
+            do!
+              loopOut.MinerFeeInvoice
+              |> PaymentRequest.Parse
+              |> ResultUtils.Result.deref
+              |> payInvoice loopOut.TheirNetwork
           let invoice =
             loopOut.Invoice
             |> PaymentRequest.Parse

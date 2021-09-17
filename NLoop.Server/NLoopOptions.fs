@@ -88,10 +88,13 @@ type NLoopOptions() =
 
   // -- --
 
-  member val MaxAcceptableSwapFeeSat = 10000L with get, set
-  member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSat)
-
-  member val MinimumSwapAmountSatoshis = 1000L with get, set
+  // -- swap fee limitations --
+  member val MaxAcceptableSwapFeeSats = 10000L with get, set
+  member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSats)
+  member val MinimumSwapAmountSats = 1000L with get, set
+  member val MaxPrepaySats = 1000L with get, set
+  member this.MaxPrepay = Money.Satoshis(this.MaxPrepaySats)
+  // -- --
 
   member val AcceptZeroConf = false with get, set
 

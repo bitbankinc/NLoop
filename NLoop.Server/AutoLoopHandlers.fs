@@ -32,7 +32,8 @@ let handleSetRule (req: SetRuleRequest): HttpHandler =
                 LocalBalance = t.LocalBalance
                 NodeId = t.NodeId
               }))
-        }
+          AutoLoop.DispatchLoopOut = failwith "todo"
+          AutoLoop.DispatchLoopIn = failwith "todo" }
         |> AutoLoop.getAggregate
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
       AutoLoop.getHandler aggr (opts.Value.EventStoreUrl |> Uri)

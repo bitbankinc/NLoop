@@ -1,10 +1,13 @@
 namespace NLoop.Server.Actors
 
 open System
+open System.Threading.Tasks
+open DotNetLightning.Payment
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
+open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -12,24 +15,31 @@ open NLoop.Server
 
 [<AutoOpen>]
 module private Helpers =
-  let getSwapDeps b f u g =
+  let getSwapDeps b f u g p =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
       Swap.Deps.UTXOProvider = u
       Swap.Deps.GetChangeAddress = g
-      Swap.Deps.GetRefundAddress = g }
+      Swap.Deps.GetRefundAddress = g
+      Swap.Deps.PayInvoice = p
+      }
 
 type SwapActor(broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetAddress,
+               lightningClient: ILightningClientProvider,
                opts: IOptions<NLoopOptions>,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator
   )  =
 
   let aggr =
-    getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress
+    let payInvoice =
+      fun (n: Network) (i: PaymentRequest) ->
+        let cc = n.ChainName.ToString() |> SupportedCryptoCode.TryParse
+        lightningClient.GetClient(cc.Value).Offer(i) :> Task
+    getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress payInvoice
     |> Swap.getAggregate
   let handler =
     Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)

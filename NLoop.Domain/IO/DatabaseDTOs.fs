@@ -31,6 +31,9 @@ type LoopOut = {
   ClaimTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  Label: string
+
+  MinerFeeInvoice: string
   ChainName: string
 }
   with
@@ -67,6 +70,7 @@ type LoopIn = {
   RefundTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  Label: string
   ChainName: string
 }
   with

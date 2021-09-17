@@ -2,6 +2,7 @@ namespace NLoop.Server
 
 open System
 open System.IO
+open NLoop.Domain
 
 [<RequireQualifiedAccess>]
 module Constants =
@@ -48,3 +49,5 @@ module Constants =
   type private Foo = Bar
   let AssemblyVersion =
     Bar.GetType().Assembly.GetName().Version.ToString()
+
+
