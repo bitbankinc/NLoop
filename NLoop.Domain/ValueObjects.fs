@@ -70,6 +70,11 @@ type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
 module PairId =
   let Default = struct (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
 
+  let toString (pairId: inref<PairId>) =
+    let struct (a, b) = pairId
+    $"{a}/{b}"
+
+
 type SwapStatusType =
   | SwapCreated = 0uy
   | SwapExpired = 1uy

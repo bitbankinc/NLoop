@@ -12,4 +12,5 @@
     &lt;TestId&gt;xUnit::6BFC30A3-7F06-4C6F-8328-27D5944C5A37::net5.0::SwapTests+SwapDomainTests.TestLoopOut&lt;/TestId&gt;
   &lt;/TestAncestor&gt;
 &lt;/SessionState&gt;</s:String>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=autoloop/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=swaprates/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>

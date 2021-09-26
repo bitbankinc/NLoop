@@ -96,6 +96,11 @@ type NLoopOptions() =
   member this.MaxPrepay = Money.Satoshis(this.MaxPrepaySats)
   // -- --
 
+  // -- autoloop --
+  /// The maximum number of the swaps simultaneously dispatched by an autolooper.
+  member val MaxAutoInFlight = 1 with get, set
+  // -- --
+
   member val AcceptZeroConf = false with get, set
 
   member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
