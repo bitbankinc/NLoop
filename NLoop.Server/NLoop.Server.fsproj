@@ -36,12 +36,11 @@
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="SwapEventListener.fs" />
     <Compile Include="Actors\SwapActor.fs" />
-    <Compile Include="Actors\AutoLoopActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />
     <Compile Include="Projections\SwapStateProjection.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
-    <Compile Include="ProcessManagers\AutoLoopProcessManager.fs" />
     <Compile Include="Services\BoltzClient.fs" />
+    <Compile Include="Services\BoltzClientExtensions.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
     <Compile Include="Services\BoltzListener.fs" />

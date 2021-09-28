@@ -123,4 +123,3 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
         let! msg = streamReader.ReadLineAsync() |> Async.AwaitTask
         yield JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
     }
-

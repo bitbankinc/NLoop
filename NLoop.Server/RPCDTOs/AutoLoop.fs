@@ -16,10 +16,4 @@ type SetRuleRequest = {
   [<JsonPropertyName "short_channel_id">]
   ShortChannelId: ShortChannelId
 }
-  with
-  member this.AsDomain = {
-    AutoLoopRule.Channel = this.ShortChannelId
-    IncomingThreshold = failwith "todo"
-    OutgoingThreshold = failwith "todo"
-  }
 
