@@ -835,13 +835,33 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; The number of confirmation before we make an off-chain offer.</summary>
+        /// <summary>&lt; The number of confirmation before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop.</summary>
         [Newtonsoft.Json.JsonProperty("conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Conf_target { get; set; } = 0;
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
+    
+        /// <summary>&lt; Maximum off-chain fee in sat that may be paied for swap payment to the server. This limit is applied during path finding.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_routing_fee { get; set; }
+    
+        /// <summary>&lt; Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.</summary>
+        [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_routing_fee { get; set; }
+    
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_fee { get; set; }
+    
+        /// <summary>&lt; Maximum amount of the (loop-out) swap fee that may be charged as a prepayment</summary>
+        [Newtonsoft.Json.JsonProperty("max_prepay_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_amount { get; set; }
+    
+        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.</summary>
+        [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -883,6 +903,10 @@ namespace NLoopClient
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
+    
+        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.</summary>
+        [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     

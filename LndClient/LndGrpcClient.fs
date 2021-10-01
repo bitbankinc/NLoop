@@ -183,11 +183,24 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
             })
           |> Seq.toList
       }
-    member this.Offer(invoice, ct) =
+    member this.Offer(param, ct) =
       let ct = defaultArg ct CancellationToken.None
       task {
         let req = SendRequest()
-        req.PaymentRequest <- invoice.ToString()
+        req.PaymentRequest <- param.Invoice.ToString()
+        req.FeeLimit <-
+          let l = FeeLimit()
+          match param.MaxFee with
+          | FeeLimit.Fixed m ->
+            l.Fixed <- m.Satoshi
+            l
+          | FeeLimit.Percent p ->
+            l.Percent <- p |> int64
+            l
+        param.OutgoingChannelId
+        |> Option.iter(fun cId ->
+          req.OutgoingChanId <- cId.ToUInt64()
+        )
         let! t = client.SendPaymentSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
         if t.PaymentError |> String.IsNullOrEmpty then
           return t.PaymentPreimage |> PaymentPreimage.Create |> Ok

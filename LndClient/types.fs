@@ -132,6 +132,16 @@ type LndOpenChannelError = {
   Message: string
 }
 
+[<RequireQualifiedAccess>]
+type FeeLimit =
+  | Fixed of Money
+  | Percent of int
+type SendPaymentRequest = {
+  Invoice: PaymentRequest
+  MaxFee: FeeLimit
+  OutgoingChannelId: ShortChannelId option
+}
+
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -148,7 +158,7 @@ type INLoopLightningClient =
     memo: string *
     ?ct: CancellationToken
      -> Task<PaymentRequest>
-  abstract member Offer: invoice: PaymentRequest * ?ct: CancellationToken -> Task<Result<Primitives.PaymentPreimage, string>>
+  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<Primitives.PaymentPreimage, string>>
   abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?ct: CancellationToken -> Task<Route>
   abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>

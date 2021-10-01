@@ -29,10 +29,10 @@ let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
-      let struct(ourCryptoCode, counterpartyCryptoCode) =
+      let struct(baseCryptoCode, quoteCryptoCode) as pairId =
         req.PairId
         |> Option.defaultValue (PairId.Default)
-      let n = opts.Value.GetNetwork(ourCryptoCode)
+      let n = opts.Value.GetNetwork(baseCryptoCode)
       let boltzCli = ctx.GetService<BoltzClient>()
       let claimKey = new Key()
       let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
@@ -41,13 +41,13 @@ let handleLoopOutCore (req: LoopOutRequest) =
       let! outResponse =
         let req =
           { CreateReverseSwapRequest.InvoiceAmount = req.Amount
-            PairId = (ourCryptoCode, counterpartyCryptoCode)
+            PairId = pairId
             OrderSide = OrderType.buy
             ClaimPublicKey = claimKey.PubKey
             PreimageHash = preimageHash.Value }
         boltzCli.CreateReverseSwapAsync(req)
 
-      let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(ourCryptoCode)
+      let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(baseCryptoCode)
       let! addr =
         match req.Address with
         | Some addr -> Task.FromResult addr
@@ -67,7 +67,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
         TimeoutBlockHeight = outResponse.TimeoutBlockHeight
         LockupTransactionId = None
         ClaimTransactionId = None
-        PairId = ourCryptoCode, counterpartyCryptoCode
+        PairId = pairId
         ChainName = opts.Value.ChainName.ToString()
         Label = req.Label |> Option.defaultValue String.Empty
         MinerFeeInvoice =
@@ -77,14 +77,30 @@ let handleLoopOutCore (req: LoopOutRequest) =
       }
 
       let actor = ctx.GetService<SwapActor>()
-      match outResponse.Validate(preimageHash.Value, claimKey.PubKey , req.Amount, opts.Value.MaxAcceptableSwapFee, opts.Value.MaxPrepay, n) with
+      let inline maxOrA (a: _) (b: _ voption) =
+        let max a b = Money.Max(a, b)
+        b |> ValueOption.map(max a) |> ValueOption.defaultValue a
+      let offChainOptions = opts.Value.ChainOptions.[baseCryptoCode]
+      let onChainOptions = opts.Value.ChainOptions.[quoteCryptoCode]
+      match outResponse.Validate(preimageHash.Value,
+                                 claimKey.PubKey,
+                                 req.Amount,
+                                 maxOrA opts.Value.MaxSwapFee req.MaxSwapFee,
+                                 maxOrA opts.Value.MaxPrepayAmount req.MaxPrepayAmount,
+                                 maxOrA opts.Value.MaxMinerFee req.MaxMinerFee,
+                                 n) with
       | Error e ->
         do! actor.Execute(loopOut.Id, Swap.Command.SetValidationError(e), "handleLoopOut")
         return! (error503 e) next ctx
       | Ok () ->
-        let height = ctx.GetBlockHeight(ourCryptoCode)
+        let loopOutParams = {
+          Swap.LoopOutParams.OutgoingChanId = req.ChannelId
+          Swap.LoopOutParams.MaxPrepayFee = maxOrA opts.Value.MaxPrepayRoutingFee req.MaxPrepayRoutingFee
+          Swap.LoopOutParams.MaxPaymentFee = maxOrA opts.Value.MaxSwapRoutingFee req.MaxSwapRoutingFee
+          Swap.LoopOutParams.Height = ctx.GetBlockHeight(baseCryptoCode)
+        }
         if (not req.AcceptZeroConf) then
-          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
+          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
           let response = {
             LoopOutResponse.Id = outResponse.Id
             Address = outResponse.LockupAddress
@@ -100,7 +116,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
                                    | Choice1Of2 { Id = swapId }
                                    | Choice2Of2 { Id = swapId } -> swapId.Value = outResponse.Id)
 
-          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(height, loopOut))
+          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
           let! firstErrorOrTxId =
             obs
             |> Observable.choose(
@@ -179,7 +195,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
 
       let actor = ctx.GetService<SwapActor>()
       let id = inResponse.Id |> SwapId
-      match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxAcceptableSwapFee, n) with
+      match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxSwapFee, n) with
       | Error e ->
         do! actor.Execute(id, Swap.Command.SetValidationError(e))
         return! (error503 e) next ctx

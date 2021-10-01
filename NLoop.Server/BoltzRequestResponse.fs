@@ -178,6 +178,7 @@ type CreateReverseSwapRequest = {
   [<JsonConverter(typeof<UInt256JsonConverter>)>]
   PreimageHash: uint256
 }
+
 type CreateReverseSwapResponse = {
   Id: string
   LockupAddress: string
@@ -194,7 +195,13 @@ type CreateReverseSwapResponse = {
   MinerFeeInvoice: PaymentRequest option
 }
   with
-  member this.Validate(preimageHash: uint256, claimPubKey: PubKey, offChainAmountWePay: Money, maxSwapServiceFee: Money, maxPrepay: Money, n: Network): Result<_, string> =
+  member this.Validate(preimageHash: uint256,
+                       claimPubKey: PubKey,
+                       offChainAmountWePay: Money,
+                       maxSwapServiceFee: Money,
+                       maxPrepay: Money,
+                       maxMinerFee: Money,
+                       n: Network): Result<_, string> =
     let mutable addr = null
     let mutable e = null
     try
@@ -214,16 +221,22 @@ type CreateReverseSwapResponse = {
     else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
       Error $"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay})."
     else
-      match this.MinerFeeInvoice |> Option.bind(fun invoice -> invoice.AmountValue) with
-      | Some amt when amt.Satoshi > maxPrepay.Satoshi ->
-        Error $"The amount specified in invoice ({amt}) was larger than the max we can accept ({maxPrepay})"
-      | _ ->
+      let prepayAmount =
+        this.MinerFeeInvoice
+        |> Option.bind(fun invoice -> invoice.AmountValue)
+        |> Option.defaultValue LNMoney.Zero
+      if prepayAmount.Satoshi > maxPrepay.Satoshi then
+        Error $"The amount specified in invoice ({prepayAmount.Satoshi} sats) was larger than the max we can accept ({maxPrepay})"
+      else
       let swapServiceFee =
-        offChainAmountWePay - this.OnchainAmount
+        offChainAmountWePay.Satoshi + prepayAmount.Satoshi - this.OnchainAmount.Satoshi
+        |> Money.Satoshis
       if maxSwapServiceFee < swapServiceFee then
         Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+      elif maxPrepay.Satoshi < prepayAmount.Satoshi then
+        Error $"The counterparty-specified amount for prepayment miner fee ({prepayAmount}) is larger than our maximum ({maxPrepay})"
       else
-        (this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash claimPubKey this.TimeoutBlockHeight)
+        this.RedeemScript |> Scripts.validateReverseSwapScript preimageHash claimPubKey this.TimeoutBlockHeight
 
 type GetSwapRatesResponse = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]

@@ -19,6 +19,9 @@ type LoopInRequest = {
 
   [<JsonPropertyName "pair_id">]
   PairId: PairId option
+
+  [<JsonPropertyName "max_miner_fee">]
+  MaxMinerFee: Money voption
 }
 
 type LoopOutRequest = {
@@ -38,6 +41,21 @@ type LoopOutRequest = {
   [<JsonPropertyName "conf_target">]
   ConfTarget: int option
   Label: string option
+
+  [<JsonPropertyName "max_swap_routing_fee">]
+  MaxSwapRoutingFee: Money voption
+
+  [<JsonPropertyName "max_prepay_routing_fee">]
+  MaxPrepayRoutingFee: Money voption
+
+  [<JsonPropertyName "max_swap_fee">]
+  MaxSwapFee: Money voption
+
+  [<JsonPropertyName "max_prepay_amount">]
+  MaxPrepayAmount: Money voption
+
+  [<JsonPropertyName "max_miner_fee">]
+  MaxMinerFee: Money voption
 }
   with
   member this.AcceptZeroConf =

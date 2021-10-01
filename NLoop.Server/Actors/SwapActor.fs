@@ -5,6 +5,7 @@ open System.Threading.Tasks
 open DotNetLightning.Payment
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
+open LndClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -36,9 +37,14 @@ type SwapActor(broadcaster: IBroadcaster,
 
   let aggr =
     let payInvoice =
-      fun (n: Network) (i: PaymentRequest) ->
+      fun (n: Network) (param: Swap.PayInvoiceParams) (i: PaymentRequest) ->
         let cc = n.ChainName.ToString() |> SupportedCryptoCode.TryParse
-        lightningClient.GetClient(cc.Value).Offer(i) :> Task
+        let req = {
+          SendPaymentRequest.Invoice = i
+          MaxFee = param.MaxFee |> FeeLimit.Fixed
+          OutgoingChannelId = param.OutgoingChannelId
+        }
+        lightningClient.GetClient(cc.Value).Offer(req) :> Task
     getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress payInvoice
     |> Swap.getAggregate
   let handler =

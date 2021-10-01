@@ -26,8 +26,13 @@ type ChainOptions() =
   /// Confirmation target for the sweep in on-chain swap
   member val SweepConf = 6 with get, set
 
-
-  // --- ---
+  // -- swap fee limitations --
+  member val MaxSwapFeeSats = Int32.MaxValue |> int64 with get, set
+  member this.MaxSwapFee = Money.Satoshis(this.MaxSwapFeeSats)
+  member val MinimumSwapAmountSats = 1000L with get, set
+  member val MaxPrepayAmountSats = Int32.MaxValue |> int64 with get, set
+  member this.MaxPrepayAmount = Money.Satoshis(this.MaxPrepayAmountSats)
+  // -- --
 
 
   // --- properties and methods ---
@@ -86,14 +91,6 @@ type NLoopOptions() =
       $"%s{protocol}://%s{user}:%s{password}@%s{host}:%i{port}"
       with get, set
 
-  // -- --
-
-  // -- swap fee limitations --
-  member val MaxAcceptableSwapFeeSats = 10000L with get, set
-  member this.MaxAcceptableSwapFee = Money.Satoshis(this.MaxAcceptableSwapFeeSats)
-  member val MinimumSwapAmountSats = 1000L with get, set
-  member val MaxPrepaySats = 1000L with get, set
-  member this.MaxPrepay = Money.Satoshis(this.MaxPrepaySats)
   // -- --
 
   // -- autoloop --

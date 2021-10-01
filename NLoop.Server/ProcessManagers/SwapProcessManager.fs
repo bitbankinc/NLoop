@@ -5,6 +5,7 @@ open System.Threading.Tasks
 open System.Reactive.Linq
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
+open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open NLoop.Domain.Utils
@@ -32,12 +33,18 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         obs
         |> Observable.choose(fun e ->
           match e.Data with
-          | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice) -> Some(swapId, pairId, invoice)
+          | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice, paymentParams) -> Some(swapId, pairId, invoice, paymentParams)
           | _ -> None)
-        |> Observable.flatmapTask(fun (swapId, struct(ourCC, _theirCC), invoice) ->
+        |> Observable.flatmapTask(fun (swapId, struct(ourCC, _theirCC), invoice, paymentParams) ->
           task {
             try
-              let! pr = lightningClientProvider.GetClient(ourCC).Offer(invoice).ConfigureAwait(false)
+              let! pr =
+                let req = {
+                  SendPaymentRequest.Invoice = invoice
+                  MaxFee = paymentParams.MaxFee |> FeeLimit.Fixed
+                  OutgoingChannelId = paymentParams.OutgoingChannelId
+                }
+                lightningClientProvider.GetClient(ourCC).Offer(req).ConfigureAwait(false)
               match pr with
               | Ok p ->
                 do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))

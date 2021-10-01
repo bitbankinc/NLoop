@@ -62,9 +62,16 @@ module Swap =
   [<Literal>]
   let entityType = "swap"
 
+  type LoopOutParams = {
+    MaxPrepayFee: Money
+    MaxPaymentFee: Money
+    OutgoingChanId: ShortChannelId option
+    Height: BlockHeight
+  }
+
   type Command =
     // -- loop out --
-    | NewLoopOut of height: BlockHeight * LoopOut
+    | NewLoopOut of LoopOutParams * LoopOut
     | OffChainOfferResolve of paymentPreimage: PaymentPreimage
 
     // -- loop in --
@@ -75,11 +82,15 @@ module Swap =
     | SetValidationError of err: string
     | NewBlock of height: BlockHeight * cryptoCode: SupportedCryptoCode
 
+  type PayInvoiceParams = {
+    MaxFee: Money
+    OutgoingChannelId: ShortChannelId option
+  }
   // ------ event -----
   type Event =
     // -- loop out --
-    | NewLoopOutAdded of  height: BlockHeight * loopIn: LoopOut
-    | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest
+    | NewLoopOutAdded of height: BlockHeight * loopIn: LoopOut
+    | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest * payInvoiceParams: PayInvoiceParams
     | ClaimTxPublished of txid: uint256
     | OffChainOfferResolved of paymentPreimage: PaymentPreimage
 
@@ -197,7 +208,7 @@ module Swap =
     GetRefundAddress: GetAddress
     /// Used for pre-paying miner fee.
     /// This is not for paying an actual swap invoice, since we cannot expect it to get finished immediately.
-    PayInvoice: Network -> PaymentRequest -> Task
+    PayInvoice: Network -> PayInvoiceParams -> PaymentRequest -> Task
   }
 
   // ----- aggregates ----
@@ -224,20 +235,32 @@ module Swap =
 
         match cmd.Data, s with
         // --- loop out ---
-        | NewLoopOut (h, loopOut), HasNotStarted ->
+        | NewLoopOut({ Height = h } as p, loopOut), HasNotStarted ->
           do! loopOut.Validate() |> expectInputError
           if loopOut.MinerFeeInvoice |> String.IsNullOrEmpty |> not then
+            let prepaymentParams =
+              { PayInvoiceParams.MaxFee =  p.MaxPrepayFee
+                OutgoingChannelId = p.OutgoingChanId }
             do!
               loopOut.MinerFeeInvoice
               |> PaymentRequest.Parse
               |> ResultUtils.Result.deref
-              |> payInvoice loopOut.TheirNetwork
-          let invoice =
-            loopOut.Invoice
-            |> PaymentRequest.Parse
-            |> ResultUtils.Result.deref
+              |> payInvoice
+                   loopOut.TheirNetwork
+                   prepaymentParams
           return
-            [NewLoopOutAdded(h, loopOut); OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice) ]
+            [
+              NewLoopOutAdded(h, loopOut)
+              let invoice =
+                loopOut.Invoice
+                |> PaymentRequest.Parse
+                |> ResultUtils.Result.deref
+              let paymentParams = {
+                MaxFee = p.MaxPrepayFee
+                OutgoingChannelId = p.OutgoingChanId
+              }
+              OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice, paymentParams)
+            ]
             |> enhance
         | OffChainOfferResolve pp, Out(_, loopOut) ->
           return [OffChainOfferResolved pp; FinishedSuccessfully loopOut.Id] |> enhance
