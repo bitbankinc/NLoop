@@ -13,9 +13,9 @@ type LoopOutQuoteRequest = {
   pair: PairId
 }
 
+/// estimates for the fees making up the total swap cost for the client.
 type LoopOutQuote = {
   SwapFee: Money
-  PrepayAmount: Money
   MinerFee: Money
   SwapPaymentDest: PubKey
 }
@@ -39,11 +39,14 @@ type BoltzClientExtensions =
   static member GetLoopOutQuote(this: BoltzClient, req: LoopOutQuoteRequest): Task<LoopOutQuote> = task {
     let! r = this.GetPairsAsync()
     let p = r.Pairs.[PairId.toString(&req.pair)]
+    let! nodes = this.GetNodesAsync()
     return {
       SwapFee =((p.Fees.Percentage / 100.) * (req.Amount.Satoshi |> double)) |> int64 |> Money.Satoshis
-      PrepayAmount = failwith "todo"
-      MinerFee = failwith "todo"
-      SwapPaymentDest = failwith "todo" }
+      MinerFee =
+        p.Fees.MinerFees.BaseAsset.Normal |> Money.Satoshis
+      SwapPaymentDest =
+        nodes.Nodes |> Seq.head |> fun i -> i.Value.NodeKey
+    }
   }
 
   static member GetLoopInQuote(this: BoltzClient, req: LoopOutQuoteRequest): Task<LoopInQuote> = task {

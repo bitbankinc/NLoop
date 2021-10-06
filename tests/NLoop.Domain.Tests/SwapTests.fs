@@ -171,7 +171,7 @@ type SwapDomainTests() =
           let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
           let paymentHash = paymentPreimage.Hash
           let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
-          PaymentRequest.TryCreate(loopOut.TheirNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
+          PaymentRequest.TryCreate(loopOut.QuoteAssetNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
           |> ResultUtils.Result.deref
           |> fun x -> x.ToString()
     }
@@ -202,14 +202,14 @@ type SwapDomainTests() =
         let loopOut =
           let claimKey = new Key()
           let claimAddr =
-            claimKey.PubKey.WitHash.GetAddress(loopOut.OurNetwork)
+            claimKey.PubKey.WitHash.GetAddress(loopOut.BaseAssetNetwork)
           let paymentHash = paymentPreimage.Hash
           let refundKey = new Key()
           let redeemScript =
             Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey (loopOut.TimeoutBlockHeight)
           let invoice =
             let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
-            PaymentRequest.TryCreate(loopOut.TheirNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
+            PaymentRequest.TryCreate(loopOut.QuoteAssetNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
             |> ResultUtils.Result.deref
           { loopOut with
               Preimage = paymentPreimage
@@ -224,7 +224,7 @@ type SwapDomainTests() =
             let fee = Money.Satoshis(30m)
             let txb =
               loopOut
-                .OurNetwork
+                .BaseAssetNetwork
                 .CreateTransactionBuilder()
             txb
               .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))

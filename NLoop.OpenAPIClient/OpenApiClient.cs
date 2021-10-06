@@ -908,6 +908,10 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Max_swap_fee { get; set; }
+    
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
         [Newtonsoft.Json.JsonExtensionData]

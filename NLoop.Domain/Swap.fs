@@ -237,16 +237,16 @@ module Swap =
         // --- loop out ---
         | NewLoopOut({ Height = h } as p, loopOut), HasNotStarted ->
           do! loopOut.Validate() |> expectInputError
-          if loopOut.MinerFeeInvoice |> String.IsNullOrEmpty |> not then
+          if loopOut.PrepayInvoice |> String.IsNullOrEmpty |> not then
             let prepaymentParams =
               { PayInvoiceParams.MaxFee =  p.MaxPrepayFee
                 OutgoingChannelId = p.OutgoingChanId }
             do!
-              loopOut.MinerFeeInvoice
+              loopOut.PrepayInvoice
               |> PaymentRequest.Parse
               |> ResultUtils.Result.deref
               |> payInvoice
-                   loopOut.TheirNetwork
+                   loopOut.QuoteAssetNetwork
                    prepaymentParams
           return
             [
@@ -273,23 +273,23 @@ module Swap =
             return []
           | SwapStatusType.TxMempool
           | SwapStatusType.TxConfirmed ->
-            let struct (_, counterPartyCryptoCode) = loopOut.PairId
+            let struct (baseAsset, _quoteAsset) = loopOut.PairId
             let! feeRate =
-              feeEstimator.Estimate(counterPartyCryptoCode)
+              feeEstimator.Estimate(baseAsset)
             let lockupTx =
               u.Transaction |> Option.defaultWith(fun () -> raise <| Exception("No Transaction in response"))
             let! claimTx =
               Transactions.createClaimTx
-                (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.OurNetwork))
+                (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.BaseAssetNetwork))
                 loopOut.ClaimKey
                 loopOut.Preimage
                 loopOut.RedeemScript
                 feeRate
                 lockupTx.Tx
-                loopOut.OurNetwork
+                loopOut.BaseAssetNetwork
               |> expectTxError "claim tx"
             do!
-              broadcaster.BroadcastTx(claimTx, counterPartyCryptoCode)
+              broadcaster.BroadcastTx(claimTx, baseAsset)
             let txid = claimTx.GetWitHash()
             return [ClaimTxPublished(txid);] |> enhance
           | SwapStatusType.SwapExpired ->
@@ -305,14 +305,14 @@ module Swap =
         | SwapUpdate u, In(_height, loopIn) ->
           match u.SwapStatus with
           | SwapStatusType.InvoiceSet ->
-            let struct (_ourCryptoCode, counterPartyCryptoCode) = loopIn.PairId
+            let struct (baseAsset, _) = loopIn.PairId
             let! utxos =
-              utxoProvider.GetUTXOs(loopIn.ExpectedAmount, counterPartyCryptoCode)
+              utxoProvider.GetUTXOs(loopIn.ExpectedAmount, baseAsset)
               |> TaskResult.mapError(UTXOProviderError)
             let! feeRate =
-              feeEstimator.Estimate(counterPartyCryptoCode)
+              feeEstimator.Estimate(baseAsset)
             let! change =
-              getChangeAddress.Invoke(counterPartyCryptoCode)
+              getChangeAddress.Invoke(baseAsset)
               |> TaskResult.mapError(FailedToGetAddress)
             let psbt =
               Transactions.createSwapPSBT
@@ -321,15 +321,15 @@ module Swap =
                 loopIn.ExpectedAmount
                 feeRate
                 change
-                loopIn.TheirNetwork
+                loopIn.QuoteAssetNetwork
               |> function | Ok x -> x | Error e -> failwith $"%A{e}"
-            let! psbt = utxoProvider.SignSwapTxPSBT(psbt, counterPartyCryptoCode)
+            let! psbt = utxoProvider.SignSwapTxPSBT(psbt, baseAsset)
             match psbt.TryFinalize() with
             | false, e ->
               return raise <| Exception $"%A{e |> Seq.toList}"
             | true, _ ->
               let tx = psbt.ExtractTransaction()
-              do! broadcaster.BroadcastTx(tx, counterPartyCryptoCode)
+              do! broadcaster.BroadcastTx(tx, baseAsset)
               return [SwapTxPublished(tx.ToHex())] |> enhance
           | SwapStatusType.TxConfirmed
           | SwapStatusType.InvoicePayed ->
@@ -357,17 +357,17 @@ module Swap =
         | SetValidationError(err), Out(_, { Id = swapId })
         | SetValidationError(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
-        | NewBlock (height, cc), Out(oldHeight, loopOut) when let struct (ourCC,_ ) = loopOut.PairId in ourCC = cc ->
+        | NewBlock (height, cc), Out(oldHeight, loopOut) when let struct (baseAsset,_ ) = loopOut.PairId in baseAsset = cc ->
             return! (height, oldHeight) ||> checkHeight
-        | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, theirCC) = loopIn.PairId in theirCC = cc ->
+        | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
           let! events = (height, oldHeight) ||> checkHeight
           if loopIn.TimeoutBlockHeight <= height then
-            let struct(_ourCC, theirCC) = loopIn.PairId
+            let struct(_offChainAsset, onChainAsset) = loopIn.PairId
             let! refundAddress =
-              getRefundAddress.Invoke(theirCC)
+              getRefundAddress.Invoke(onChainAsset)
               |> TaskResult.mapError(FailedToGetAddress)
             let! fee =
-              feeEstimator.Estimate(theirCC)
+              feeEstimator.Estimate(onChainAsset)
             let! refundTx =
               Transactions.createRefundTx
                 loopIn.LockupTransactionHex.Value
@@ -376,10 +376,10 @@ module Swap =
                 refundAddress
                 loopIn.RefundPrivateKey
                 loopIn.TimeoutBlockHeight
-                loopIn.TheirNetwork
+                loopIn.QuoteAssetNetwork
               |> expectTxError "refund tx"
 
-            do! broadcaster.BroadcastTx(refundTx, theirCC)
+            do! broadcaster.BroadcastTx(refundTx, onChainAsset)
             let additionalEvents =
               [RefundTxPublished(refundTx.GetWitHash()); FinishedByRefund loopIn.Id]
               |> enhance

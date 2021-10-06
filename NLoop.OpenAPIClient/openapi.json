@@ -445,6 +445,11 @@
             "description": "< Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.",
             "format": "int64",
             "nullable": true
+          },
+          "max_swap_fee": {
+            "type": "integer",
+            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.",
+            "format": "int64"
           }
         }
       },

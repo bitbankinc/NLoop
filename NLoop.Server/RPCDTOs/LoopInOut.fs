@@ -22,6 +22,9 @@ type LoopInRequest = {
 
   [<JsonPropertyName "max_miner_fee">]
   MaxMinerFee: Money voption
+
+  [<JsonPropertyName "max_swap_fee">]
+  MaxSwapFee: Money voption
 }
 
 type LoopOutRequest = {
@@ -56,6 +59,7 @@ type LoopOutRequest = {
 
   [<JsonPropertyName "max_miner_fee">]
   MaxMinerFee: Money voption
+
 }
   with
   member this.AcceptZeroConf =
@@ -63,12 +67,6 @@ type LoopOutRequest = {
     | None
     | Some 0 -> true
     | _ -> false
-
-  member this.Validate(opts: NLoopOptions): Result<unit, string list> =
-    if this.Amount.Satoshi < opts.MinimumSwapAmountSats then
-      Error([$"Swap amount must be larger than {opts.MinimumSwapAmountSats} satoshis. It was {this.Amount.Satoshi} satoshi"])
-    else
-      Ok()
 
 type LoopInResponse = {
   /// Unique id for the swap.

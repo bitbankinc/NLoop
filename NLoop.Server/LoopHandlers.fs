@@ -25,6 +25,11 @@ open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks
 open Giraffe
 
+module private ValueOption =
+  let defaultToVeryHighFee(v: Money voption) =
+    v |> ValueOption.defaultValue(Money.Coins(100000m))
+
+
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
@@ -47,7 +52,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
             PreimageHash = preimageHash.Value }
         boltzCli.CreateReverseSwapAsync(req)
 
-      let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(baseCryptoCode)
+      let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(quoteCryptoCode)
       let! addr =
         match req.Address with
         | Some addr -> Task.FromResult addr
@@ -70,24 +75,20 @@ let handleLoopOutCore (req: LoopOutRequest) =
         PairId = pairId
         ChainName = opts.Value.ChainName.ToString()
         Label = req.Label |> Option.defaultValue String.Empty
-        MinerFeeInvoice =
+        PrepayInvoice =
           outResponse.MinerFeeInvoice
           |> Option.map(fun s -> s.ToString())
           |> Option.defaultValue String.Empty
+        MaxMinerFee =
+          req.MaxMinerFee |> ValueOption.defaultToVeryHighFee
       }
 
       let actor = ctx.GetService<SwapActor>()
-      let inline maxOrA (a: _) (b: _ voption) =
-        let max a b = Money.Max(a, b)
-        b |> ValueOption.map(max a) |> ValueOption.defaultValue a
-      let offChainOptions = opts.Value.ChainOptions.[baseCryptoCode]
-      let onChainOptions = opts.Value.ChainOptions.[quoteCryptoCode]
       match outResponse.Validate(preimageHash.Value,
                                  claimKey.PubKey,
                                  req.Amount,
-                                 maxOrA opts.Value.MaxSwapFee req.MaxSwapFee,
-                                 maxOrA opts.Value.MaxPrepayAmount req.MaxPrepayAmount,
-                                 maxOrA opts.Value.MaxMinerFee req.MaxMinerFee,
+                                 req.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
+                                 req.MaxPrepayAmount |> ValueOption.defaultToVeryHighFee,
                                  n) with
       | Error e ->
         do! actor.Execute(loopOut.Id, Swap.Command.SetValidationError(e), "handleLoopOut")
@@ -95,8 +96,8 @@ let handleLoopOutCore (req: LoopOutRequest) =
       | Ok () ->
         let loopOutParams = {
           Swap.LoopOutParams.OutgoingChanId = req.ChannelId
-          Swap.LoopOutParams.MaxPrepayFee = maxOrA opts.Value.MaxPrepayRoutingFee req.MaxPrepayRoutingFee
-          Swap.LoopOutParams.MaxPaymentFee = maxOrA opts.Value.MaxSwapRoutingFee req.MaxSwapRoutingFee
+          Swap.LoopOutParams.MaxPrepayFee = req.MaxPrepayRoutingFee |> ValueOption.defaultValue(Money.Coins 100000m)
+          Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
           Swap.LoopOutParams.Height = ctx.GetBlockHeight(baseCryptoCode)
         }
         if (not req.AcceptZeroConf) then
@@ -146,20 +147,14 @@ let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
-
-      match req.Validate(opts.Value) with
-      | Error errors ->
-        ctx.SetStatusCode StatusCodes.Status400BadRequest
-        return! json {| errors = errors.ToArray() |} next ctx
-      | Ok _ ->
       let pairId =
         req.PairId
-        |> Option.defaultValue (PairId.Default)
-      let struct(_ourCryptoCode, counterPartyCryptoCode) =
+        |> Option.defaultValue PairId.Default
+      let struct(_baseAsset, quoteAsset) =
         pairId
       return!
         (checkBlockchainIsSyncedAndSetTipHeight pairId
-         >=> checkWeHaveRouteToCounterParty counterPartyCryptoCode req.Amount
+         >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
          >=> handleLoopOutCore req)
           next ctx
     }
@@ -168,11 +163,11 @@ let handleLoopInCore (loopIn: LoopInRequest) =
     task {
       let pairId =
         loopIn.PairId
-        |> Option.defaultValue (PairId.Default)
-      let struct(ourCryptoCode, counterpartyCryptoCode) =
+        |> Option.defaultValue PairId.Default
+      let struct(baseCryptoCode, quoteCryptoCode) =
         pairId
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
-      let n = opts.Value.GetNetwork(ourCryptoCode)
+      let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
       let boltzCli = ctx.GetService<BoltzClient>()
 
       let refundKey = new Key()
@@ -182,20 +177,24 @@ let handleLoopInCore (loopIn: LoopInRequest) =
         let amt = loopIn.Amount.ToLNMoney()
         ctx
           .GetService<ILightningClientProvider>()
-          .GetClient(ourCryptoCode)
+          .GetClient(baseCryptoCode)
           .GetInvoice(preimage, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
 
       let! inResponse =
         let req =
           { CreateSwapRequest.Invoice = invoice
-            PairId = (ourCryptoCode, counterpartyCryptoCode)
+            PairId = pairId
             OrderSide = OrderType.buy
             RefundPublicKey = refundKey.PubKey }
         boltzCli.CreateSwapAsync(req)
 
       let actor = ctx.GetService<SwapActor>()
       let id = inResponse.Id |> SwapId
-      match inResponse.Validate(invoice.PaymentHash.Value, refundKey.PubKey, loopIn.Amount, opts.Value.MaxSwapFee, n) with
+      match inResponse.Validate(invoice.PaymentHash.Value,
+                                refundKey.PubKey,
+                                loopIn.Amount,
+                                loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
+                                onChainNetwork) with
       | Error e ->
         do! actor.Execute(id, Swap.Command.SetValidationError(e))
         return! (error503 e) next ctx
@@ -216,7 +215,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
           ChainName = opts.Value.ChainName.ToString()
           Label = loopIn.Label |> Option.defaultValue String.Empty
         }
-        let height = ctx.GetBlockHeight(ourCryptoCode)
+        let height = ctx.GetBlockHeight(quoteCryptoCode)
         do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
         let response = {
           LoopInResponse.Id = inResponse.Id

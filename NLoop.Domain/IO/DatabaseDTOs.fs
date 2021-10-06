@@ -33,14 +33,16 @@ type LoopOut = {
   PairId: PairId
   Label: string
 
-  MinerFeeInvoice: string
+  PrepayInvoice: string
+
+  MaxMinerFee: Money
   ChainName: string
 }
   with
-  member this.OurNetwork =
+  member this.BaseAssetNetwork =
     let struct (cryptoCode, _) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
-  member this.TheirNetwork =
+  member this.QuoteAssetNetwork =
     let struct (_, cryptoCode) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
@@ -74,10 +76,10 @@ type LoopIn = {
   ChainName: string
 }
   with
-  member this.OurNetwork =
+  member this.BaseAssetNetwork =
     let struct (cryptoCode, _) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
-  member this.TheirNetwork =
+  member this.QuoteAssetNetwork =
     let struct (_, cryptoCode) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 

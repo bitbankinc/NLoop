@@ -131,12 +131,12 @@ type CreateSwapResponse = {
   TimeoutBlockHeight: BlockHeight
 }
   with
-  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money, n: Network): Result<_, string> =
+  member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money, onChainNetwork: Network): Result<_, string> =
     let mutable addr = null
     let mutable e = null
     try
       addr <-
-        BitcoinAddress.Create(this.Address, n)
+        BitcoinAddress.Create(this.Address, onChainNetwork)
     with
     | :? FormatException as ex ->
       e <- ex
@@ -200,7 +200,6 @@ type CreateReverseSwapResponse = {
                        offChainAmountWePay: Money,
                        maxSwapServiceFee: Money,
                        maxPrepay: Money,
-                       maxMinerFee: Money,
                        n: Network): Result<_, string> =
     let mutable addr = null
     let mutable e = null

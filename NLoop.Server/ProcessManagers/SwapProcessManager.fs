@@ -35,7 +35,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           match e.Data with
           | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice, paymentParams) -> Some(swapId, pairId, invoice, paymentParams)
           | _ -> None)
-        |> Observable.flatmapTask(fun (swapId, struct(ourCC, _theirCC), invoice, paymentParams) ->
+        |> Observable.flatmapTask(fun (swapId, struct(_baseAsset, quoteAsset), invoice, paymentParams) ->
           task {
             try
               let! pr =
@@ -44,7 +44,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                   MaxFee = paymentParams.MaxFee |> FeeLimit.Fixed
                   OutgoingChannelId = paymentParams.OutgoingChannelId
                 }
-                lightningClientProvider.GetClient(ourCC).Offer(req).ConfigureAwait(false)
+                lightningClientProvider.GetClient(quoteAsset).Offer(req).ConfigureAwait(false)
               match pr with
               | Ok p ->
                 do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
@@ -52,7 +52,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                 do! handleError swapId e
             with
             | ex ->
-                do! handleError swapId (ex.Message)
+                do! handleError swapId ex.Message
           })
         |> Observable.subscribe(id)
 
