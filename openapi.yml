@@ -314,6 +314,12 @@ components:
             the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that
             the server is not publishing the revocation.
           nullable: true
+        sweep_conf_target:
+          type: integer
+          format: int32
+          description: <
+            Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
+          nullable: true
       required:
         - amount
     LoopInRequest:
@@ -355,6 +361,13 @@ components:
             Maximum we are willing to pay the server for the swap.
             This value is not disclosed in the swap initiation call, but if the server asks for a higher fee,
             we abort the swap.
+          nullable: true
+        htlc_conf_target:
+          type: integer
+          format: int32
+          description: <
+            Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
+          nullable: true
       required:
         - amount
 

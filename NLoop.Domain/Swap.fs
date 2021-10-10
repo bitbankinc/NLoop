@@ -3,6 +3,8 @@ namespace NLoop.Domain
 open System
 open System.Text.Json
 open System.Threading.Tasks
+open System.Threading.Tasks
+open FSharp.Control.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils.Primitives
 open NBitcoin
@@ -27,6 +29,8 @@ module Swap =
     | Refunded of uint256
     /// Counterparty gave us bogus msg. Swap did not start.
     | Errored of msg: string
+    /// Counterparty did not publish the swap tx (lockup tx) in loopout, so the swap is canceled.
+    | Timeout of msg: string
 
   [<Struct>]
   type Category =
@@ -61,6 +65,14 @@ module Swap =
 
   [<Literal>]
   let entityType = "swap"
+
+  [<AutoOpen>]
+  module private Constants =
+    let MinPreimageRevealDelta = BlockHeightOffset32(20u)
+
+    let DefaultSweepConfTarget = BlockHeightOffset32 9u
+
+    let DefaultSweepConfTargetDelta = BlockHeightOffset32 18u
 
   type LoopOutParams = {
     MaxPrepayFee: Money
@@ -108,6 +120,7 @@ module Swap =
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
     | FinishedByRefund of id: SwapId
+    | FinishedByTimeout of reason: string
     | UnknownTagEvent of tag: uint16 * data: byte[]
     with
     member this.EventTag =
@@ -126,6 +139,7 @@ module Swap =
       | FinishedSuccessfully _ -> 1024us + 0us
       | FinishedByRefund _ -> 1024us + 1us
       | FinishedByError _ -> 1024us + 2us
+      | FinishedByTimeout _ -> 1024us + 3us
 
       | UnknownTagEvent (t, _) -> t
 
@@ -145,6 +159,7 @@ module Swap =
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
       | FinishedByError _ -> "finished_by_error"
+      | FinishedByTimeout _ -> "finished_by_timeout"
 
       | UnknownTagEvent _ -> "unknown_version_event"
     member this.ToEventSourcingEvent effectiveDate source : ESEvent<Event> =
@@ -160,6 +175,7 @@ module Swap =
     | FailedToGetAddress of string
     | UTXOProviderError of UTXOProviderError
     | InputError of string
+    | CanNotSafelyRevealPreimage
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
     r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)
@@ -217,10 +233,58 @@ module Swap =
   let private enhanceEvents date source (events: Event list) =
     events |> List.map(fun e -> e.ToEventSourcingEvent date source)
 
+  /// Returns None in case we don't have to do anything.
+  /// Otherwise returns txid for sweep tx.
+  let private sweepOrBump
+    { Deps.FeeEstimator = feeEstimator; Broadcaster = broadcaster }
+    (height: BlockHeight)
+    (lockupTx: Transaction)
+    (loopOut: LoopOut): Task<Result<_ option, Error>> = taskResult {
+      let struct (baseAsset, _quoteAsset) = loopOut.PairId
+      let! feeRate =
+        let confTarget =
+          let remainingBlocks = loopOut.TimeoutBlockHeight - height
+          if remainingBlocks <= DefaultSweepConfTargetDelta && loopOut.SweepConfTarget > DefaultSweepConfTarget then
+            DefaultSweepConfTarget
+          else
+            loopOut.SweepConfTarget
+        feeEstimator.Estimate confTarget baseAsset
+      let getClaimTx feeRate: Result<Transaction, Error> =
+        Transactions.createClaimTx
+          (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.BaseAssetNetwork))
+          loopOut.ClaimKey
+          loopOut.Preimage
+          loopOut.RedeemScript
+          feeRate
+          lockupTx
+          loopOut.BaseAssetNetwork
+        |> expectTxError "claim tx"
+      let! claimTx = getClaimTx feeRate
+      let! maybeClaimTxToPublish =
+        if loopOut.MaxMinerFee > feeRate.GetFee(claimTx) then
+          if loopOut.ClaimTransactionId.IsSome then
+            // if the preimage is already revealed, we have no choice to bump the fee
+            // to our possible maximum value.
+            getClaimTx (FeeRate(loopOut.MaxMinerFee, claimTx.GetVirtualSize()))
+            |> Result.map(Some)
+          else
+            // otherwise, we should not do anything.
+            None |> Ok
+        else
+          claimTx |> Some |> Ok
+      match maybeClaimTxToPublish with
+      | Some claimTx ->
+        do!
+          broadcaster.BroadcastTx(claimTx, baseAsset)
+      | None -> ()
+      return
+        maybeClaimTxToPublish |> Option.map(fun t -> t.GetWitHash())
+    }
 
   let executeCommand
-    { Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-      GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress; PayInvoice = payInvoice }
+    ({ Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
+       GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress; PayInvoice = payInvoice
+     } as deps)
     (s: State)
     (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
     taskResult {
@@ -264,7 +328,7 @@ module Swap =
             |> enhance
         | OffChainOfferResolve pp, Out(_, loopOut) ->
           return [OffChainOfferResolved pp; FinishedSuccessfully loopOut.Id] |> enhance
-        | SwapUpdate u, Out(_height, loopOut) ->
+        | SwapUpdate u, Out(height, loopOut) ->
           if (u.SwapStatus = loopOut.Status) then
             return []
           else
@@ -273,28 +337,24 @@ module Swap =
             return []
           | SwapStatusType.TxMempool
           | SwapStatusType.TxConfirmed ->
-            let struct (baseAsset, _quoteAsset) = loopOut.PairId
-            let! feeRate =
-              feeEstimator.Estimate(baseAsset)
-            let lockupTx =
-              u.Transaction |> Option.defaultWith(fun () -> raise <| Exception("No Transaction in response"))
-            let! claimTx =
-              Transactions.createClaimTx
-                (BitcoinAddress.Create(loopOut.ClaimAddress, loopOut.BaseAssetNetwork))
-                loopOut.ClaimKey
-                loopOut.Preimage
-                loopOut.RedeemScript
-                feeRate
-                lockupTx.Tx
-                loopOut.BaseAssetNetwork
-              |> expectTxError "claim tx"
-            do!
-              broadcaster.BroadcastTx(claimTx, baseAsset)
-            let txid = claimTx.GetWitHash()
-            return [ClaimTxPublished(txid);] |> enhance
+
+            let swapTx =
+               u.Transaction
+               |> Option.map(fun txInfo -> txInfo.Tx)
+               |> Option.defaultWith(fun () -> raise <| Exception("No Transaction in response"))
+
+            let e = SwapTxPublished(swapTx.ToHex())
+            match! sweepOrBump deps height swapTx loopOut with
+            | Some txid ->
+              return [e; ClaimTxPublished(txid);] |> enhance
+            | None ->
+              return [e] |> enhance
+
           | SwapStatusType.SwapExpired ->
-            let reason = u.FailureReason |> Option.defaultValue ""
-            return [FinishedByError(loopOut.Id, $"Swap expired (Reason: %s{reason})");] |> enhance
+            let reason =
+              u.FailureReason
+              |> Option.defaultValue "Counterparty claimed that the loop out is expired but we don't know the exact reason."
+            return [FinishedByTimeout($"Swap expired (Reason: %s{reason})");] |> enhance
           | _ ->
             return []
 
@@ -310,7 +370,9 @@ module Swap =
               utxoProvider.GetUTXOs(loopIn.ExpectedAmount, baseAsset)
               |> TaskResult.mapError(UTXOProviderError)
             let! feeRate =
-              feeEstimator.Estimate(baseAsset)
+              feeEstimator.Estimate
+                loopIn.HTLCConfTarget
+                baseAsset
             let! change =
               getChangeAddress.Invoke(baseAsset)
               |> TaskResult.mapError(FailedToGetAddress)
@@ -357,8 +419,35 @@ module Swap =
         | SetValidationError(err), Out(_, { Id = swapId })
         | SetValidationError(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
-        | NewBlock (height, cc), Out(oldHeight, loopOut) when let struct (baseAsset,_ ) = loopOut.PairId in baseAsset = cc ->
-            return! (height, oldHeight) ||> checkHeight
+        | NewBlock (height, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
+          when baseAsset = cc ->
+            let! events = (height, oldHeight) ||> checkHeight
+            let! additionalEvents = taskResult {
+              let remainingBlocks = timeout - height
+              let haveWeRevealedThePreimage = maybePrevTxId.IsSome
+              // If we have not revealed the preimage, and we don't have time left to sweep the swap,
+              // we abandon the swap because we can no longer sweep on the success path (without potentially having to
+              // compete with server's timeout tx.) and we have not had any coins pulled off-chain
+              if remainingBlocks <= MinPreimageRevealDelta && not <| haveWeRevealedThePreimage then
+                let msg =
+                  $"We reached a timeout height (timeout: {timeout}) - (current height: {height}) < (minimum_delta: {MinPreimageRevealDelta})" +
+                  "That means Preimage can no longer safely revealed, so we will give up the swap"
+                return [FinishedByTimeout msg] |> enhance
+              else
+                match loopOut.LockupTransactionHex with
+                | None ->
+                  // When we don't know lockup tx (a.k.a. swap tx), there is no way we can claim our share.
+                  return []
+                | Some lockupTxHex ->
+                  let tx = Transaction.Parse(lockupTxHex, loopOut.BaseAssetNetwork)
+                  match! sweepOrBump deps height tx loopOut with
+                  | Some txid ->
+                    return [ClaimTxPublished(txid);] |> enhance
+                  | None ->
+                    return []
+              }
+            return events @ additionalEvents
+
         | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
           let! events = (height, oldHeight) ||> checkHeight
           if loopIn.TimeoutBlockHeight <= height then
@@ -367,7 +456,7 @@ module Swap =
               getRefundAddress.Invoke(onChainAsset)
               |> TaskResult.mapError(FailedToGetAddress)
             let! fee =
-              feeEstimator.Estimate(onChainAsset)
+              feeEstimator.Estimate loopIn.HTLCConfTarget onChainAsset
             let! refundTx =
               Transactions.createRefundTx
                 loopIn.LockupTransactionHex.Value
@@ -402,6 +491,8 @@ module Swap =
       Out (h, x)
     | ClaimTxPublished txid, Out(h, x) ->
       Out (h, { x with ClaimTransactionId = Some txid })
+    | SwapTxPublished tx, Out(h, x) ->
+      Out (h, { x with LockupTransactionHex = Some tx })
     | OffChainOfferResolved(preimage), Out(h, x) ->
       Out(h, { x with Preimage = preimage })
 
@@ -421,6 +512,9 @@ module Swap =
       Finished(FinishedState.Success)
     | FinishedByRefund _, In (_h, { RefundTransactionId = Some txid }) ->
       Finished(FinishedState.Refunded(txid))
+    | FinishedByTimeout reason, Out _
+    | FinishedByTimeout reason, In _ ->
+      Finished(FinishedState.Timeout(reason))
 
     | NewTipReceived h, Out(_, x) ->
       Out(h, x)

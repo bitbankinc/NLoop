@@ -50,4 +50,5 @@ module Constants =
   let AssemblyVersion =
     Bar.GetType().Assembly.GetName().Version.ToString()
 
-
+  let [<Literal>] DefaultHtlcConfTarget = 8
+  let [<Literal>] DefaultSweepConfTarget = 8

@@ -86,7 +86,7 @@ type NLoopExtensions() =
       this
         .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
-        .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
+        .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
         .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()

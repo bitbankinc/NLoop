@@ -49,6 +49,15 @@ type BlockHeightJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetUInt32() |> BlockHeight
 
+type BlockHeightOffsetJsonConverter() =
+  inherit JsonConverter<BlockHeightOffset32>()
+  override this.Write(writer, value, _options) =
+    value.Value
+    |> writer.WriteNumberValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetUInt32() |> BlockHeightOffset32
+
+
 type UnixTimeJsonConverter() =
   inherit JsonConverter<DateTimeOffset>()
   override this.Write(writer, value, _options) =
@@ -164,6 +173,7 @@ type Extensions() =
     this.Converters.Add(HexPubKeyJsonConverter())
     this.Converters.Add(PrivKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
+    this.Converters.Add(BlockHeightOffsetJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
     this.Converters.Add(PaymentRequestJsonConverter())

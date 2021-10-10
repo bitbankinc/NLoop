@@ -17,7 +17,7 @@ open NLoop.Server.Actors
 
 type BoltzFeeEstimator(boltzClient: BoltzClient) =
   interface IFeeEstimator with
-    member this.Estimate(cryptoCode) = task {
+    member this.Estimate confTarget (cryptoCode) = task {
       let! feeMap = boltzClient.GetFeeEstimation()
       match feeMap.TryGetValue(cryptoCode.ToString()) with
       | true, fee ->
@@ -33,6 +33,13 @@ type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>, logger: ILogger<Bitcoin
       logger.LogInformation($"Broadcasting Transaction: {tx.GetWitHash()}")
       let! _ = cli.SendRawTransactionAsync(tx)
       ()
+    }
+
+type RPCFeeEstimator(opts: IOptions<NLoopOptions>) =
+  interface IFeeEstimator with
+    member this.Estimate target cc = task {
+      let! resp = opts.Value.GetRPCClient(cc).TryEstimateSmartFeeAsync(target.Value |> int)
+      return resp.FeeRate
     }
 
 type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =

@@ -70,7 +70,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
         ClaimAddress = addr.ToString()
         OnChainAmount = outResponse.OnchainAmount
         TimeoutBlockHeight = outResponse.TimeoutBlockHeight
-        LockupTransactionId = None
+        LockupTransactionHex = None
         ClaimTransactionId = None
         PairId = pairId
         ChainName = opts.Value.ChainName.ToString()
@@ -81,6 +81,10 @@ let handleLoopOutCore (req: LoopOutRequest) =
           |> Option.defaultValue String.Empty
         MaxMinerFee =
           req.MaxMinerFee |> ValueOption.defaultToVeryHighFee
+        SweepConfTarget =
+          req.SweepConfTarget
+          |> ValueOption.defaultValue Constants.DefaultSweepConfTarget
+          |> uint |> BlockHeightOffset32
       }
 
       let actor = ctx.GetService<SwapActor>()
@@ -214,6 +218,10 @@ let handleLoopInCore (loopIn: LoopInRequest) =
           PairId = pairId
           ChainName = opts.Value.ChainName.ToString()
           Label = loopIn.Label |> Option.defaultValue String.Empty
+          HTLCConfTarget =
+            loopIn.HtlcConfTarget
+            |> ValueOption.defaultValue Constants.DefaultHtlcConfTarget
+            |> uint |> BlockHeightOffset32
         }
         let height = ctx.GetBlockHeight(quoteCryptoCode)
         do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))

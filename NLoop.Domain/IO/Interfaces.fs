@@ -7,7 +7,7 @@ open NBitcoin
 open NLoop.Domain
 
 type IFeeEstimator =
-  abstract member Estimate: cryptoCode: SupportedCryptoCode -> Task<FeeRate>
+  abstract member Estimate: confTarget: BlockHeightOffset32 -> cryptoCode: SupportedCryptoCode -> Task<FeeRate>
 
 type IBroadcaster =
   abstract member BroadcastTx: tx: Transaction * cryptoCode: SupportedCryptoCode -> Task

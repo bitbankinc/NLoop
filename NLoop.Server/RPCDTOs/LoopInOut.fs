@@ -25,6 +25,9 @@ type LoopInRequest = {
 
   [<JsonPropertyName "max_swap_fee">]
   MaxSwapFee: Money voption
+
+  [<JsonPropertyName "htlc_conf_target">]
+  HtlcConfTarget: int voption
 }
 
 type LoopOutRequest = {
@@ -60,6 +63,8 @@ type LoopOutRequest = {
   [<JsonPropertyName "max_miner_fee">]
   MaxMinerFee: Money voption
 
+  [<JsonPropertyName "sweep_conf_target">]
+  SweepConfTarget: int voption
 }
   with
   member this.AcceptZeroConf =

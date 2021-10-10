@@ -14,7 +14,9 @@ type LoopOut = {
   Id: SwapId
   [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
+
   AcceptZeroConf: bool
+
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   ClaimKey: Key
   [<JsonConverter(typeof<PaymentPreimageJsonConverter>)>]
@@ -27,13 +29,18 @@ type LoopOut = {
   OnChainAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
-  LockupTransactionId: uint256 option
+
+  LockupTransactionHex: string option
+
   ClaimTransactionId: uint256 option
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
   Label: string
 
   PrepayInvoice: string
+
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  SweepConfTarget: BlockHeightOffset32
 
   MaxMinerFee: Money
   ChainName: string
@@ -67,6 +74,9 @@ type LoopIn = {
   ExpectedAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
+
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  HTLCConfTarget: BlockHeightOffset32
 
   LockupTransactionHex: string option
   RefundTransactionId: uint256 option

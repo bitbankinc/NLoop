@@ -411,6 +411,12 @@
             "description": "< Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.",
             "format": "int64",
             "nullable": true
+          },
+          "sweep_conf_target": {
+            "type": "integer",
+            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "format": "int32",
+            "nullable": true
           }
         }
       },
@@ -449,7 +455,14 @@
           "max_swap_fee": {
             "type": "integer",
             "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.",
-            "format": "int64"
+            "format": "int64",
+            "nullable": true
+          },
+          "htlc_conf_target": {
+            "type": "integer",
+            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "format": "int32",
+            "nullable": true
           }
         }
       },

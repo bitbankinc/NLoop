@@ -9,6 +9,7 @@ open LndClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -16,13 +17,13 @@ open NLoop.Server
 
 [<AutoOpen>]
 module private Helpers =
-  let getSwapDeps b f u g p =
+  let getSwapDeps b f u g payInvoice =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
       Swap.Deps.UTXOProvider = u
       Swap.Deps.GetChangeAddress = g
       Swap.Deps.GetRefundAddress = g
-      Swap.Deps.PayInvoice = p
+      Swap.Deps.PayInvoice = payInvoice
       }
 
 type SwapActor(broadcaster: IBroadcaster,
