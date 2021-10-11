@@ -37,9 +37,10 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
           let newBlockNum = info.Blocks |> uint32 |> BlockHeight
           let isIBDDone = not <| (info.VerificationProgress < 1.0f)
           if isIBDDone && currentHeight <> newBlockNum then
+            let! block = cli.GetBlockAsync(newBlockNum.Value)
             currentHeight <- newBlockNum
             let cmd =
-              (newBlockNum, cc)
+              (newBlockNum, block, cc)
               |> Swap.Command.NewBlock
             for s in swaps.Keys do
               do! actor.Execute(s, cmd, nameof(BlockchainListener))

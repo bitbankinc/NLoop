@@ -84,7 +84,6 @@ module Swap =
   type Command =
     // -- loop out --
     | NewLoopOut of LoopOutParams * LoopOut
-    | OffChainOfferResolve of paymentPreimage: PaymentPreimage
 
     // -- loop in --
     | NewLoopIn of height: BlockHeight * LoopIn
@@ -92,7 +91,7 @@ module Swap =
     // -- both
     | SwapUpdate of Data.SwapStatusResponseData
     | SetValidationError of err: string
-    | NewBlock of height: BlockHeight * cryptoCode: SupportedCryptoCode
+    | NewBlock of height: BlockHeight * block: Block * cryptoCode: SupportedCryptoCode
 
   type PayInvoiceParams = {
     MaxFee: Money
@@ -104,7 +103,6 @@ module Swap =
     | NewLoopOutAdded of height: BlockHeight * loopIn: LoopOut
     | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest * payInvoiceParams: PayInvoiceParams
     | ClaimTxPublished of txid: uint256
-    | OffChainOfferResolved of paymentPreimage: PaymentPreimage
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
@@ -128,7 +126,6 @@ module Swap =
       | NewLoopOutAdded _ -> 0us
       | ClaimTxPublished _ -> 1us
       | OffChainOfferStarted _ -> 2us
-      | OffChainOfferResolved _ -> 3us
 
       | NewLoopInAdded _ -> 256us + 0us
       | SwapTxPublished _ -> 256us + 1us
@@ -148,7 +145,6 @@ module Swap =
       | NewLoopOutAdded _ -> "new_loop_out_added"
       | ClaimTxPublished _ -> "claim_tx_published"
       | OffChainOfferStarted _ -> "offchain_offer_started"
-      | OffChainOfferResolved _ -> "offchain_offer_resolved"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
       | SwapTxPublished _ -> "swap_tx_published"
@@ -242,8 +238,11 @@ module Swap =
     (loopOut: LoopOut): Task<Result<_ option, Error>> = taskResult {
       let struct (baseAsset, _quoteAsset) = loopOut.PairId
       let! feeRate =
+        // the block confirmation target for fee estimation.
         let confTarget =
           let remainingBlocks = loopOut.TimeoutBlockHeight - height
+          // iI we have come too close to the expiration height, we will use DefaultSweepConfTarget
+          // unless the user-provided one is shorter than the default.
           if remainingBlocks <= DefaultSweepConfTargetDelta && loopOut.SweepConfTarget > DefaultSweepConfTarget then
             DefaultSweepConfTarget
           else
@@ -261,7 +260,10 @@ module Swap =
         |> expectTxError "claim tx"
       let! claimTx = getClaimTx feeRate
       let! maybeClaimTxToPublish =
-        if loopOut.MaxMinerFee > feeRate.GetFee(claimTx) then
+        if feeRate.GetFee(claimTx) <= loopOut.MaxMinerFee  then
+          claimTx |> Some |> Ok
+        else
+          // requested fee exceeds our our maximum fee.
           if loopOut.ClaimTransactionId.IsSome then
             // if the preimage is already revealed, we have no choice to bump the fee
             // to our possible maximum value.
@@ -270,8 +272,7 @@ module Swap =
           else
             // otherwise, we should not do anything.
             None |> Ok
-        else
-          claimTx |> Some |> Ok
+
       match maybeClaimTxToPublish with
       | Some claimTx ->
         do!
@@ -326,8 +327,6 @@ module Swap =
               OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice, paymentParams)
             ]
             |> enhance
-        | OffChainOfferResolve pp, Out(_, loopOut) ->
-          return [OffChainOfferResolved pp; FinishedSuccessfully loopOut.Id] |> enhance
         | SwapUpdate u, Out(height, loopOut) ->
           if (u.SwapStatus = loopOut.Status) then
             return []
@@ -419,12 +418,18 @@ module Swap =
         | SetValidationError(err), Out(_, { Id = swapId })
         | SetValidationError(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
-        | NewBlock (height, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
+        | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
+            match maybePrevClaimTxId with
+            | Some txid when block.Transactions |> Seq.exists(fun t -> t.GetWitHash() = txid) ->
+              /// Our sweep tx is confirmed, this swap is finished!
+              return events @ ([FinishedSuccessfully(loopOut.Id)] |> enhance)
+            | _ ->
+            // we have to create or bump the sweep tx.
             let! additionalEvents = taskResult {
               let remainingBlocks = timeout - height
-              let haveWeRevealedThePreimage = maybePrevTxId.IsSome
+              let haveWeRevealedThePreimage = maybePrevClaimTxId.IsSome
               // If we have not revealed the preimage, and we don't have time left to sweep the swap,
               // we abandon the swap because we can no longer sweep on the success path (without potentially having to
               // compete with server's timeout tx.) and we have not had any coins pulled off-chain
@@ -448,7 +453,7 @@ module Swap =
               }
             return events @ additionalEvents
 
-        | NewBlock (height, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
+        | NewBlock (height, _block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
           let! events = (height, oldHeight) ||> checkHeight
           if loopIn.TimeoutBlockHeight <= height then
             let struct(_offChainAsset, onChainAsset) = loopIn.PairId
@@ -493,8 +498,6 @@ module Swap =
       Out (h, { x with ClaimTransactionId = Some txid })
     | SwapTxPublished tx, Out(h, x) ->
       Out (h, { x with LockupTransactionHex = Some tx })
-    | OffChainOfferResolved(preimage), Out(h, x) ->
-      Out(h, { x with Preimage = preimage })
 
     | NewLoopInAdded(h, x), HasNotStarted ->
       In (h, x)

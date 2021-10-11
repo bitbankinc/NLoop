@@ -2,7 +2,6 @@ namespace NLoop.Server.ProcessManagers
 
 open System.Collections.Generic
 open System.Threading.Tasks
-open System.Reactive.Linq
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open LndClient
@@ -45,9 +44,10 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                   OutgoingChannelId = paymentParams.OutgoingChannelId
                 }
                 lightningClientProvider.GetClient(quoteAsset).Offer(req).ConfigureAwait(false)
+
               match pr with
-              | Ok p ->
-                do! actor.Execute(swapId, Swap.Command.OffChainOfferResolve(p), nameof(SwapProcessManager))
+              | Ok _ ->
+                ()
               | Error e ->
                 do! handleError swapId e
             with

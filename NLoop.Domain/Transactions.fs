@@ -24,6 +24,7 @@ module Transactions =
         """
     override this.ToString() = this.Message
 
+  /// We might bump the claim tx, so this returns an RBF enabled tx.
   let createClaimTx
     (output: BitcoinAddress)
     (key: Key)
@@ -47,6 +48,7 @@ module Transactions =
         txB
           .SendEstimatedFees(fee)
           .SendAllRemaining(output)
+          .SetOptInRBF(true)
           .BuildTransaction(false)
       let signature = tx.SignInput(key, sc)
       let witnessItems =

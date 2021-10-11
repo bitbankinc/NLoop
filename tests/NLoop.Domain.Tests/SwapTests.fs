@@ -184,16 +184,17 @@ type SwapDomainTests() =
     Assertion.isOk events
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopOut(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool) =
-    let ourCryptoCode =
-      if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
+  member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool) =
+    let baseAsset =
+       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let loopOut =
       { loopOut with
           Id = SwapId(Guid.NewGuid().ToString())
           ChainName = Network.RegTest.ChainName.ToString()
-          PairId = (ourCryptoCode, SupportedCryptoCode.BTC)
+          PairId = (baseAsset, SupportedCryptoCode.BTC)
         }
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+    let timeoutBlockHeight = BlockHeight(3u)
     let loopOut =
       let claimKey = new Key()
       let claimAddr =
@@ -209,24 +210,18 @@ type SwapDomainTests() =
       { loopOut
           with
           Preimage = paymentPreimage
+          TimeoutBlockHeight = timeoutBlockHeight
           Invoice = invoice.ToString()
           PrepayInvoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
           ClaimKey = claimKey
           OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
           RedeemScript = redeemScript
+          ClaimTransactionId = None
+          LockupTransactionHex = None
+          AcceptZeroConf = true
+          Status = SwapStatusType.SwapCreated
+          MaxMinerFee = Money.Coins(10m)
           ClaimAddress = claimAddr.ToString(); }
-    let swapTx =
-      let fee = Money.Satoshis(30m)
-      let txb =
-        loopOut
-          .BaseAssetNetwork
-          .CreateTransactionBuilder()
-      txb
-        .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
-        .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
-        .SendFees(fee)
-        .SetChange((new Key()).PubKey.WitHash)
-        .BuildTransaction(true)
     let commands =
       [
         let loopOutParams = {
@@ -235,6 +230,18 @@ type SwapDomainTests() =
         }
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(loopOutParams, loopOut))
         let update =
+          let swapTx =
+            let fee = Money.Satoshis(30m)
+            let txb =
+              loopOut
+                .BaseAssetNetwork
+                .CreateTransactionBuilder()
+            txb
+              .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
+              .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
+              .SendFees(fee)
+              .SetChange((new Key()).PubKey.WitHash)
+              .BuildTransaction(true)
           {
             Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
             Swap.Data.SwapStatusResponseData.Transaction =
@@ -245,18 +252,60 @@ type SwapDomainTests() =
           }
 
         (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(update))
-        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.OffChainOfferResolve(paymentPreimage))
+
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+
+    let txBroadcasted = ResizeArray()
+    let deps =
+      let broadcaster = {
+        new IBroadcaster with
+          member this.BroadcastTx(tx, cc) =
+            txBroadcasted.Add(tx)
+            Task.CompletedTask
+      }
+      { mockDeps() with
+          UTXOProvider =
+            let fundsKey = new Key()
+            mockUtxoProvider([|fundsKey|])
+          Broadcaster = broadcaster }
+    let repo = getTestRepository()
+    let _ =
+      let events =
+        commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+      Assertion.isOk events
+      let lastEvent =
+        events
+        |> Result.deref
+        |> List.last
+      Assert.Equal(Swap.Event.ClaimTxPublished(null).Type, lastEvent.Data.Type)
+
+    let claimTx = Assert.Single(txBroadcasted)
+    let confirmationCommands =
+      [
+        let emptyBlock =
+          match baseAsset with
+          | SupportedCryptoCode.LTC ->
+            Altcoins.Litecoin.LitecoinBlock.CreateBlock(Network.RegTest)
+          | SupportedCryptoCode.BTC ->
+            Block.CreateBlock(loopOut.BaseAssetNetwork)
+          | _ -> failwith "unreachable"
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(BlockHeight(2u), emptyBlock, baseAsset))
+        let block =
+          match baseAsset with
+          | SupportedCryptoCode.LTC ->
+            Altcoins.Litecoin.LitecoinBlock.CreateBlock(loopOut.BaseAssetNetwork)
+          | SupportedCryptoCode.BTC ->
+            Block.CreateBlock(loopOut.BaseAssetNetwork)
+          | _ -> failwith "unreachable"
+        block.AddTransaction(claimTx) |> ignore
+        let nextHeight = BlockHeight(3u)
+        assert(nextHeight = timeoutBlockHeight)
+        (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, block, baseAsset))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let events =
-      let fundsKey = new Key()
-      let deps = { mockDeps()
-                     with
-                       UTXOProvider = mockUtxoProvider([|fundsKey|])
-                 }
-      let repo = getTestRepository()
-      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
-    Assertion.isOk events
+      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB confirmationCommands
     let lastEvent =
       events
       |> Result.deref
@@ -290,7 +339,7 @@ type SwapDomainTests() =
         yield!
           [ for h in currentHeight.Value..loopOut.TimeoutBlockHeight.Value ->
               i <- i + 1
-              (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), SupportedCryptoCode.LTC))
+              (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), Altcoins.Litecoin.LitecoinBlock.CreateBlock(Network.RegTest), SupportedCryptoCode.LTC))
             ]
       ]
       |> List.map(fun x -> x ||> getCommand)
@@ -304,14 +353,14 @@ type SwapDomainTests() =
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn_Timeout(loopIn: LoopIn, testAltcoin: bool) =
-    let theirCryptoCode =
+    let quoteAsset =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
-    let ourCryptoCode = SupportedCryptoCode.BTC
+    let baseAsset = SupportedCryptoCode.BTC
     let loopIn =
       { loopIn with
           Id = SwapId(Guid.NewGuid().ToString())
           ChainName = Network.RegTest.ChainName.ToString()
-          PairId = (ourCryptoCode, theirCryptoCode)
+          PairId = (baseAsset, quoteAsset)
         }
     let commands =
       [
@@ -346,12 +395,13 @@ type SwapDomainTests() =
         (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
 
         let nextHeight = initialBlockHeight + BlockHeightOffset16(1us)
-        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+        let block = Altcoins.Litecoin.LitecoinBlock.CreateBlock(Network.RegTest)
+        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(nextHeight, block,quoteAsset))
         let nextHeight = initialBlockHeight + BlockHeightOffset16(2us)
-        (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+        (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, block, quoteAsset))
         let nextHeight = initialBlockHeight + BlockHeightOffset16(3us)
         assert(nextHeight = timeoutBlockHeight)
-        (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.NewBlock(nextHeight, theirCryptoCode))
+        (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.NewBlock(nextHeight, block, quoteAsset))
       ]
       |> List.map(fun x -> x ||> getCommand)
 
@@ -382,14 +432,14 @@ type SwapDomainTests() =
     Assert.Equal(Swap.Event.FinishedByRefund(loopIn.Id), lastEvent.Data)
 
   [<Property(MaxTest=40)>]
-  member this.TestLoopIn(loopIn: LoopIn, testAltcoin: bool) =
-    let theirCryptoCode =
+  member this.TestLoopIn_Success(loopIn: LoopIn, testAltcoin: bool) =
+    let quoteAsset =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let loopIn =
       { loopIn with
           Id = SwapId(Guid.NewGuid().ToString())
           ChainName = Network.RegTest.ChainName.ToString()
-          PairId = (SupportedCryptoCode.BTC, theirCryptoCode) }
+          PairId = (SupportedCryptoCode.BTC, quoteAsset) }
     let commands =
       [
         let addr =
