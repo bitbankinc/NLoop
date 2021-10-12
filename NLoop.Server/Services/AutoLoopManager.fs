@@ -13,11 +13,14 @@ open FSharp.Control.Tasks
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
+open NLoop.Server.Services
 
 
 type [<Measure>] percent
@@ -114,6 +117,14 @@ module private Helpers =
   let validateRestrictions(server: Restrictions, client: Restrictions) =
     Ok()
 
+  let worstCaseOutFees
+    (maxPrepayRoutingFee: Money voption)
+    (maxSwapRoutingFee: Money voption)
+    (maxSwapFee: Money voption)
+    (maxMinerFee: Money voption)
+    (maxPrepayAmount: Money voption): Money =
+    failwith "todo"
+
 type Rules = {
   ChannelRules: Map<ShortChannelId, ThresholdRule>
   PeerRules: Map<NodeId, ThresholdRule>
@@ -131,7 +142,12 @@ type SwapSuggestion =
   member this.Fees(): Money =
     match this with
     | Out req ->
-      failwith "todo"
+      worstCaseOutFees
+        req.MaxPrepayRoutingFee
+        req.MaxSwapRoutingFee
+        req.MaxSwapFee
+        req.MaxMinerFee
+        req.MaxPrepayAmount
 
   member this.Amount: Money =
     match this with
@@ -140,18 +156,34 @@ type SwapSuggestion =
   member this.Channels: ShortChannelId [] =
     match this with
     | Out req ->
-      let c = req.ChannelId
-      failwith "todo"
+      req.ChannelId |> Option.toArray
 
-  member this.Peers: NodeId[] =
-    failwith "todo"
+  member this.Peers(knownChannels: Map<ShortChannelId, NodeId>, logger: ILogger): NodeId[] =
+    match this with
+    | Out req ->
+      let g =
+        req.OutgoingChanSet
+        |> Seq.ofArray
+        |> Seq.groupBy(fun channel -> knownChannels.All(fun kc -> kc.Key = channel))
+      g
+      |> Seq.filter(fst >> not)
+      |> Seq.map(snd)
+      |> Seq.concat
+      |> Seq.iter(fun c -> logger.LogWarning($"peer for channel: {c} (%d{c.ToUInt64()}) unknown"))
+
+      g
+      |> Seq.filter(fst)
+      |> Seq.map(snd)
+      |> Seq.concat
+      |> Seq.map(fun shortChannelId -> knownChannels.TryGetValue(shortChannelId) |> snd)
+      |> Seq.toArray
 
 [<AutoOpen>]
 module private Fees =
   type IFeeLimit =
     abstract member Validate: unit -> Result<unit, string>
-    abstract member MayLoopOut: FeeRate -> Result<unit, string>
-    abstract member LoopOutLimits: swapAmount: Money * LoopOutQuote -> Result<unit, string>
+    abstract member MayLoopOut: FeeRate -> Result<unit, SwapDisqualifiedReason>
+    abstract member LoopOutLimits: swapAmount: Money * LoopOutQuote -> Task<Result<unit, SwapDisqualifiedReason>>
     abstract member LoopOutFees: amount: Money * quote: LoopOutQuote -> Money * Money * Money
 
   type FeePortion = {
@@ -224,21 +256,104 @@ type Parameters = private {
     }
 
 type Config = {
+  RPCClient: RPCClient
   Restrictions: Swap.Category -> Task<Result<Restrictions, string>>
   Lnd: INLoopLightningClient
-  LoopOutQuote: LoopOutQuoteRequest -> LoopOutQuote
-  LoopInQuote: LoopInQuoteRequest -> LoopInQuote
+  LoopOutQuote: LoopOutQuoteRequest -> Task<LoopOutQuote>
+  LoopInQuote: LoopInQuoteRequest -> Task<LoopInQuote>
   MinConfirmation: BlockHeightOffset32
+  SwapActor: SwapActor
+  Logger: ILogger
 }
 
 type SuggestSwapError =
   | SwapDisqualified of SwapDisqualifiedReason
   | Other of string
 
+
+type private SwapTraffic = {
+  OngoingLoopOut: Map<ShortChannelId, bool>
+  OngoingLoopIn: Map<NodeId, bool>
+  FailedLoopOut: Map<ShortChannelId, DateTimeOffset>
+}
+  with
+  /// returns a boolean that indicates whether we may perform a swap for a peer and its set of channels.
+  member this.MaySwap(peer: NodeId, channels: ShortChannelId seq, logger: ILogger) = result {
+      for chanId in channels do
+        let recentFail, lastFail = this.FailedLoopOut.TryGetValue chanId
+        if recentFail then
+          logger.LogDebug($"Channel: {chanId} (i.e. {chanId.ToUInt64()}) not eligible for suggestions. Part of a failed swap at {lastFail}")
+          return! Error SwapDisqualifiedReason.FailureBackoff
+        else if this.OngoingLoopOut |> Seq.exists(fun kv -> kv.Key = chanId) then
+          logger.LogDebug($"Channel {chanId} (i.e. {chanId.ToUInt64()} not eligible for suggestions. ongoing loop out utilizing channel")
+          return! Error SwapDisqualifiedReason.LoopOutAlreadyInTheChannel
+      failwith "todo"
+    }
+
+type private TargetPeerOrChannel = {
+  Peer: NodeId
+  Channels: ShortChannelId array
+}
+type SwapBuilder = {
+  SwapType: Swap.Category
+  MaySwap: Parameters -> Task<Result<unit, SwapDisqualifiedReason>>
+  /// Examines our current swap traffic to determine whether we should suggest the builder's type of swap for the peer
+  /// and channels suggested.
+  InUse: SwapTraffic -> TargetPeerOrChannel -> Task<Result<unit, SwapDisqualifiedReason>>
+  BuildSwap: TargetPeerOrChannel -> Money -> PairId -> bool -> Parameters -> Task<Result<SwapSuggestion, SwapDisqualifiedReason>>
+}
+  with
+  static member NewLoopOut(cfg: Config): SwapBuilder =
+    {
+      SwapType = Swap.Category.Out
+      MaySwap = fun parameters -> task {
+        let! resp = cfg.RPCClient.EstimateSmartFeeAsync(parameters.SweepConfTarget.Value |> int)
+        return parameters.SweepFeeRateLimit.MayLoopOut(resp.FeeRate)
+      }
+      InUse = fun traffic { Peer = peer; Channels = channels } -> taskResult {
+        for chanId in channels do
+          match traffic.FailedLoopOut.TryGetValue(chanId) with
+          | true, lastFailedSwap ->
+            // there is a recently failed swap.
+            cfg.Logger.LogDebug($"channel: {chanId} ({chanId.ToUInt64()}) not eligible for suggestions.
+                                It was a part of the failed swap at: {lastFailedSwap}")
+            return! Error(SwapDisqualifiedReason.FailureBackoff)
+          | false, _ -> ()
+          match traffic.OngoingLoopOut.TryGetValue chanId with
+          | true, _ ->
+            cfg.Logger.LogDebug($"Channel: {chanId} ({chanId.ToUInt64()}) not eligible for suggestions.
+                                Ongoing loop out utilizing channel.")
+            return! Error(SwapDisqualifiedReason.LoopOutAlreadyInTheChannel)
+          | false, _ -> ()
+
+        match traffic.OngoingLoopIn.TryGetValue peer with
+        | true, _ ->
+          return! Error(SwapDisqualifiedReason.LoopInAlreadyInTheChannel)
+        | false, _ -> ()
+        return ()
+      }
+      BuildSwap = fun { Peer = peer; Channels = channels } amount pairId autoloop parameters -> taskResult {
+        let! quote =
+          let req =
+            { LoopOutQuoteRequest.pair = pairId
+              Amount = amount
+              SweepConfTarget = parameters.SweepConfTarget }
+          cfg.LoopOutQuote(req)
+        do! parameters.SweepFeeRateLimit.LoopOutLimits(amount, quote)
+
+        let prepayMaxFee, routeMaxFee, minerFee = parameters.SweepFeeRateLimit.LoopOutFees(amount, quote)
+
+        do! cfg.SwapActor.Execute()
+        return
+          failwith "todo"
+      }
+    }
+
 type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      opts: IOptions<NLoopOptions>,
                      projection: SwapStateProjection,
                      boltzClient: BoltzClient,
+                     cfg: Config,
                      lightningClientProvider: ILightningClientProvider)  =
   inherit BackgroundService()
   member val Parameters = Parameters.Default with get, set
@@ -259,9 +374,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       SpentFees = failwith "todo"
       PendingFees = failwith "todo"
     }
-
-  member private this.CurrentSwapTraffic(loopOut, loopIn) =
-    ()
+  member private this.CurrentSwapTraffic(loopOut, loopIn): SwapTraffic =
+    failwith "todo"
 
   member private this.GetSwapRestrictions(swapType: Swap.Category, cryptoPair: PairId) = task {
       let! p = boltzClient.GetPairsAsync()
@@ -357,6 +471,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   member private this.SuggestSwap(traffic, balance, rule: ThresholdRule, restrictions: Restrictions, autoloop: bool): Task<Result<SwapSuggestion, SuggestSwapError>> =
     task {
+      do! traffic.MaySwap(balance.PubKey, balance.Channel)
       return failwith "todo"
     }
 

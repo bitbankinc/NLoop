@@ -67,6 +67,9 @@ type LoopOutRequest = {
   SweepConfTarget: int voption
 }
   with
+  member this.OutgoingChanSet =
+    this.ChannelId |> Option.toArray
+
   member this.AcceptZeroConf =
     match this.ConfTarget with
     | None
