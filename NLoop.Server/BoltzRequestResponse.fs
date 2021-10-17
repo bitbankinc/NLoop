@@ -25,19 +25,31 @@ type GetPairsResponse = {
   Warnings: string []
   Pairs: Map<string, PairInfo>
 }
+
 and PairInfo = {
   Rate: double
-  Limits: {| Maximal: int64; Minimal: int64; MaximalZeroConf: {|BaseAsset: int64; QuoteAsset: int64|} |}
-  Fees: {|
-           Percentage: double
-           MinerFees: {| BaseAsset : AssetFeeInfo; QuoteAsset: AssetFeeInfo |}
-         |}
+  Limits: ServerLimit
+  Fees: Fees
   Hash: string
+}
+and Fees = {
+  Percentage: double
+  MinerFees: BaseAndQuote<AssetFeeInfo>
 }
 and AssetFeeInfo = {
   Normal: int64
   Reverse: {| Claim: int64; Lockup: int64 |}
 }
+and ServerLimit = {
+  Maximal: int64
+  Minimal: int64
+  MaximalZeroConf: BaseAndQuote<int64>
+}
+and BaseAndQuote<'T> = {
+  BaseAsset: 'T
+  QuoteAsset: 'T
+}
+
 
 
 type GetNodesResponse = {

@@ -1,6 +1,7 @@
 module SwapTests
 
 open DotNetLightning.Payment
+open DotNetLightning.Utils
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -59,8 +60,12 @@ type SwapDomainTests() =
       Swap.Deps.GetChangeAddress = getChangeAddress
       Swap.Deps.GetRefundAddress = getChangeAddress
       Swap.Deps.PayInvoice =
-        fun _n _parameters _req ->
-          Task.CompletedTask
+        fun _n _parameters req ->
+          let r = {
+            Swap.PayInvoiceResult.AmountPayed = req.AmountValue |> Option.defaultValue(LNMoney.Satoshis(100000L))
+            Swap.PayInvoiceResult.RoutingFee = LNMoney.Satoshis(10L)
+          }
+          Task.FromResult(r)
     }
 
   do
@@ -113,9 +118,17 @@ type SwapDomainTests() =
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
     let paymentHash = paymentPreimage.Hash
     let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
-    PaymentRequest.TryCreate(network, None, DateTimeOffset.UtcNow, fields, new Key())
+    PaymentRequest.TryCreate(network, Some(LNMoney.Satoshis(100000L)), DateTimeOffset.UtcNow, fields, new Key())
     |> ResultUtils.Result.deref
     |> fun x -> x.ToString()
+
+  let assertNotUnknownEvent (e: ESEvent<_>) =
+    e.Data |> function | Swap.Event.UnknownTagEvent(t, _) -> failwith $"unknown tag {t}" | _ -> e
+  let getLastEvent e =
+      e
+      |> Result.deref
+      |> List.map(assertNotUnknownEvent)
+      |> List.last
 
   [<Fact>]
   member this.JsonSerializerTest() =
@@ -192,9 +205,12 @@ type SwapDomainTests() =
           Id = SwapId(Guid.NewGuid().ToString())
           ChainName = Network.RegTest.ChainName.ToString()
           PairId = (baseAsset, SupportedCryptoCode.BTC)
+          IsOffchainOfferResolved = false
+          IsClaimTxConfirmed = false
         }
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
     let timeoutBlockHeight = BlockHeight(3u)
+    let onChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
     let loopOut =
       let claimKey = new Key()
       let claimAddr =
@@ -205,7 +221,7 @@ type SwapDomainTests() =
         Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey loopOut.TimeoutBlockHeight
       let invoice =
         let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
-        PaymentRequest.TryCreate(loopOut.QuoteAssetNetwork, None, DateTimeOffset.UtcNow, fields, new Key())
+        PaymentRequest.TryCreate(loopOut.QuoteAssetNetwork, Some(LNMoney.Satoshis(100000L)), DateTimeOffset.UtcNow, fields, new Key())
         |> ResultUtils.Result.deref
       { loopOut
           with
@@ -214,7 +230,7 @@ type SwapDomainTests() =
           Invoice = invoice.ToString()
           PrepayInvoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
           ClaimKey = claimKey
-          OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
+          OnChainAmount = onChainAmount
           RedeemScript = redeemScript
           ClaimTransactionId = None
           LockupTransactionHex = None
@@ -271,13 +287,9 @@ type SwapDomainTests() =
           Broadcaster = broadcaster }
     let repo = getTestRepository()
     let _ =
-      let events =
-        commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
-      Assertion.isOk events
       let lastEvent =
-        events
-        |> Result.deref
-        |> List.last
+        commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+        |> getLastEvent
       Assert.Equal(Swap.Event.ClaimTxPublished(null).Type, lastEvent.Data.Type)
 
     let claimTx = Assert.Single(txBroadcasted)
@@ -304,12 +316,28 @@ type SwapDomainTests() =
         (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, block, baseAsset))
       ]
       |> List.map(fun x -> x ||> getCommand)
-    let events =
-      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB confirmationCommands
     let lastEvent =
-      events
-      |> Result.deref
-      |> List.last
+      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB confirmationCommands
+      |> getLastEvent
+    let serverFee = LNMoney.Satoshis(1000L)
+    let sweepAmount = loopOut.OnChainAmount - serverFee.ToMoney()
+    let expected =
+      let sweepTxId = txBroadcasted |> Seq.last |> fun t -> t.GetWitHash()
+      Swap.Event.SweepTxConfirmed(sweepTxId, sweepAmount)
+    Assert.Equal(expected.Type, lastEvent.Data.Type)
+    Assert.True(Money.Zero < sweepAmount && sweepAmount < loopOut.OnChainAmount)
+    let offChainSolvedCommands =
+      [
+        let r =
+          let routingFee = LNMoney.Satoshis(100L)
+          { Swap.PayInvoiceResult.AmountPayed = onChainAmount.ToLNMoney() + serverFee
+            Swap.PayInvoiceResult.RoutingFee = routingFee }
+        (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.OffChainOfferResolve(r))
+      ]
+      |> List.map(fun x -> x ||> getCommand)
+    let lastEvent =
+      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB offChainSolvedCommands
+      |> getLastEvent
     Assert.Equal(Swap.Event.FinishedSuccessfully(loopOut.Id), lastEvent.Data)
 
   /// It should time out when the server does not tell us about swap tx that they ought to published
@@ -343,12 +371,11 @@ type SwapDomainTests() =
             ]
       ]
       |> List.map(fun x -> x ||> getCommand)
-    let events =
+    let lastEvent =
       let deps = mockDeps()
       let repo = getTestRepository()
       commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
-    Assertion.isOk events
-    let lastEvent = events |> Result.deref |> List.last
+      |> getLastEvent
     Assert.Equal(Swap.Event.FinishedByTimeout("").Type, lastEvent.Data.Type)
 
   [<Property(MaxTest=10)>]
@@ -425,10 +452,7 @@ type SwapDomainTests() =
     Assertion.isOk events
     Assert.Equal(2, txBroadcasted) // swap tx and refund tx
 
-    let lastEvent =
-      events
-      |> Result.deref
-      |> List.last
+    let lastEvent = events |> getLastEvent
     Assert.Equal(Swap.Event.FinishedByRefund(loopIn.Id), lastEvent.Data)
 
   [<Property(MaxTest=40)>]
@@ -467,15 +491,11 @@ type SwapDomainTests() =
         (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
       ]
       |> List.map(fun x -> x ||> getCommand)
-    let events =
+    let lastEvent =
       use fundsKey = new Key()
       let deps = { mockDeps() with UTXOProvider = mockUtxoProvider([|fundsKey|]) }
       let repo = getTestRepository()
       commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands
-    Assertion.isOk events
-    let lastEvent =
-      events
-      |> Result.deref
-      |> List.last
+      |> getLastEvent
     Assert.Equal(Swap.Event.FinishedSuccessfully(loopIn.Id), lastEvent.Data)
     ()

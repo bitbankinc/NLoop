@@ -32,7 +32,7 @@ type LoopInRequest = {
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]
-  ChannelId: ShortChannelId option
+  ChannelId: ShortChannelId array
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
   [<JsonPropertyName "address">]
@@ -67,8 +67,6 @@ type LoopOutRequest = {
   SweepConfTarget: int voption
 }
   with
-  member this.OutgoingChanSet =
-    this.ChannelId |> Option.toArray
 
   member this.AcceptZeroConf =
     match this.ConfTarget with

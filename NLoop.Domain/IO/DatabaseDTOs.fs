@@ -9,6 +9,24 @@ open Newtonsoft.Json
 open NLoop.Domain
 open NLoop.Domain.Utils
 
+
+/// SwapCost is a breakdown of the final swap costs.
+type SwapCost = {
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  Server: Money
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  OnChain: Money
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  OffChain: Money
+}
+  with
+  member this.Total =
+    this.Server + this.OnChain + this.OffChain
+  static member Zero = {
+    Server = Money.Zero
+    OnChain = Money.Zero
+    OffChain = Money.Zero
+  }
 type LoopOut = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
@@ -33,6 +51,9 @@ type LoopOut = {
   LockupTransactionHex: string option
 
   ClaimTransactionId: uint256 option
+  IsClaimTxConfirmed: bool
+  IsOffchainOfferResolved: bool
+
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
   Label: string
@@ -44,6 +65,7 @@ type LoopOut = {
 
   MaxMinerFee: Money
   ChainName: string
+  Cost: SwapCost
 }
   with
   member this.BaseAssetNetwork =
@@ -52,6 +74,10 @@ type LoopOut = {
   member this.QuoteAssetNetwork =
     let struct (_, cryptoCode) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.LockupTransaction =
+    this.LockupTransactionHex
+    |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
 
   member this.Validate() =
     if this.OnChainAmount <= Money.Zero then Error ("LoopOut has non-positive on chain amount") else
@@ -80,10 +106,13 @@ type LoopIn = {
 
   LockupTransactionHex: string option
   RefundTransactionId: uint256 option
+
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
   Label: string
   ChainName: string
+
+  Cost: SwapCost
 }
   with
   member this.BaseAssetNetwork =

@@ -5,10 +5,12 @@ open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
 open System.Threading
+open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FSharp.Control
 open Google.Protobuf
+open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
 open Grpc.Net.Client.Configuration
@@ -19,6 +21,7 @@ open FSharp.Control.Tasks
 open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
+open Routerrpc
 
 type LndGrpcSettings = {
   TlsCertLocation: string option
@@ -109,6 +112,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
   let client =
     Lightning.LightningClient(channel)
   let invoiceClient = Invoicesrpc.Invoices.InvoicesClient(channel)
+  let routerClient = Routerrpc.Router.RouterClient(channel)
+
   member this.DefaultHeaders = null
     //let metadata = Metadata()
     // metadata.Add()
@@ -186,26 +191,42 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
     member this.Offer(param, ct) =
       let ct = defaultArg ct CancellationToken.None
       task {
-        let req = SendRequest()
-        req.PaymentRequest <- param.Invoice.ToString()
-        req.FeeLimit <-
-          let l = FeeLimit()
-          match param.MaxFee with
-          | FeeLimit.Fixed m ->
-            l.Fixed <- m.Satoshi
-            l
-          | FeeLimit.Percent p ->
-            l.Percent <- p |> int64
-            l
-        param.OutgoingChannelId
-        |> Option.iter(fun cId ->
-          req.OutgoingChanId <- cId.ToUInt64()
-        )
-        let! t = client.SendPaymentSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        if t.PaymentError |> String.IsNullOrEmpty then
-          return t.PaymentPreimage |> PaymentPreimage.Create |> Ok
-        else
-          return t.PaymentError |> Error
+        let responseStream =
+          let req = SendPaymentRequest()
+          req.PaymentRequest <- param.Invoice.ToString()
+          req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
+          req.FeeLimitSat <- param.MaxFee.Satoshi
+          routerClient.SendPaymentV2(req).ResponseStream
+
+        let f (s:Payment) =
+          {
+            PaymentResult.Fee = s.FeeMsat |> LNMoney.MilliSatoshis
+            PaymentPreimage = s.PaymentPreimage |> hex.DecodeData |> PaymentPreimage.Create
+          }
+
+        try
+          let mutable result = None
+          let mutable hasNotFinished = true
+          while result.IsNone && hasNotFinished do
+            ct.ThrowIfCancellationRequested()
+            let! notFinished = responseStream.MoveNext(ct)
+            hasNotFinished <- notFinished
+            if hasNotFinished then
+              let status = responseStream.Current
+              match status.Status with
+              | Payment.Types.PaymentStatus.Succeeded ->
+                result <- status |> f |> Ok |> Some
+              | Payment.Types.PaymentStatus.Failed ->
+                result <- status.FailureReason |> Enum.GetName |> Error |> Some
+              | s ->
+                result <- $"Unexpected payment state: {s}" |> Error |> Some
+          return
+            match result with
+            | Some r -> r
+            | None -> Error $"Empty result in offer"
+        with
+        | ex ->
+          return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
       }
     member this.OpenChannel(request, ct) =
       task {

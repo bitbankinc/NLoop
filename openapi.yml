@@ -240,7 +240,9 @@ components:
       type: object
       properties:
         channel_id:
-          $ref: '#/components/schemas/ShortChannelId'
+          type: array
+          items:
+            $ref: '#/components/schemas/ShortChannelId'
           description: <
             ShortChannelId for the one you want to get inbound liquidity.
             default is the one it has least.

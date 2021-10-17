@@ -4,6 +4,7 @@ open System
 open System.Text.Json
 open System.Threading.Tasks
 open System.Threading.Tasks
+open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils.Primitives
@@ -17,9 +18,9 @@ open NLoop.Domain.Utils.EventStore
 [<RequireQualifiedAccess>]
 /// List of ubiquitous languages
 /// * SwapTx (LockupTx) ... On-Chain TX which offers funds with HTLC.
-/// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage. a.k.a "sweep"
-/// * RefundTx ... TX to take funds from SwapTx in case of the timeout.
-/// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient to claim SwapTx.
+/// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage. a.k.a "sweep" (loop out)
+/// * RefundTx ... TX to take funds from SwapTx in case of the timeout (loop in).
+/// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient for us to claim the SwapTx.
 /// * Payment ... off-chain payment from counterparty to us.
 module Swap =
   [<RequireQualifiedAccess>]
@@ -47,6 +48,16 @@ module Swap =
 
   // ------ command -----
 
+  type BogusResponseError =
+    | NoTx
+    | TxDoesNotPayToClaimAddress
+    | PaymentAmountMismatch of expected: Money * actual: Money
+    with
+    member this.Message =
+      match this with
+      | NoTx _ -> "no swap tx in response"
+      | TxDoesNotPayToClaimAddress -> "Swap TX does not pay to the address we have specified"
+      | PaymentAmountMismatch (e, a) -> $"Swap tx output amount mismatch. (expected: {e}, actual: {a})"
   module Data =
     type TxInfo = {
       TxId: uint256
@@ -62,6 +73,36 @@ module Swap =
       member this.SwapStatus =
         SwapStatusType.FromString(this._Status)
 
+      member this.ValidateAndGetTx(loopOut: LoopOut ) =
+        result {
+          let! swapTx =
+            this.Transaction
+            |> Option.map(fun txInfo -> txInfo.Tx)
+            |>
+              function
+              | Some x -> Ok x
+              | None -> Error BogusResponseError.NoTx
+
+          let! swapTxAmount =
+            swapTx.Outputs
+            |> Seq.tryPick(fun o ->
+              if o.ScriptPubKey.Equals(loopOut.RedeemScript.WitHash.ScriptPubKey) then
+                Some o.Value
+              else
+                None
+              )
+            |>
+              function
+              | Some x -> Ok x
+              | None ->
+                Error BogusResponseError.TxDoesNotPayToClaimAddress
+
+          return!
+            if swapTxAmount <> loopOut.OnChainAmount then
+              Error (BogusResponseError.PaymentAmountMismatch(loopOut.OnChainAmount, swapTxAmount))
+            else
+              Ok swapTx
+        }
 
   [<Literal>]
   let entityType = "swap"
@@ -77,32 +118,41 @@ module Swap =
   type LoopOutParams = {
     MaxPrepayFee: Money
     MaxPaymentFee: Money
-    OutgoingChanId: ShortChannelId option
+    OutgoingChanIds: ShortChannelId []
     Height: BlockHeight
+  }
+
+  type PayInvoiceResult = {
+    RoutingFee: LNMoney
+    AmountPayed: LNMoney
   }
 
   type Command =
     // -- loop out --
     | NewLoopOut of LoopOutParams * LoopOut
+    | OffChainOfferResolve of PayInvoiceResult
 
     // -- loop in --
     | NewLoopIn of height: BlockHeight * LoopIn
 
     // -- both
     | SwapUpdate of Data.SwapStatusResponseData
-    | SetValidationError of err: string
+    | MarkAsErrored of err: string
     | NewBlock of height: BlockHeight * block: Block * cryptoCode: SupportedCryptoCode
 
   type PayInvoiceParams = {
     MaxFee: Money
-    OutgoingChannelId: ShortChannelId option
+    OutgoingChannelIds: ShortChannelId []
   }
   // ------ event -----
   type Event =
     // -- loop out --
-    | NewLoopOutAdded of height: BlockHeight * loopIn: LoopOut
+    | NewLoopOutAdded of height: BlockHeight * loopOut: LoopOut
     | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest * payInvoiceParams: PayInvoiceParams
     | ClaimTxPublished of txid: uint256
+    | SweepTxConfirmed of txid: uint256 * sweepAmount: Money
+    | PrePayFinished of PayInvoiceResult
+    | OffchainOfferResolved of PayInvoiceResult
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
@@ -126,6 +176,9 @@ module Swap =
       | NewLoopOutAdded _ -> 0us
       | ClaimTxPublished _ -> 1us
       | OffChainOfferStarted _ -> 2us
+      | OffchainOfferResolved _ -> 3us
+      | SweepTxConfirmed _ -> 4us
+      | PrePayFinished _ -> 5us
 
       | NewLoopInAdded _ -> 256us + 0us
       | SwapTxPublished _ -> 256us + 1us
@@ -145,6 +198,9 @@ module Swap =
       | NewLoopOutAdded _ -> "new_loop_out_added"
       | ClaimTxPublished _ -> "claim_tx_published"
       | OffChainOfferStarted _ -> "offchain_offer_started"
+      | OffchainOfferResolved _ -> "offchain_offer_resolved"
+      | SweepTxConfirmed _ -> "sweep_tx_confirmed"
+      | PrePayFinished _ -> "prepay_finished"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
       | SwapTxPublished _ -> "swap_tx_published"
@@ -172,6 +228,7 @@ module Swap =
     | UTXOProviderError of UTXOProviderError
     | InputError of string
     | CanNotSafelyRevealPreimage
+    | CounterPartyReturnedBogusResponse of BogusResponseError
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
     r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)
@@ -197,10 +254,10 @@ module Swap =
         try
           let e =
             match Utils.ToUInt16(b.[0..1], false) with
-            | 0us | 1us | 2us | 3us
+            | 0us | 1us | 2us | 3us | 4us | 5us
             | 256us | 257us | 258us
             | 512us
-            | 1024us | 1025us | 1026us ->
+            | 1024us | 1025us | 1026us | 1027us ->
               JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[2..], jsonConverterOpts)
             | v ->
               UnknownTagEvent(v, b.[2..])
@@ -220,7 +277,7 @@ module Swap =
     GetRefundAddress: GetAddress
     /// Used for pre-paying miner fee.
     /// This is not for paying an actual swap invoice, since we cannot expect it to get finished immediately.
-    PayInvoice: Network -> PayInvoiceParams -> PaymentRequest -> Task
+    PayInvoice: Network -> PayInvoiceParams -> PaymentRequest -> Task<PayInvoiceResult>
   }
 
   // ----- aggregates ----
@@ -302,31 +359,42 @@ module Swap =
         // --- loop out ---
         | NewLoopOut({ Height = h } as p, loopOut), HasNotStarted ->
           do! loopOut.Validate() |> expectInputError
-          if loopOut.PrepayInvoice |> String.IsNullOrEmpty |> not then
-            let prepaymentParams =
-              { PayInvoiceParams.MaxFee =  p.MaxPrepayFee
-                OutgoingChannelId = p.OutgoingChanId }
-            do!
+          let! additionalEvents =
+            if loopOut.PrepayInvoice |> String.IsNullOrEmpty |> not then
+              let prepaymentParams =
+                { PayInvoiceParams.MaxFee =  p.MaxPrepayFee
+                  OutgoingChannelIds = p.OutgoingChanIds }
               loopOut.PrepayInvoice
               |> PaymentRequest.Parse
               |> ResultUtils.Result.deref
               |> payInvoice
                    loopOut.QuoteAssetNetwork
                    prepaymentParams
+              |> Task.map(PrePayFinished >> List.singleton >> Ok)
+            else
+              Task.FromResult(Ok [])
+          let invoice =
+            loopOut.Invoice
+            |> PaymentRequest.Parse
+            |> ResultUtils.Result.deref
+          do! invoice.AmountValue |> function | Some _ -> Ok() | None -> Error(Error.InputError($"invoice has no amount specified"))
           return
             [
               NewLoopOutAdded(h, loopOut)
-              let invoice =
-                loopOut.Invoice
-                |> PaymentRequest.Parse
-                |> ResultUtils.Result.deref
+              yield! additionalEvents
               let paymentParams = {
                 MaxFee = p.MaxPrepayFee
-                OutgoingChannelId = p.OutgoingChanId
+                OutgoingChannelIds = p.OutgoingChanIds
               }
               OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice, paymentParams)
             ]
             |> enhance
+        | OffChainOfferResolve payInvoiceResult, Out(_h, loopOut) ->
+          return [
+            OffchainOfferResolved payInvoiceResult
+            if loopOut.IsClaimTxConfirmed then
+              FinishedSuccessfully(loopOut.Id)
+          ] |> enhance
         | SwapUpdate u, Out(height, loopOut) ->
           if (u.SwapStatus = loopOut.Status) then
             return []
@@ -337,10 +405,9 @@ module Swap =
           | SwapStatusType.TxMempool
           | SwapStatusType.TxConfirmed ->
 
-            let swapTx =
-               u.Transaction
-               |> Option.map(fun txInfo -> txInfo.Tx)
-               |> Option.defaultWith(fun () -> raise <| Exception("No Transaction in response"))
+            let! swapTx =
+              u.ValidateAndGetTx(loopOut)
+              |> Result.mapError(Error.CounterPartyReturnedBogusResponse)
 
             let e = SwapTxPublished(swapTx.ToHex())
             match! sweepOrBump deps height swapTx loopOut with
@@ -415,16 +482,34 @@ module Swap =
 
         // --- ---
 
-        | SetValidationError(err), Out(_, { Id = swapId })
-        | SetValidationError(err), In (_ , { Id = swapId }) ->
+        | MarkAsErrored(err), Out(_, { Id = swapId })
+        | MarkAsErrored(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
         | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
-            match maybePrevClaimTxId with
-            | Some txid when block.Transactions |> Seq.exists(fun t -> t.GetWitHash() = txid) ->
-              /// Our sweep tx is confirmed, this swap is finished!
-              return events @ ([FinishedSuccessfully(loopOut.Id)] |> enhance)
+            match maybePrevClaimTxId
+                  |> Option.bind(fun txid -> block.Transactions |> Seq.tryFind(fun t -> t.GetWitHash() = txid)) with
+            | Some sweepTx ->
+              let sweepTxAmount =
+                sweepTx.Outputs
+                |> Seq.pick(fun o ->
+                  if o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork).ToString() = loopOut.ClaimAddress then
+                    Some(o.Value)
+                  else
+                    None
+                  )
+              // Our sweep tx is confirmed, this swap is finished!
+              let additionalEvents = [
+                SweepTxConfirmed(sweepTx.GetWitHash(), sweepTxAmount)
+                // We do not mark it as finished until the counterparty receives their share.
+                // This is because we don't know how much we have payed as off-chain routing fee until counterparty
+                // receives. (Usually they receive way before the sweep tx is confirmed so it is very rare case that
+                // this will be false.)
+                if loopOut.IsOffchainOfferResolved then
+                  FinishedSuccessfully(loopOut.Id)
+              ]
+              return events @ (additionalEvents |> enhance)
             | _ ->
             // we have to create or bump the sweep tx.
             let! additionalEvents = taskResult {
@@ -439,12 +524,11 @@ module Swap =
                   "That means Preimage can no longer safely revealed, so we will give up the swap"
                 return [FinishedByTimeout msg] |> enhance
               else
-                match loopOut.LockupTransactionHex with
+                match loopOut.LockupTransaction with
                 | None ->
                   // When we don't know lockup tx (a.k.a. swap tx), there is no way we can claim our share.
                   return []
-                | Some lockupTxHex ->
-                  let tx = Transaction.Parse(lockupTxHex, loopOut.BaseAssetNetwork)
+                | Some tx ->
                   match! sweepOrBump deps height tx loopOut with
                   | Some txid ->
                     return [ClaimTxPublished(txid);] |> enhance
@@ -498,7 +582,28 @@ module Swap =
       Out (h, { x with ClaimTransactionId = Some txid })
     | SwapTxPublished tx, Out(h, x) ->
       Out (h, { x with LockupTransactionHex = Some tx })
-
+    | PrePayFinished { RoutingFee = fee; AmountPayed = amount }, Out(h, x) ->
+      Out(h, { x with
+                 Cost =
+                   { x.Cost with
+                       OffChain = x.Cost.OffChain + fee.ToMoney()
+                       Server = x.Cost.Server + amount.ToMoney() } })
+    | OffchainOfferResolved { RoutingFee = fee; AmountPayed = amount }, Out(h, x) ->
+      Out(h, { x with
+                 IsOffchainOfferResolved = true
+                 Cost =
+                   { x.Cost with
+                       OffChain = x.Cost.OffChain + fee.ToMoney()
+                       Server = x.Cost.Server + amount.ToMoney() } })
+    | SweepTxConfirmed(txid, sweepTxAmount), Out(h, x) ->
+      let swapTxAmount = x.OnChainAmount
+      let cost =
+        { x.Cost
+            with
+            Server = x.Cost.Server - sweepTxAmount
+            OnChain = sweepTxAmount - swapTxAmount
+            }
+      Out(h, { x with IsClaimTxConfirmed = true; ClaimTransactionId = Some txid; Cost = cost })
     | NewLoopInAdded(h, x), HasNotStarted ->
       In (h, x)
     | SwapTxPublished tx, In(h, x) ->

@@ -131,15 +131,15 @@ type LndOpenChannelError = {
   StatusCode: int option
   Message: string
 }
-
-[<RequireQualifiedAccess>]
-type FeeLimit =
-  | Fixed of Money
-  | Percent of int
 type SendPaymentRequest = {
   Invoice: PaymentRequest
-  MaxFee: FeeLimit
-  OutgoingChannelId: ShortChannelId option
+  MaxFee: Money
+  OutgoingChannelIds: ShortChannelId[]
+}
+
+type PaymentResult = {
+  PaymentPreimage: Primitives.PaymentPreimage
+  Fee: LNMoney
 }
 
 type INLoopLightningClient =
@@ -158,7 +158,7 @@ type INLoopLightningClient =
     memo: string *
     ?ct: CancellationToken
      -> Task<PaymentRequest>
-  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<Primitives.PaymentPreimage, string>>
+  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
   abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?ct: CancellationToken -> Task<Route>
   abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>

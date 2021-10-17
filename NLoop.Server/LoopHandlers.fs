@@ -25,126 +25,60 @@ open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks
 open Giraffe
 
-module private ValueOption =
-  let defaultToVeryHighFee(v: Money voption) =
-    v |> ValueOption.defaultValue(Money.Coins(100000m))
-
 
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
+      let boltzCli = ctx.GetService<BoltzClient>()
       let struct(baseCryptoCode, quoteCryptoCode) as pairId =
         req.PairId
-        |> Option.defaultValue (PairId.Default)
-      let n = opts.Value.GetNetwork(baseCryptoCode)
-      let boltzCli = ctx.GetService<BoltzClient>()
-      let claimKey = new Key()
-      let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
-      let preimageHash = preimage.Hash
-
-      let! outResponse =
-        let req =
-          { CreateReverseSwapRequest.InvoiceAmount = req.Amount
-            PairId = pairId
-            OrderSide = OrderType.buy
-            ClaimPublicKey = claimKey.PubKey
-            PreimageHash = preimageHash.Value }
-        boltzCli.CreateReverseSwapAsync(req)
-
-      let lnClient = ctx.GetService<ILightningClientProvider>().GetClient(quoteCryptoCode)
-      let! addr =
-        match req.Address with
-        | Some addr -> Task.FromResult addr
-        | None ->
-          lnClient.GetDepositAddress()
-
-      let loopOut = {
-        LoopOut.Id = outResponse.Id |> SwapId
-        Status = SwapStatusType.SwapCreated
-        AcceptZeroConf = req.AcceptZeroConf
-        ClaimKey = claimKey
-        Preimage = preimage
-        RedeemScript = outResponse.RedeemScript
-        Invoice = outResponse.Invoice.ToString()
-        ClaimAddress = addr.ToString()
-        OnChainAmount = outResponse.OnchainAmount
-        TimeoutBlockHeight = outResponse.TimeoutBlockHeight
-        LockupTransactionHex = None
-        ClaimTransactionId = None
-        PairId = pairId
-        ChainName = opts.Value.ChainName.ToString()
-        Label = req.Label |> Option.defaultValue String.Empty
-        PrepayInvoice =
-          outResponse.MinerFeeInvoice
-          |> Option.map(fun s -> s.ToString())
-          |> Option.defaultValue String.Empty
-        MaxMinerFee =
-          req.MaxMinerFee |> ValueOption.defaultToVeryHighFee
-        SweepConfTarget =
-          req.SweepConfTarget
-          |> ValueOption.defaultValue Constants.DefaultSweepConfTarget
-          |> uint |> BlockHeightOffset32
-      }
-
+        |> Option.defaultValue PairId.Default
+      let height = ctx.GetBlockHeight(baseCryptoCode)
       let actor = ctx.GetService<SwapActor>()
-      match outResponse.Validate(preimageHash.Value,
-                                 claimKey.PubKey,
-                                 req.Amount,
-                                 req.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
-                                 req.MaxPrepayAmount |> ValueOption.defaultToVeryHighFee,
-                                 n) with
+      let f = boltzCli.CreateReverseSwapAsync
+      let obs =
+        ctx
+          .GetService<IEventAggregator>()
+          .GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
+          .Replay()
+
+      match! actor.ExecNewLoopOut(f, req, height) with
       | Error e ->
-        do! actor.Execute(loopOut.Id, Swap.Command.SetValidationError(e), "handleLoopOut")
         return! (error503 e) next ctx
-      | Ok () ->
-        let loopOutParams = {
-          Swap.LoopOutParams.OutgoingChanId = req.ChannelId
-          Swap.LoopOutParams.MaxPrepayFee = req.MaxPrepayRoutingFee |> ValueOption.defaultValue(Money.Coins 100000m)
-          Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
-          Swap.LoopOutParams.Height = ctx.GetBlockHeight(baseCryptoCode)
+      | Ok loopOut ->
+      if (not req.AcceptZeroConf) then
+        let response = {
+          LoopOutResponse.Id = loopOut.Id.Value
+          Address = loopOut.ClaimAddress
+          ClaimTxId = None
         }
-        if (not req.AcceptZeroConf) then
-          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
+        return! json response next ctx
+      else
+        let firstErrorOrTxIdT =
+          obs
+          |> Observable.filter(function
+                               | Choice1Of2 { Id = swapId }
+                               | Choice2Of2 { Id = swapId } -> swapId = loopOut.Id)
+          |> Observable.choose(
+            function
+            | Choice1Of2({ Event = Swap.Event.ClaimTxPublished txId }) -> txId |> Ok |> Some
+            | Choice1Of2( { Event = Swap.Event.FinishedByError(_id, err) }) -> err |> Error |> Some
+            | Choice2Of2({ Error = e }) -> e.ToString() |> Error |> Some
+            | _ -> None
+            )
+          |> fun o -> o.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
+        use _ = obs.Connect()
+        match! firstErrorOrTxIdT with
+        | Error e ->
+          return! (error503 e) next ctx
+        | Ok txid ->
           let response = {
-            LoopOutResponse.Id = outResponse.Id
-            Address = outResponse.LockupAddress
-            ClaimTxId = None
+            LoopOutResponse.Id = loopOut.Id.Value
+            Address = loopOut.ClaimAddress
+            ClaimTxId = Some txid
           }
           return! json response next ctx
-        else
-          let obs =
-            ctx
-              .GetService<IEventAggregator>()
-              .GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
-              |> Observable.filter(function
-                                   | Choice1Of2 { Id = swapId }
-                                   | Choice2Of2 { Id = swapId } -> swapId.Value = outResponse.Id)
-
-          do! actor.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
-          let! firstErrorOrTxId =
-            obs
-            |> Observable.choose(
-              function
-              | Choice1Of2({ Event = Swap.Event.ClaimTxPublished txId }) -> txId |> box |> Some
-              | Choice1Of2( { Event = Swap.Event.FinishedByError(_id, err) }) -> err |> box |> Some
-              | Choice2Of2({ Error = e }) -> e.ToString() |> box |> Some
-              | _ -> None
-              )
-            |> fun o -> o.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
-
-          match firstErrorOrTxId with
-          | :? string as e ->
-            return! (error503 e) next ctx
-          | :? uint256 as txid ->
-            let response = {
-              LoopOutResponse.Id = outResponse.Id
-              Address = outResponse.LockupAddress
-              ClaimTxId = Some txid
-            }
-            return! json response next ctx
-          | x ->
-            return failwith $"Unreachable: {x}"
     }
 
 let handleLoopOut (req: LoopOutRequest) =
@@ -200,7 +134,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
                                 loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
                                 onChainNetwork) with
       | Error e ->
-        do! actor.Execute(id, Swap.Command.SetValidationError(e))
+        do! actor.Execute(id, Swap.Command.MarkAsErrored(e))
         return! (error503 e) next ctx
       | Ok _events ->
         let loopIn = {
@@ -222,6 +156,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
             loopIn.HtlcConfTarget
             |> ValueOption.defaultValue Constants.DefaultHtlcConfTarget
             |> uint |> BlockHeightOffset32
+          Cost = SwapCost.Zero
         }
         let height = ctx.GetBlockHeight(quoteCryptoCode)
         do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))

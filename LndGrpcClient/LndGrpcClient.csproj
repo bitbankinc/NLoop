@@ -16,6 +16,7 @@
   <ItemGroup>
     <Protobuf Include="./lightning.proto" GrpcServices="Client" />
     <Protobuf Include="./invoices.proto" GrpcServices="Client" />
+    <Protobuf Include="./router.proto" GrpcServices="Client" />
   </ItemGroup>
 
 </Project>

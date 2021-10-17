@@ -24,7 +24,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
 
   let handleError swapId msg  = unitTask {
     logger.LogError($"{msg}")
-    do! actor.Execute(swapId, Swap.Command.SetValidationError msg, nameof(SwapProcessManager))
+    do! actor.Execute(swapId, Swap.Command.MarkAsErrored msg, nameof(SwapProcessManager))
   }
   interface IHostedService with
     member this.StartAsync(_ct) =
@@ -40,14 +40,17 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
               let! pr =
                 let req = {
                   SendPaymentRequest.Invoice = invoice
-                  MaxFee = paymentParams.MaxFee |> FeeLimit.Fixed
-                  OutgoingChannelId = paymentParams.OutgoingChannelId
+                  MaxFee = paymentParams.MaxFee
+                  OutgoingChannelIds = paymentParams.OutgoingChannelIds
                 }
                 lightningClientProvider.GetClient(quoteAsset).Offer(req).ConfigureAwait(false)
 
               match pr with
-              | Ok _ ->
-                ()
+              | Ok s ->
+                let  cmd =
+                  { Swap.PayInvoiceResult.RoutingFee = s.Fee; Swap.PayInvoiceResult.AmountPayed = invoice.AmountValue.Value }
+                  |> Swap.Command.OffChainOfferResolve
+                do! actor.Execute(swapId, cmd, nameof(SwapProcessManager))
               | Error e ->
                 do! handleError swapId e
             with
