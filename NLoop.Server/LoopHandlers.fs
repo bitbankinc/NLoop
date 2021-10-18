@@ -99,72 +99,17 @@ let handleLoopOut (req: LoopOutRequest) =
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
-      let pairId =
-        loopIn.PairId
-        |> Option.defaultValue PairId.Default
-      let struct(baseCryptoCode, quoteCryptoCode) =
-        pairId
-      let opts = ctx.GetService<IOptions<NLoopOptions>>()
-      let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
-      let boltzCli = ctx.GetService<BoltzClient>()
-
-      let refundKey = new Key()
-      let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
-
-      let! invoice =
-        let amt = loopIn.Amount.ToLNMoney()
-        ctx
-          .GetService<ILightningClientProvider>()
-          .GetClient(baseCryptoCode)
-          .GetInvoice(preimage, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
-
-      let! inResponse =
-        let req =
-          { CreateSwapRequest.Invoice = invoice
-            PairId = pairId
-            OrderSide = OrderType.buy
-            RefundPublicKey = refundKey.PubKey }
-        boltzCli.CreateSwapAsync(req)
-
       let actor = ctx.GetService<SwapActor>()
-      let id = inResponse.Id |> SwapId
-      match inResponse.Validate(invoice.PaymentHash.Value,
-                                refundKey.PubKey,
-                                loopIn.Amount,
-                                loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
-                                onChainNetwork) with
-      | Error e ->
-        do! actor.Execute(id, Swap.Command.MarkAsErrored(e))
-        return! (error503 e) next ctx
-      | Ok _events ->
-        let loopIn = {
-          LoopIn.Id = id
-          Status = SwapStatusType.InvoiceSet
-          RefundPrivateKey = refundKey
-          Preimage = None
-          RedeemScript = inResponse.RedeemScript
-          Invoice = invoice.ToString()
-          Address = inResponse.Address.ToString()
-          ExpectedAmount = inResponse.ExpectedAmount
-          TimeoutBlockHeight = inResponse.TimeoutBlockHeight
-          LockupTransactionHex = None
-          RefundTransactionId = None
-          PairId = pairId
-          ChainName = opts.Value.ChainName.ToString()
-          Label = loopIn.Label |> Option.defaultValue String.Empty
-          HTLCConfTarget =
-            loopIn.HtlcConfTarget
-            |> ValueOption.defaultValue Constants.DefaultHtlcConfTarget
-            |> uint |> BlockHeightOffset32
-          Cost = SwapCost.Zero
-        }
-        let height = ctx.GetBlockHeight(quoteCryptoCode)
-        do! actor.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
-        let response = {
-          LoopInResponse.Id = inResponse.Id
-          Address = inResponse.Address
-        }
+      let height = ctx.GetBlockHeight()
+      let request =
+        ctx
+          .GetService<BoltzClient>()
+          .CreateSwapAsync
+      match! actor.ExecNewLoopIn(request, loopIn, height) with
+      | Ok response ->
         return! json response next ctx
+      | Error e ->
+        return! (error503 e) next ctx
     }
 let handleLoopIn (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
@@ -172,7 +117,7 @@ let handleLoopIn (loopIn: LoopInRequest) =
       let handle = (handleLoopInCore loopIn)
       let pairId =
         loopIn.PairId
-        |> Option.defaultValue (PairId.Default)
+        |> Option.defaultValue PairId.Default
       return!
         (checkBlockchainIsSyncedAndSetTipHeight pairId >=>
          handle)

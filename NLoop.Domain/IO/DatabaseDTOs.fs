@@ -112,6 +112,12 @@ type LoopIn = {
   Label: string
   ChainName: string
 
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  MaxMinerFee: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  MaxSwapFee: Money
+
   Cost: SwapCost
 }
   with

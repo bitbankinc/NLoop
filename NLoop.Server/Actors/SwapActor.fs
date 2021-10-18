@@ -172,3 +172,74 @@ type SwapActor(broadcaster: IBroadcaster,
         do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
         return Ok loopOut
   }
+
+
+  member this.ExecNewLoopIn(request: CreateSwapRequest -> Task<CreateSwapResponse>, loopIn: LoopInRequest, height: BlockHeight) = task {
+      let pairId =
+        loopIn.PairId
+        |> Option.defaultValue PairId.Default
+      let struct(baseCryptoCode, quoteCryptoCode) =
+        pairId
+      let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
+
+      let refundKey = new Key()
+      let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
+
+      let! invoice =
+        let amt = loopIn.Amount.ToLNMoney()
+        lightningClientProvider
+          .GetClient(baseCryptoCode)
+          .GetInvoice(preimage, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
+
+      let! inResponse =
+        let req =
+          { CreateSwapRequest.Invoice = invoice
+            PairId = pairId
+            OrderSide = OrderType.buy
+            RefundPublicKey = refundKey.PubKey }
+        request req
+
+      let id = inResponse.Id |> SwapId
+      match inResponse.Validate(invoice.PaymentHash.Value,
+                                refundKey.PubKey,
+                                loopIn.Amount,
+                                loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
+                                onChainNetwork) with
+      | Error e ->
+        do! this.Execute(id, Swap.Command.MarkAsErrored(e))
+        return Error(e)
+      | Ok _events ->
+        let loopIn = {
+          LoopIn.Id = id
+          Status = SwapStatusType.InvoiceSet
+          RefundPrivateKey = refundKey
+          Preimage = None
+          RedeemScript = inResponse.RedeemScript
+          Invoice = invoice.ToString()
+          Address = inResponse.Address.ToString()
+          ExpectedAmount = inResponse.ExpectedAmount
+          TimeoutBlockHeight = inResponse.TimeoutBlockHeight
+          LockupTransactionHex = None
+          RefundTransactionId = None
+          PairId = pairId
+          ChainName = opts.Value.ChainName.ToString()
+          Label = loopIn.Label |> Option.defaultValue String.Empty
+          HTLCConfTarget =
+            loopIn.HtlcConfTarget
+            |> ValueOption.defaultValue Constants.DefaultHtlcConfTarget
+            |> uint |> BlockHeightOffset32
+          Cost = SwapCost.Zero
+          MaxMinerFee =
+            loopIn.MaxMinerFee
+            |> ValueOption.defaultToVeryHighFee
+          MaxSwapFee =
+            loopIn.MaxSwapFee
+            |> ValueOption.defaultToVeryHighFee
+        }
+        do! this.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
+        let response = {
+          LoopInResponse.Id = inResponse.Id
+          Address = inResponse.Address
+        }
+        return Ok(response)
+    }
