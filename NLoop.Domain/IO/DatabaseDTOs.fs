@@ -105,6 +105,7 @@ type LoopIn = {
   HTLCConfTarget: BlockHeightOffset32
 
   LockupTransactionHex: string option
+  LockupTransactionOutPoint: (uint256 * uint) option
   RefundTransactionId: uint256 option
 
   [<JsonConverter(typeof<PairIdJsonConverter>)>]

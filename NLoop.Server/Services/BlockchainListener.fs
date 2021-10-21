@@ -10,11 +10,14 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 
+open NBitcoin
 open NBitcoin.RPC
 
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
+
+type ComparableOutpoint = uint256 * uint
 
 type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: ILogger<BlockchainListener>) =
   inherit BackgroundService()

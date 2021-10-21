@@ -20,6 +20,7 @@ open NLoop.Domain.Utils.EventStore
 /// * SwapTx (LockupTx) ... On-Chain TX which offers funds with HTLC.
 /// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage. a.k.a "sweep" (loop out)
 /// * RefundTx ... TX to take funds from SwapTx in case of the timeout (loop in).
+/// * SuccessTx ... counterparty's claim tx (loop in)
 /// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient for us to claim the SwapTx.
 /// * Payment ... off-chain payment from counterparty to us.
 module Swap =
@@ -42,9 +43,16 @@ module Swap =
     | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
     | In of blockHeight: BlockHeight * LoopIn
-    | Finished of FinishedState
+    | Finished of finalCost: SwapCost * FinishedState
     with
     static member Zero = HasNotStarted
+
+    member this.Cost =
+      match this with
+      | HasNotStarted _ -> SwapCost.Zero
+      | Out(_, { Cost = cost })
+      | In(_, { Cost = cost })
+      | Finished(cost, _) -> cost
 
   // ------ command -----
 
@@ -153,14 +161,18 @@ module Swap =
     | SweepTxConfirmed of txid: uint256 * sweepAmount: Money
     | PrePayFinished of PayInvoiceResult
     | OffchainOfferResolved of PayInvoiceResult
+    | TheirSwapTxPublished of txHex: string
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
     // We do not use `Transaction` type just to make serializer happy.
     // if we stop using json serializer for serializing this event, we can use `Transaction` instead.
     // But it seems that just using string is much simpler.
-    | SwapTxPublished of txHex: string
+    | OurSwapTxPublished of fee: Money * txHex: string
+    | OurSwapTxConfirmed of txid: uint256 * htlcOutIndex: uint
     | RefundTxPublished of txid: uint256
+    | RefundTxConfirmed of fee: Money * txid: uint256
+    | SuccessTxConfirmed of htlcValue: Money * txid: uint256
 
     // -- general --
     | NewTipReceived of BlockHeight
@@ -168,7 +180,7 @@ module Swap =
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
     | FinishedByRefund of id: SwapId
-    | FinishedByTimeout of reason: string
+    | FinishedByTimeout of id: SwapId * reason: string
     | UnknownTagEvent of tag: uint16 * data: byte[]
     with
     member this.EventTag =
@@ -179,10 +191,14 @@ module Swap =
       | OffchainOfferResolved _ -> 3us
       | SweepTxConfirmed _ -> 4us
       | PrePayFinished _ -> 5us
+      | TheirSwapTxPublished _ -> 6us
 
       | NewLoopInAdded _ -> 256us + 0us
-      | SwapTxPublished _ -> 256us + 1us
-      | RefundTxPublished _-> 256us + 2us
+      | OurSwapTxPublished _ -> 256us + 1us
+      | OurSwapTxConfirmed _ -> 256us + 2us
+      | RefundTxPublished _-> 256us + 3us
+      | RefundTxConfirmed _ -> 256us + 4us
+      | SuccessTxConfirmed _ -> 256us + 5us
 
       | NewTipReceived _ -> 512us + 0us
 
@@ -201,10 +217,14 @@ module Swap =
       | OffchainOfferResolved _ -> "offchain_offer_resolved"
       | SweepTxConfirmed _ -> "sweep_tx_confirmed"
       | PrePayFinished _ -> "prepay_finished"
+      | TheirSwapTxPublished _ -> "their_swap_tx_published"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
-      | SwapTxPublished _ -> "swap_tx_published"
+      | OurSwapTxPublished _ -> "our_swap_tx_published"
+      | OurSwapTxConfirmed _ -> "our_swap_tx_confirmed"
       | RefundTxPublished _ -> "refund_tx_published"
+      | RefundTxConfirmed _ -> "refund_tx_confirmed"
+      | SuccessTxConfirmed _ -> "success_tx_confirmed"
 
       | NewTipReceived _ -> "new_tip_received"
 
@@ -229,9 +249,13 @@ module Swap =
     | InputError of string
     | CanNotSafelyRevealPreimage
     | CounterPartyReturnedBogusResponse of BogusResponseError
+    | BogusSwapTransaction of msg: string
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
     r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)
+
+  let inline private expectBogusSwapTx(r: Result<_, string>) =
+    r |> Result.mapError(fun msg -> $"SwapTx is Bogus! This should never happen: {msg}" |> BogusSwapTransaction)
 
   let inline private expectInputError(r: Result<_, string>) =
     r |> Result.mapError InputError
@@ -254,8 +278,8 @@ module Swap =
         try
           let e =
             match Utils.ToUInt16(b.[0..1], false) with
-            | 0us | 1us | 2us | 3us | 4us | 5us
-            | 256us | 257us | 258us
+            | 0us | 1us | 2us | 3us | 4us | 5us | 6us
+            | 256us | 257us | 258us | 259us | 260us | 261us
             | 512us
             | 1024us | 1025us | 1026us | 1027us ->
               JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[2..], jsonConverterOpts)
@@ -336,7 +360,7 @@ module Swap =
           broadcaster.BroadcastTx(claimTx, baseAsset)
       | None -> ()
       return
-        maybeClaimTxToPublish |> Option.map(fun t -> t.GetWitHash())
+        maybeClaimTxToPublish |> Option.map(fun t -> t.GetHash())
     }
 
   let executeCommand
@@ -409,7 +433,7 @@ module Swap =
               u.ValidateAndGetTx(loopOut)
               |> Result.mapError(Error.CounterPartyReturnedBogusResponse)
 
-            let e = SwapTxPublished(swapTx.ToHex())
+            let e = TheirSwapTxPublished(swapTx.ToHex())
             match! sweepOrBump deps height swapTx loopOut with
             | Some txid ->
               return [e; ClaimTxPublished(txid);] |> enhance
@@ -420,7 +444,7 @@ module Swap =
             let reason =
               u.FailureReason
               |> Option.defaultValue "Counterparty claimed that the loop out is expired but we don't know the exact reason."
-            return [FinishedByTimeout($"Swap expired (Reason: %s{reason})");] |> enhance
+            return [FinishedByTimeout(loopOut.Id, $"Swap expired (Reason: %s{reason})");] |> enhance
           | _ ->
             return []
 
@@ -457,15 +481,24 @@ module Swap =
               return raise <| Exception $"%A{e |> Seq.toList}"
             | true, _ ->
               let tx = psbt.ExtractTransaction()
-              do! broadcaster.BroadcastTx(tx, baseAsset)
-              return [SwapTxPublished(tx.ToHex())] |> enhance
+              let fee = feeRate.GetFee(tx)
+              if fee < loopIn.MaxMinerFee then
+                // we give up executing the swap here rather than dealing with the fee-market nitty-gritty.
+                return [
+                  let msg = $"OnChain FeeRate is too high. (actual fee: {fee}. Our maximum: {loopIn.MaxMinerFee})"
+                  FinishedByError(loopIn.Id, msg)
+                ] |> enhance
+              else
+                do! broadcaster.BroadcastTx(tx, baseAsset)
+                return [
+                  OurSwapTxPublished(fee, tx.ToHex())
+                ] |> enhance
           | SwapStatusType.TxConfirmed
           | SwapStatusType.InvoicePayed ->
             // Ball is on their side. Just wait till they claim their on-chain share.
             return []
           | SwapStatusType.TxClaimed ->
-            // boltz server has happily claimed their on-chain share.
-            return [FinishedSuccessfully(loopIn.Id)] |> enhance
+            return [] |> enhance
           | SwapStatusType.InvoiceFailedToPay ->
             // The counterparty says that they have failed to receive preimage before timeout. This should never happen.
             // But even if it does, we will just reclaim the swap tx when the timeout height has reached.
@@ -489,7 +522,7 @@ module Swap =
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
             match maybePrevClaimTxId
-                  |> Option.bind(fun txid -> block.Transactions |> Seq.tryFind(fun t -> t.GetWitHash() = txid)) with
+                  |> Option.bind(fun txid -> block.Transactions |> Seq.tryFind(fun t -> t.GetHash() = txid)) with
             | Some sweepTx ->
               let sweepTxAmount =
                 sweepTx.Outputs
@@ -501,7 +534,7 @@ module Swap =
                   )
               // Our sweep tx is confirmed, this swap is finished!
               let additionalEvents = [
-                SweepTxConfirmed(sweepTx.GetWitHash(), sweepTxAmount)
+                SweepTxConfirmed(sweepTx.GetHash(), sweepTxAmount)
                 // We do not mark it as finished until the counterparty receives their share.
                 // This is because we don't know how much we have payed as off-chain routing fee until counterparty
                 // receives. (Usually they receive way before the sweep tx is confirmed so it is very rare case that
@@ -522,7 +555,7 @@ module Swap =
                 let msg =
                   $"We reached a timeout height (timeout: {timeout}) - (current height: {height}) < (minimum_delta: {MinPreimageRevealDelta})" +
                   "That means Preimage can no longer safely revealed, so we will give up the swap"
-                return [FinishedByTimeout msg] |> enhance
+                return [FinishedByTimeout(loopOut.Id, msg)] |> enhance
               else
                 match loopOut.LockupTransaction with
                 | None ->
@@ -537,33 +570,92 @@ module Swap =
               }
             return events @ additionalEvents
 
-        | NewBlock (height, _block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
+        | NewBlock (height, block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
           let! events = (height, oldHeight) ||> checkHeight
-          if loopIn.TimeoutBlockHeight <= height then
-            let struct(_offChainAsset, onChainAsset) = loopIn.PairId
-            let! refundAddress =
-              getRefundAddress.Invoke(onChainAsset)
-              |> TaskResult.mapError(FailedToGetAddress)
-            let! fee =
-              feeEstimator.Estimate loopIn.HTLCConfTarget onChainAsset
-            let! refundTx =
-              Transactions.createRefundTx
-                loopIn.LockupTransactionHex.Value
-                loopIn.RedeemScript
-                fee
-                refundAddress
-                loopIn.RefundPrivateKey
-                loopIn.TimeoutBlockHeight
-                loopIn.QuoteAssetNetwork
-              |> expectTxError "refund tx"
+          let! maybeSwapTxConfirmedEvent = result {
+            let maybeSwapTxInBlock =
+              loopIn.LockupTransactionHex
+              |> Option.bind(fun swapTxHex ->
+                let swapTx = Transaction.Parse(swapTxHex, loopIn.QuoteAssetNetwork)
+                block.Transactions |> Seq.tryFind(fun tx -> tx.GetHash() = swapTx.GetHash())
+              )
+            match maybeSwapTxInBlock with
+            | Some tx ->
+              let! index =
+                tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
+                |> expectBogusSwapTx
+              return [
+                OurSwapTxConfirmed(tx.GetHash(), index)
+              ] |> enhance
+            | None ->
+              return []
+            }
+          let maybeSpendTx =
+            loopIn.LockupTransactionOutPoint
+            |> Option.bind(fun (txid, vOut) ->
+              block.Transactions
+              |> Seq.tryPick(fun t ->
+                t.Inputs
+                |> Seq.tryPick(fun i ->
+                  if i.PrevOut.Hash = txid && i.PrevOut.N = vOut then
+                    Some(i, t)
+                  else
+                    None
+                )
+              )
+            )
 
-            do! broadcaster.BroadcastTx(refundTx, onChainAsset)
-            let additionalEvents =
-              [RefundTxPublished(refundTx.GetWitHash()); FinishedByRefund loopIn.Id]
-              |> enhance
-            return events @ additionalEvents
-          else
-            return events
+          let maybeSpendTxEvent =
+            maybeSpendTx
+            |> Option.map(fun(txin, tx) ->
+              assert loopIn.LockupTransactionHex.IsSome
+              let swapTx = Transaction.Parse(loopIn.LockupTransactionHex.Value, loopIn.QuoteAssetNetwork)
+              if (txin.WitScript |> Scripts.isSuccessWitness) then
+                // confirmed tx is their claim tx.
+                [
+                  let htlcOut =
+                    swapTx.Outputs.[txin.PrevOut.N]
+                  SuccessTxConfirmed(htlcOut.Value, tx.GetHash())
+                  FinishedSuccessfully(loopIn.Id)
+                ] |> enhance
+              else
+                // confirmed tx is our refund tx.
+                let refundTxFee =
+                  let c = swapTx.Outputs.AsCoins() |> Seq.cast |> Seq.toArray
+                  tx.GetFee(c)
+                [ RefundTxConfirmed(refundTxFee, tx.GetHash()); FinishedByRefund loopIn.Id ] |> enhance
+            )
+            |> Option.toList
+            |> List.concat
+
+          let! publishEvent = taskResult {
+            match maybeSpendTx with
+            | None when loopIn.TimeoutBlockHeight <= height ->
+              let struct(_, quoteAsset) = loopIn.PairId
+              let! refundAddress =
+                getRefundAddress.Invoke(quoteAsset)
+                |> TaskResult.mapError(FailedToGetAddress)
+              let! fee =
+                feeEstimator.Estimate loopIn.HTLCConfTarget quoteAsset
+              let! refundTx =
+                Transactions.createRefundTx
+                  loopIn.LockupTransactionHex.Value
+                  loopIn.RedeemScript
+                  fee
+                  refundAddress
+                  loopIn.RefundPrivateKey
+                  loopIn.TimeoutBlockHeight
+                  loopIn.QuoteAssetNetwork
+                |> expectTxError "refund tx"
+
+              do! broadcaster.BroadcastTx(refundTx, quoteAsset)
+              return
+                [RefundTxPublished(refundTx.GetHash()); ]
+                |> enhance
+
+              | _ -> return []
+            }
+          return events @ maybeSwapTxConfirmedEvent @ maybeSpendTxEvent @ publishEvent
         | _, Finished _ ->
           return []
         | x, s ->
@@ -573,6 +665,29 @@ module Swap =
         return! UnExpectedError ex |> Error
     }
 
+  let updateCost (state: State) (event: Event) (cost: SwapCost) =
+    match event, state with
+    | PrePayFinished { RoutingFee = fee; AmountPayed = amount }, Out(_, x) ->
+                 { cost with
+                     OffChain = x.Cost.OffChain + fee.ToMoney()
+                     Server = x.Cost.Server + amount.ToMoney() }
+    | OffchainOfferResolved { RoutingFee = fee; AmountPayed = amount }, Out(_, x) ->
+                   { cost with
+                       OffChain = x.Cost.OffChain + fee.ToMoney()
+                       Server = x.Cost.Server + amount.ToMoney() }
+    | SweepTxConfirmed(_, sweepTxAmount), Out(_, x) ->
+        let swapTxAmount = x.OnChainAmount
+        { cost
+            with
+            Server = x.Cost.Server - sweepTxAmount
+            OnChain = sweepTxAmount - swapTxAmount
+            }
+    | SuccessTxConfirmed (htlcAmount, _txid), In(_, x) ->
+      { x.Cost with Server = x.Cost.Server + htlcAmount }
+    | RefundTxConfirmed (fee, _txid), In(_, x) ->
+      { x.Cost with OnChain = x.Cost.OnChain + fee }
+    | _ -> cost
+
   let applyChanges
     (state: State) (event: Event) =
     match event, state with
@@ -580,50 +695,44 @@ module Swap =
       Out (h, x)
     | ClaimTxPublished txid, Out(h, x) ->
       Out (h, { x with ClaimTransactionId = Some txid })
-    | SwapTxPublished tx, Out(h, x) ->
+    | TheirSwapTxPublished tx, Out(h, x) ->
       Out (h, { x with LockupTransactionHex = Some tx })
-    | PrePayFinished { RoutingFee = fee; AmountPayed = amount }, Out(h, x) ->
+    | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
-                 Cost =
-                   { x.Cost with
-                       OffChain = x.Cost.OffChain + fee.ToMoney()
-                       Server = x.Cost.Server + amount.ToMoney() } })
-    | OffchainOfferResolved { RoutingFee = fee; AmountPayed = amount }, Out(h, x) ->
+                 Cost = updateCost state event x.Cost })
+    | OffchainOfferResolved _, Out(h, x) ->
       Out(h, { x with
                  IsOffchainOfferResolved = true
-                 Cost =
-                   { x.Cost with
-                       OffChain = x.Cost.OffChain + fee.ToMoney()
-                       Server = x.Cost.Server + amount.ToMoney() } })
-    | SweepTxConfirmed(txid, sweepTxAmount), Out(h, x) ->
-      let swapTxAmount = x.OnChainAmount
-      let cost =
-        { x.Cost
-            with
-            Server = x.Cost.Server - sweepTxAmount
-            OnChain = sweepTxAmount - swapTxAmount
-            }
+                 Cost = updateCost state event x.Cost })
+    | SweepTxConfirmed(txid, _), Out(h, x) ->
+      let cost = updateCost state event x.Cost
       Out(h, { x with IsClaimTxConfirmed = true; ClaimTransactionId = Some txid; Cost = cost })
     | NewLoopInAdded(h, x), HasNotStarted ->
       In (h, x)
-    | SwapTxPublished tx, In(h, x) ->
-      In (h, { x with LockupTransactionHex = Some tx })
+    | OurSwapTxPublished(fee, tx), In(h, x) ->
+      let cost = { x.Cost with OnChain = fee }
+      In (h, { x with LockupTransactionHex = Some tx; Cost = cost })
+    | OurSwapTxConfirmed(txid, vOut), In(h, x) ->
+      In(h, { x with LockupTransactionOutPoint = Some (txid, vOut) })
     | RefundTxPublished txid, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
+    | SuccessTxConfirmed _, In(h, x) ->
+      In(h, { x with Cost = updateCost state event x.Cost })
+    | RefundTxConfirmed _, In(h, x) ->
+      In(h, { x with Cost = updateCost state event x.Cost })
 
-    | FinishedByError (_, err), In _ ->
-      Finished(FinishedState.Errored(err))
-    | FinishedByError (_, err), Out _ ->
-      Finished(FinishedState.Errored(err))
-    | FinishedSuccessfully _, Out _
-    | FinishedSuccessfully _, In _ ->
-      Finished(FinishedState.Success)
-    | FinishedByRefund _, In (_h, { RefundTransactionId = Some txid }) ->
-      Finished(FinishedState.Refunded(txid))
-    | FinishedByTimeout reason, Out _
-    | FinishedByTimeout reason, In _ ->
-      Finished(FinishedState.Timeout(reason))
-
+    | FinishedByError (_, err), In(_, { Cost = cost }) ->
+      Finished(cost, FinishedState.Errored(err))
+    | FinishedByError (_, err), Out(_, { Cost = cost }) ->
+      Finished(cost, FinishedState.Errored(err))
+    | FinishedSuccessfully _, Out (_ ,{ Cost = cost })
+    | FinishedSuccessfully _, In(_, { Cost = cost }) ->
+      Finished(cost, FinishedState.Success)
+    | FinishedByRefund _, In (_h, { Cost = cost; RefundTransactionId = Some txid }) ->
+      Finished(cost, FinishedState.Refunded(txid))
+    | FinishedByTimeout(_, reason), Out(_, { Cost = cost })
+    | FinishedByTimeout(_, reason), In(_, { Cost = cost }) ->
+      Finished(cost, FinishedState.Timeout(reason))
     | NewTipReceived h, Out(_, x) ->
       Out(h, x)
     | NewTipReceived h, In(_, x) ->

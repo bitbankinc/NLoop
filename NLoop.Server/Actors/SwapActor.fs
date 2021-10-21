@@ -235,6 +235,7 @@ type SwapActor(broadcaster: IBroadcaster,
           MaxSwapFee =
             loopIn.MaxSwapFee
             |> ValueOption.defaultToVeryHighFee
+          LockupTransactionOutPoint = None
         }
         do! this.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
         let response = {

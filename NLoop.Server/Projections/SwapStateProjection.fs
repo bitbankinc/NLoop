@@ -1,35 +1,17 @@
 namespace NLoop.Server.Projections
 
 open System
-open System.Net
 open System.Threading
 open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
-open NBitcoin
 open NLoop.Domain
-open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 open NLoop.Server.Actors
-
-type SwapSummary = {
-  Cost: SwapCost
-  SwapId: SwapId
-  IsFinished: bool
-  PairId: PairId
-}
-  with
-  static member Create(id: SwapId, pairId: PairId) = {
-    Cost = SwapCost.Zero
-    SwapId = id
-    IsFinished = false
-    PairId = pairId
-  }
-
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
@@ -63,25 +45,6 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
             (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
         log.LogTrace($"Publishing RecordedEvent {r}")
 
-        let updateSummary (e: Swap.Event) (s: SwapSummary) =
-          s
-
-        this.SwapDetails <-
-          (
-            if this.SwapDetails |> Map.containsKey r.StreamId |> not then
-              let pairId, swapId =
-                match r.Data with
-                | Swap.Event.NewLoopOutAdded (_, d) -> d.PairId, d.Id
-                | Swap.Event.NewLoopInAdded(_, d) -> d.PairId, d.Id
-                | t -> failwith $"Unreachable! {t}"
-              this.SwapDetails |> Map.add r.StreamId (SwapSummary.Create(swapId, pairId))
-            else
-              this.SwapDetails
-          )
-          |> Map.change
-            r.StreamId
-            (Option.map(updateSummary r.Data))
-
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
         do!
           r.EventNumber.Value
@@ -103,12 +66,6 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
     and set v =
       lock lockObj <| fun () ->
         _state <- v
-  member this.SwapDetails
-    with get(): Map<_, SwapSummary> = _finishedSwapSummary
-    and set v =
-      lock lockObj <| fun () ->
-        _finishedSwapSummary <- v
-
   member this.OngoingLoopOuts =
     this.State
     |> Seq.choose(fun v ->

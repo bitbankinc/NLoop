@@ -353,9 +353,12 @@
         ],
         "properties": {
           "channel_id": {
+            "type": "array",
             "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
             "nullable": true,
-            "$ref": "#/components/schemas/ShortChannelId"
+            "items": {
+              "$ref": "#/components/schemas/ShortChannelId"
+            }
           },
           "pair_id": {
             "description": "< currency pair to perform the swap. Default is BTC/BTC.",

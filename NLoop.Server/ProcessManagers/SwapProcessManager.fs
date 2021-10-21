@@ -2,6 +2,7 @@ namespace NLoop.Server.ProcessManagers
 
 open System.Collections.Generic
 open System.Threading.Tasks
+open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open LndClient
@@ -19,16 +20,14 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                         listeners: IEnumerable<ISwapEventListener>) =
   let obs = eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()
 
-  let mutable subsc1 = null
-  let mutable subsc2 = null
-
+  let subscriptions = ResizeArray()
   let handleError swapId msg  = unitTask {
     logger.LogError($"{msg}")
     do! actor.Execute(swapId, Swap.Command.MarkAsErrored msg, nameof(SwapProcessManager))
   }
   interface IHostedService with
     member this.StartAsync(_ct) =
-      subsc1 <-
+      let subsc1 =
         obs
         |> Observable.choose(fun e ->
           match e.Data with
@@ -58,8 +57,8 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                 do! handleError swapId ex.Message
           })
         |> Observable.subscribe(id)
-
-      subsc2 <-
+      subscriptions.Add subsc1
+      let subsc2 =
         obs
         |> Observable.subscribe(fun e ->
           match e.Data with
@@ -72,16 +71,19 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
               l.RegisterSwap(swapId)
           | Swap.Event.FinishedSuccessfully swapId
           | Swap.Event.FinishedByRefund swapId
+          | Swap.Event.FinishedByTimeout(swapId, _)
           | Swap.Event.FinishedByError (swapId, _) ->
             logger.LogDebug($"Removing Finished Swap {swapId}")
             for l in listeners do
               l.RemoveSwap swapId
           | _ -> ()
         )
+      subscriptions.Add subsc2
+
       Task.CompletedTask
 
+
     member this.StopAsync(_ct) =
-      do
-        subsc1.Dispose()
-        subsc2.Dispose()
+      for s in subscriptions do
+        s.Dispose()
       Task.CompletedTask

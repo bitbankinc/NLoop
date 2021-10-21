@@ -33,8 +33,8 @@
     <Compile Include="RPCDTOs\Query.fs" />
     <Compile Include="BoltzRequestResponse.fs" />
     <Compile Include="EventAggregator.fs" />
+    <Compile Include="Interfaces.fs" />
     <Compile Include="LightningClientProvider.fs" />
-    <Compile Include="SwapEventListener.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />
     <Compile Include="Projections\SwapStateProjection.fs" />

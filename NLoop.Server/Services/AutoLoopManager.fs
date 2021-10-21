@@ -209,22 +209,15 @@ type SwapSuggestion =
   member this.Peers(knownChannels: Map<ShortChannelId, NodeId>, logger: ILogger): NodeId[] =
     match this with
     | Out req ->
-      let g =
+      let knownPeers, unKnownPeers =
         req.ChannelId
-        |> Seq.ofArray
-        |> Seq.groupBy(fun channel -> knownChannels.All(fun kc -> kc.Key = channel))
-      g
-      |> Seq.filter(fst >> not)
-      |> Seq.map(snd)
-      |> Seq.concat
-      |> Seq.iter(fun c -> logger.LogWarning($"peer for channel: {c} (%d{c.ToUInt64()}) unknown"))
+        |> Array.partition(fun c -> knownChannels.Any(fun kc -> kc.Key = c))
 
-      g
-      |> Seq.filter(fst)
-      |> Seq.map(snd)
-      |> Seq.concat
-      |> Seq.map(fun shortChannelId -> knownChannels.TryGetValue(shortChannelId) |> snd)
-      |> Seq.toArray
+      unKnownPeers
+      |> Array.iter(fun c -> logger.LogWarning($"peer for channel: {c} (%d{c.ToUInt64()}) unknown"))
+
+      knownPeers
+      |> Array.map(fun shortChannelId -> knownChannels.TryGetValue(shortChannelId) |> snd)
 
 [<AutoOpen>]
 module private Fees =
@@ -442,17 +435,16 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     ()
 
   member private this.CheckExistingAutoLoopsOut(states: Map<_, Swap.State>): ExistingAutoLoopSummary =
+    let loopOutFees =
       states
-      |> Map.toSeq
+      |> Map.toList
       |> Seq.map(snd)
-      |> Seq.choose(
-        function
-        | Swap.State.Finished s -> s |> Some
-        | _ -> None
-      )
+      |> Seq.choose(function | Swap.State.Out(_, o) when o.Label = Labels.autoLoopLabel(Swap.Category.Out) -> Some o | _ -> None)
+      |> Seq.map(fun s -> s.Cost.Total)
       |> Seq.fold(fun acc s ->
-        failwith "todo"
+        { acc with SpentFees = acc.SpentFees + s }
       ) ExistingAutoLoopSummary.Default
+    loopOutFees
 
   member private this.CurrentSwapTraffic(loopOut, loopIn): SwapTraffic =
     failwith "todo"

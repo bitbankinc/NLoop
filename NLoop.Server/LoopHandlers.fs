@@ -98,29 +98,21 @@ let handleLoopOut (req: LoopOutRequest) =
     }
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    task {
-      let actor = ctx.GetService<SwapActor>()
-      let height = ctx.GetBlockHeight()
-      let request =
-        ctx
-          .GetService<BoltzClient>()
-          .CreateSwapAsync
-      match! actor.ExecNewLoopIn(request, loopIn, height) with
-      | Ok response ->
-        return! json response next ctx
-      | Error e ->
-        return! (error503 e) next ctx
-    }
+    let actor = ctx.GetService<SwapActor>()
+    let height = ctx.GetBlockHeight()
+    let request =
+      ctx
+        .GetService<BoltzClient>()
+        .CreateSwapAsync
+    actor.ExecNewLoopIn(request, loopIn, height)
+    |> Task.bind(function | Ok resp -> json resp next ctx | Error e -> (error503 e) next ctx)
+
 let handleLoopIn (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    task {
-      let handle = (handleLoopInCore loopIn)
-      let pairId =
-        loopIn.PairId
-        |> Option.defaultValue PairId.Default
-      return!
-        (checkBlockchainIsSyncedAndSetTipHeight pairId >=>
-         handle)
-          next ctx
-    }
+    let handle = (handleLoopInCore loopIn)
+    let pairId =
+      loopIn.PairId
+      |> Option.defaultValue PairId.Default
+    (checkBlockchainIsSyncedAndSetTipHeight pairId >=> handle)
+      next ctx
 

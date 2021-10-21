@@ -97,3 +97,7 @@ module Scripts =
       do! checkOpcode 10 OpcodeType.OP_ENDIF
       do! checkOpcode 11 OpcodeType.OP_CHECKSIG
     }
+
+  let isSuccessWitness(witness: WitScript): bool =
+    let isRefund = (witness.PushCount = 3)
+    not <| isRefund

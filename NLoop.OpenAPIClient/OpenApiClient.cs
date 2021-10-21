@@ -821,8 +821,7 @@ namespace NLoopClient
     {
         /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
-        public string Channel_id { get; set; }
+        public System.Collections.Generic.ICollection<string> Channel_id { get; set; }
     
         /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC.</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
