@@ -45,8 +45,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
             let cmd =
               (newBlockNum, block, cc)
               |> Swap.Command.NewBlock
-            for s in swaps.Keys do
-              do! actor.Execute(s, cmd, nameof(BlockchainListener))
+            let! _ = swaps.Keys |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener))) |> Task.WhenAll
+            ()
     with
     | :? OperationCanceledException ->
       logger.LogInformation($"Stopping {nameof(BlockchainListener)}...")

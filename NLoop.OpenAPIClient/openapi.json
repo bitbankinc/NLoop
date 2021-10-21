@@ -523,6 +523,9 @@
           "refund_txid": {
             "type": "string",
             "nullable": true
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Cost"
           }
         }
       },
@@ -530,6 +533,23 @@
         "type": "object",
         "additionalProperties": {
           "$ref": "#/components/schemas/ShortSwapSummary"
+        }
+      },
+      "Cost": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "onchain": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "offchain": {
+            "type": "integer",
+            "format": "int64"
+          }
         }
       },
       "GetOngoingSwapResponse": {

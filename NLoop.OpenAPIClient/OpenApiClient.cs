@@ -1010,6 +1010,9 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("refund_txid", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Refund_txid { get; set; }
     
+        [Newtonsoft.Json.JsonProperty("cost", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public Cost Cost { get; set; }
+    
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
         [Newtonsoft.Json.JsonExtensionData]
@@ -1042,6 +1045,39 @@ namespace NLoopClient
         public static GetSwapHistoryResponse FromJson(string data)
         {
             return Newtonsoft.Json.JsonConvert.DeserializeObject<GetSwapHistoryResponse>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class Cost 
+    {
+        [Newtonsoft.Json.JsonProperty("server", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Server { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("onchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Onchain { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("offchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Offchain { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static Cost FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<Cost>(data);
         }
     
     }

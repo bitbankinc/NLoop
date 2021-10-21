@@ -65,7 +65,6 @@ module QueryHandlers =
           )
         )
         |> Map.ofSeq
-      printfn $"Returning \n {resp} \nin json"
       return! json resp next ctx
     }
 
