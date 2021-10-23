@@ -40,6 +40,7 @@
     <Compile Include="Projections\SwapStateProjection.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
     <Compile Include="Services\BoltzClient.fs" />
+    <Compile Include="Services\LightningInvoiceProvider.fs" />
     <Compile Include="Services\BoltzClientExtensions.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />

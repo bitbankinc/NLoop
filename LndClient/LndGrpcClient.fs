@@ -10,11 +10,9 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FSharp.Control
 open Google.Protobuf
-open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
-open Grpc.Net.Client.Configuration
-open LndClient
+open Invoicesrpc
 open LndClient
 open Lnrpc
 open FSharp.Control.Tasks
@@ -111,8 +109,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
     GrpcChannel.ForAddress(settings.Url, opts)
   let client =
     Lightning.LightningClient(channel)
-  let invoiceClient = Invoicesrpc.Invoices.InvoicesClient(channel)
-  let routerClient = Routerrpc.Router.RouterClient(channel)
+  let invoiceClient = Invoices.InvoicesClient(channel)
+  let routerClient = Router.RouterClient(channel)
 
   member this.DefaultHeaders = null
     //let metadata = Metadata()
@@ -145,7 +143,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
     member this.GetHodlInvoice(paymentHash, value, expiry, memo, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
-        let req = Invoicesrpc.AddHoldInvoiceRequest()
+        let req = AddHoldInvoiceRequest()
         req.Hash <-
           paymentHash.ToBytes()
           |> ByteString.CopyFrom
@@ -162,6 +160,29 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         let! m = client.GetInfoAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return m |> box
       }
+
+    member this.SubscribeSingleInvoice(invoiceHash, ct) =
+      let ct = defaultArg ct CancellationToken.None
+      let resp =
+        let req = SubscribeSingleInvoiceRequest()
+        req.RHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
+        invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
+      let translateEnum: Invoice.Types.InvoiceState -> InvoiceStateEnum =
+        function
+        | Invoice.Types.InvoiceState.Accepted -> InvoiceStateEnum.Accepted
+        | Invoice.Types.InvoiceState.Canceled -> InvoiceStateEnum.Canceled
+        | Invoice.Types.InvoiceState.Open -> InvoiceStateEnum.Open
+        | Invoice.Types.InvoiceState.Settled -> InvoiceStateEnum.Settled
+        | _ -> raise <| InvalidDataException("Enum out of range.")
+
+      resp.ReadAllAsync(ct)
+      |> AsyncSeq.ofAsyncEnum
+      |> AsyncSeq.map(fun inv ->
+        { InvoiceSubscription.InvoiceState = inv.State |> translateEnum
+          AmountPayed = inv.AmtPaidSat |> Money.Satoshis
+          PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref }
+        )
+
     member this.GetInvoice(paymentPreimage, amount, expiry, memo, ct) =
       task {
         let req = Invoice()
@@ -268,15 +289,12 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
           |> Seq.toList
           |> Route.Route
       }
-    member this.SubscribeChannelChange(ct) = task {
+    member this.SubscribeChannelChange(ct) =
       let ct = defaultArg ct CancellationToken.None
       let req = ChannelEventSubscription()
-      return
-        client
-          .SubscribeChannelEvents(req, this.DefaultHeaders, this.Deadline, ct)
-          .ResponseStream
-          .ReadAllAsync(ct)
-        |> AsyncSeq.ofAsyncEnum
-        |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
-        |> AsyncSeq.toAsyncEnum
-    }
+      client
+        .SubscribeChannelEvents(req, this.DefaultHeaders, this.Deadline, ct)
+        .ResponseStream
+        .ReadAllAsync(ct)
+      |> AsyncSeq.ofAsyncEnum
+      |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)

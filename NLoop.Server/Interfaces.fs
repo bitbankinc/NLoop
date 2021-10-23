@@ -2,6 +2,11 @@ namespace NLoop.Server
 
 open System.IO
 open System.Runtime.CompilerServices
+open System.Threading
+open System.Threading.Tasks
+open DotNetLightning.Payment
+open DotNetLightning.Utils
+open DotNetLightning.Utils.Primitives
 open LndClient
 open NBitcoin
 open FSharp.Control.Tasks
@@ -34,3 +39,17 @@ type ILightningClientProviderExtensions =
           return (Ok(c :> IDestination))
       }
     )
+
+type OnPaymentReception = Money -> Task
+type OnPaymentCancellation = string -> Task
+
+type ILightningInvoiceProvider =
+  abstract member GetAndListenToInvoice:
+    cryptoCode: SupportedCryptoCode *
+    preimage: PaymentPreimage *
+    amt: LNMoney *
+    label: string *
+    onPaymentFinished: OnPaymentReception *
+    onCancellation: OnPaymentCancellation *
+    ct: CancellationToken option
+     -> Task<PaymentRequest>

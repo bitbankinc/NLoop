@@ -13,8 +13,12 @@ open NLoop.Domain.Utils
 /// SwapCost is a breakdown of the final swap costs.
 type SwapCost = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  [<JsonPropertyName "server">]
-  Server: Money
+  [<JsonPropertyName "server_onchain">]
+  ServerOnChain: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "server_offchain">]
+  ServerOffChain: Money
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   [<JsonPropertyName "onchain">]
@@ -26,9 +30,11 @@ type SwapCost = {
 }
   with
   member this.Total =
-    this.Server + this.OnChain + this.OffChain
+    this.ServerOnChain + this.ServerOffChain + this.OnChain + this.OffChain
+
   static member Zero = {
-    Server = Money.Zero
+    ServerOnChain = Money.Zero
+    ServerOffChain = Money.Zero
     OnChain = Money.Zero
     OffChain = Money.Zero
   }

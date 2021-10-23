@@ -35,6 +35,7 @@ type SwapActor(broadcaster: IBroadcaster,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetAddress,
                lightningClientProvider: ILightningClientProvider,
+               invoiceProvider: ILightningInvoiceProvider,
                opts: IOptions<NLoopOptions>,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator
@@ -92,11 +93,12 @@ type SwapActor(broadcaster: IBroadcaster,
   }
 
   /// Helper function for creating new loop out.
-  /// This really should be in the Domain layer, but we want swapId to be the StreamId of the event stream, we must
+  /// Technically, the logic of this function should be in the Domain layer, but we want
+  /// swapId to be the StreamId of the event stream, we must
   /// get the StreamId outside of the Domain, So we must call `BoltzClient.CreateReverseSwap` and get the swapId before
   /// sending the command into the domain layer.
   /// If we define some internal UUID for swapid instead of using the one given by the boltz server, the logic of this
-  /// function can go into the domain layer. But that complicates things by having to use two kind of IDs for each swaps.
+  /// function can go into the domain layer. But that complicates things by having two kinds of IDs for each swaps.
   member this.ExecNewLoopOut(request: CreateReverseSwapRequest -> Task<CreateReverseSwapResponse>,
                              req: LoopOutRequest,
                              height: BlockHeight
@@ -185,12 +187,27 @@ type SwapActor(broadcaster: IBroadcaster,
       let refundKey = new Key()
       let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
 
+      let mutable maybeSwapId = None
+
       let! invoice =
         let amt = loopIn.Amount.ToLNMoney()
-        lightningClientProvider
-          .GetClient(baseCryptoCode)
-          .GetInvoice(preimage, amt, TimeSpan.FromMinutes(float(10 * 6)), $"This is an invoice for LoopIn by NLoop (label: \"{loopIn.Label}\")")
+        let onPaymentFinished = fun (amt: Money) ->
+          match maybeSwapId with
+          | Some i ->
+            this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), nameof(invoiceProvider)) :> Task
+          | None ->
+            // This will never happen unless they pay us unconditionally.
+            Task.CompletedTask
 
+        let onPaymentCanceled = fun (msg: string) ->
+          match maybeSwapId with
+          | Some i ->
+            this.Execute(i, Swap.Command.MarkAsErrored(msg)) :> Task
+          | None ->
+            // This will never happen unless they pay us unconditionally.
+            Task.CompletedTask
+
+        invoiceProvider.GetAndListenToInvoice(baseCryptoCode, preimage, amt, loopIn.Label |> Option.defaultValue(String.Empty), onPaymentFinished, onPaymentCanceled, None)
       let! inResponse =
         let req =
           { CreateSwapRequest.Invoice = invoice
@@ -198,19 +215,19 @@ type SwapActor(broadcaster: IBroadcaster,
             OrderSide = OrderType.buy
             RefundPublicKey = refundKey.PubKey }
         request req
-
-      let id = inResponse.Id |> SwapId
+      let swapId = inResponse.Id |> SwapId
+      maybeSwapId <- swapId |> Some
       match inResponse.Validate(invoice.PaymentHash.Value,
                                 refundKey.PubKey,
                                 loopIn.Amount,
                                 loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
                                 onChainNetwork) with
       | Error e ->
-        do! this.Execute(id, Swap.Command.MarkAsErrored(e))
+        do! this.Execute(swapId, Swap.Command.MarkAsErrored(e))
         return Error(e)
       | Ok _events ->
         let loopIn = {
-          LoopIn.Id = id
+          LoopIn.Id = swapId
           Status = SwapStatusType.InvoiceSet
           RefundPrivateKey = refundKey
           Preimage = None
@@ -237,7 +254,7 @@ type SwapActor(broadcaster: IBroadcaster,
             |> ValueOption.defaultToVeryHighFee
           LockupTransactionOutPoint = None
         }
-        do! this.Execute(id, Swap.Command.NewLoopIn(height, loopIn))
+        do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
         let response = {
           LoopInResponse.Id = inResponse.Id
           Address = inResponse.Address

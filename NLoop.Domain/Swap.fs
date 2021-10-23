@@ -142,6 +142,7 @@ module Swap =
 
     // -- loop in --
     | NewLoopIn of height: BlockHeight * LoopIn
+    | CommitReceivedOffChainPayment of amt: Money
 
     // -- both
     | SwapUpdate of Data.SwapStatusResponseData
@@ -173,6 +174,7 @@ module Swap =
     | RefundTxPublished of txid: uint256
     | RefundTxConfirmed of fee: Money * txid: uint256
     | SuccessTxConfirmed of htlcValue: Money * txid: uint256
+    | OffChainPaymentReceived of amt: Money
 
     // -- general --
     | NewTipReceived of BlockHeight
@@ -192,6 +194,7 @@ module Swap =
       | SweepTxConfirmed _ -> 4us
       | PrePayFinished _ -> 5us
       | TheirSwapTxPublished _ -> 6us
+      | OffChainPaymentReceived _ -> 7us
 
       | NewLoopInAdded _ -> 256us + 0us
       | OurSwapTxPublished _ -> 256us + 1us
@@ -218,6 +221,7 @@ module Swap =
       | SweepTxConfirmed _ -> "sweep_tx_confirmed"
       | PrePayFinished _ -> "prepay_finished"
       | TheirSwapTxPublished _ -> "their_swap_tx_published"
+      | OffChainPaymentReceived _ -> "offchain_payment_received"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
       | OurSwapTxPublished _ -> "our_swap_tx_published"
@@ -278,7 +282,7 @@ module Swap =
         try
           let e =
             match Utils.ToUInt16(b.[0..1], false) with
-            | 0us | 1us | 2us | 3us | 4us | 5us | 6us
+            | 0us | 1us | 2us | 3us | 4us | 5us | 6us | 7us
             | 256us | 257us | 258us | 259us | 260us | 261us
             | 512us
             | 1024us | 1025us | 1026us | 1027us ->
@@ -512,6 +516,8 @@ module Swap =
             return []
           | _ ->
             return []
+        | CommitReceivedOffChainPayment amt, In _ ->
+          return [ OffChainPaymentReceived(amt) ] |> enhance
 
         // --- ---
 
@@ -665,28 +671,35 @@ module Swap =
         return! UnExpectedError ex |> Error
     }
 
-  let updateCost (state: State) (event: Event) (cost: SwapCost) =
+  let private updateCost (state: State) (event: Event) (cost: SwapCost) =
     match event, state with
+    // loop out
     | PrePayFinished { RoutingFee = fee; AmountPayed = amount }, Out(_, x) ->
-                 { cost with
-                     OffChain = x.Cost.OffChain + fee.ToMoney()
-                     Server = x.Cost.Server + amount.ToMoney() }
+      { cost with
+          OffChain = x.Cost.OffChain + fee.ToMoney()
+          ServerOffChain = x.Cost.ServerOffChain + amount.ToMoney() }
     | OffchainOfferResolved { RoutingFee = fee; AmountPayed = amount }, Out(_, x) ->
-                   { cost with
-                       OffChain = x.Cost.OffChain + fee.ToMoney()
-                       Server = x.Cost.Server + amount.ToMoney() }
+      { cost with
+          OffChain = x.Cost.OffChain + fee.ToMoney()
+          ServerOffChain = x.Cost.ServerOffChain + amount.ToMoney() }
     | SweepTxConfirmed(_, sweepTxAmount), Out(_, x) ->
-        let swapTxAmount = x.OnChainAmount
-        { cost
-            with
-            Server = x.Cost.Server - sweepTxAmount
-            OnChain = sweepTxAmount - swapTxAmount
-            }
+      let swapTxAmount = x.OnChainAmount
+      { cost
+          with
+          ServerOnChain = x.Cost.ServerOnChain - sweepTxAmount
+          OnChain = sweepTxAmount - swapTxAmount
+          }
+
+    // loop in
+    | OurSwapTxPublished(fee, _), In(_, x) ->
+      { x.Cost with OnChain = fee }
     | SuccessTxConfirmed (htlcAmount, _txid), In(_, x) ->
-      { x.Cost with Server = x.Cost.Server + htlcAmount }
+      { x.Cost with ServerOnChain = x.Cost.ServerOnChain + htlcAmount }
     | RefundTxConfirmed (fee, _txid), In(_, x) ->
       { x.Cost with OnChain = x.Cost.OnChain + fee }
-    | _ -> cost
+    | OffChainPaymentReceived amt, In(_, x) ->
+      { x.Cost with ServerOffChain = x.Cost.ServerOffChain - amt }
+    | x -> failwith $"Unreachable! %A{x}"
 
   let applyChanges
     (state: State) (event: Event) =
@@ -719,6 +732,8 @@ module Swap =
     | SuccessTxConfirmed _, In(h, x) ->
       In(h, { x with Cost = updateCost state event x.Cost })
     | RefundTxConfirmed _, In(h, x) ->
+      In(h, { x with Cost = updateCost state event x.Cost })
+    | OffChainPaymentReceived _, In(h, x) ->
       In(h, { x with Cost = updateCost state event x.Cost })
 
     | FinishedByError (_, err), In(_, { Cost = cost }) ->

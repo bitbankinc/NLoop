@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.CompilerServices
+open FSharp.Control
 open Macaroons
 open NBitcoin.DataEncoders
 open System.Threading
@@ -142,6 +143,17 @@ type PaymentResult = {
   Fee: LNMoney
 }
 
+type InvoiceStateEnum =
+   | Open = 0
+   | Settled = 1
+   | Canceled = 2
+   | Accepted = 3
+
+type InvoiceSubscription = {
+  PaymentRequest: PaymentRequest
+  InvoiceState: InvoiceStateEnum
+  AmountPayed: Money
+}
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -164,4 +176,5 @@ type INLoopLightningClient =
   abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
-  abstract member SubscribeChannelChange: ?ct: CancellationToken -> Task<IAsyncEnumerable<ChannelEventUpdate>>
+  abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
+  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
