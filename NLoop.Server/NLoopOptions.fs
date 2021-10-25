@@ -26,15 +26,6 @@ type ChainOptions() =
   /// Confirmation target for the sweep in on-chain swap
   member val SweepConf = 6 with get, set
 
-  // -- swap fee limitations --
-  member val MaxSwapFeeSats = Int32.MaxValue |> int64 with get, set
-  member this.MaxSwapFee = Money.Satoshis(this.MaxSwapFeeSats)
-  member val MinimumSwapAmountSats = 1000L with get, set
-  member val MaxPrepayAmountSats = Int32.MaxValue |> int64 with get, set
-  member this.MaxPrepayAmount = Money.Satoshis(this.MaxPrepayAmountSats)
-  // -- --
-
-
   // --- properties and methods ---
 
   member this.GetNetwork(chainName: string) =

@@ -146,42 +146,6 @@ module NLoopServerCommandLine =
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-
-       // -- swap fee limitations --
-       let o = Option<int64>($"--{nameof(ChainOptions.Instance.MaxSwapFee).ToLowerInvariant()}",
-                             "Maximum we are willing to pay the server for the swap. This value is not disclosed in the\n
-                             swap initiation call, but if the server asks for a higher fee, we abort the swap.\n
-                             You can also specify as a json body when sending a request.")
-       o.Argument <-
-         let a = Argument<int64>()
-         a.Arity <- ArgumentArity.ZeroOrOne
-         a
-       o
-       let o = Option<int64>($"--{nameof(ChainOptions.Instance.MinimumSwapAmountSats).ToLowerInvariant()}",
-                             $"Minimum Swap amount we can perform. (default: {ChainOptions.Instance.MinimumSwapAmountSats})\n
-                               This is a hard limit. You can also specify as a json body when sending a request.")
-       o.Argument <-
-         let a = Argument<int64>()
-         a.Arity <- ArgumentArity.ZeroOrOne
-         a
-       o
-
-       let o = Option<int64>($"--{nameof(ChainOptions.Instance.MaxPrepayAmountSats).ToLowerInvariant()}",
-                             $"Maximum amount you accept as an prepay fee for a loop out.\n
-                             This is a hard limit. you can also specify as a json body ")
-       o.Argument <-
-         let a = Argument<int64>()
-         a.Arity <- ArgumentArity.ZeroOrOne
-         a
-       o
-       let o = Option<int64>($"--{nameof(ChainOptions.Instance.MaxPrepayAmountSats).ToLowerInvariant()}", $"Maximum amount you accept as an prepay fee for loop out.")
-       o.Argument <-
-         let a = Argument<int64>()
-         a.Arity <- ArgumentArity.ZeroOrOne
-         a
-       o
-       // -- --
-
      ]
 
   let getOptions(): Option seq =
