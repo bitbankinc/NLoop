@@ -6,6 +6,7 @@ open System.Collections.Generic
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
+open System.Security.Cryptography.X509Certificates
 open System.Threading.Tasks
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -22,10 +23,8 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOp
 
   member private this.CheckClientConnection(c: SupportedCryptoCode) = task {
     let settings = opts.Value.GetLndGrpcSettings()
-    let httpClient = httpClientFactory.CreateClient()
-    httpClient.Timeout <- TimeSpan.FromDays(3.)
     let cli =
-      NLoopLndGrpcClient(settings, opts.Value.GetNetwork(c), httpClient)
+      NLoopLndGrpcClient(settings, opts.Value.GetNetwork(c))
       :> INLoopLightningClient
     clients.Add(c, cli)
     try

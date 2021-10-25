@@ -117,6 +117,7 @@ services:
       - litecoind
     ports:
       - "${LND_USER_REST_PORT:?no_lnd_user_rest_port_set}:32736"
+      - "${LND_USER_RPC_PORT:?no_lnd_user_rpc_port_set}:32777"
     volumes:
       - "${DATA_PATH}/lnd_user:/data"
       - "${DATA_PATH}/bitcoin:/deps/.bitcoin"

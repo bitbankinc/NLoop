@@ -99,7 +99,11 @@ let handleLoopOut (req: LoopOutRequest) =
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     let actor = ctx.GetService<SwapActor>()
-    let height = ctx.GetBlockHeight()
+    let height =
+      let struct(_, quoteAsset) =
+        loopIn.PairId
+        |> Option.defaultValue PairId.Default
+      ctx.GetBlockHeight quoteAsset
     let request =
       ctx
         .GetService<BoltzClient>()

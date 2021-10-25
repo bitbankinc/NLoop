@@ -1,9 +1,11 @@
 namespace LndClient
 
 open System
+open System.Linq
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
+open System.Security.Cryptography.X509Certificates
 open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Payment
@@ -21,13 +23,18 @@ open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
 open Routerrpc
 
-type LndGrpcSettings = {
-  TlsCertLocation: string option
+type LndGrpcSettings = internal {
   Url: Uri
+  MaybeCertificateThumbprint: byte[] option
   Macaroon: MacaroonInfo option
+  AllowInsecure: bool
 }
   with
-  static member Create(uriStr: string, tlsCertPath: string option, macaroon: string option, macaroonFile: string option) = result {
+  static member Create(uriStr: string,
+                       macaroon: string option,
+                       macaroonFile: string option,
+                       maybeCertificateThumbprint: string option,
+                       allowInsecure) = result {
     let! uri = uriStr |> parseUri
     let! macaroonInfo =
       match macaroon, macaroonFile with
@@ -47,11 +54,54 @@ type LndGrpcSettings = {
       | None, None ->
         None |> Ok
 
+    let! certThumbprint =
+      match maybeCertificateThumbprint with
+      | None -> Ok None
+      | Some t ->
+        try
+          t.Replace(":", "")
+          |> Encoders.Hex.DecodeData
+          |> Some
+          |> Ok
+        with
+        | ex ->
+          $"%A{ex}"
+          |> Error
+
     return
       { Url = uri
         Macaroon = macaroonInfo
-        TlsCertLocation = tlsCertPath }
+        AllowInsecure = allowInsecure
+        MaybeCertificateThumbprint = certThumbprint
+        }
   }
+
+  member this.CreateHttpClientHandler() =
+    let handler = new HttpClientHandler()
+    if this.AllowInsecure && this.Url.Scheme = "http" then
+      handler
+    elif this.MaybeCertificateThumbprint.IsNone && this.Url.Scheme = "https" then
+      handler
+    else
+      let updateHandler (h: HttpClientHandler) =
+        this.MaybeCertificateThumbprint
+        |> Option.iter(fun x ->
+          h.ServerCertificateCustomValidationCallback <-
+            let cb = fun _request _cert (chain: X509Chain) _errors ->
+              let actualCert = chain.ChainElements.[chain.ChainElements.Count - 1].Certificate
+              let hash = getHash(actualCert)
+              hash.SequenceEqual(x)
+            Func<_,_,_,_,_>(cb)
+        )
+        if this.AllowInsecure then
+          h.ServerCertificateCustomValidationCallback <-
+            let cb = fun _ _ _ _ -> true
+            Func<_,_,_,_,_>(cb)
+        elif this.Url.Scheme = "http" then
+          raise <| InvalidOperationException("AllowInsecure is set to false, but the URI is not using https")
+        h
+
+      handler |> updateHandler
 
   member this.CreateLndAuth() =
     match this.Macaroon with
@@ -81,31 +131,29 @@ type GrpcClientExtensions =
         this.Add("macaroon", macaroonHex)
     | LndAuth.Null -> ()
 
-type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient: HttpClient) =
+  [<Extension>]
+  static member ApplyLndSettings(this: GrpcChannelOptions, settings: LndGrpcSettings) =
+    this.HttpHandler <- settings.CreateHttpClientHandler()
+    match settings.Macaroon with
+    | Some _ when settings.Url.Scheme <> "https" ->
+      failwith $"The grpc url must be https when using certificate. It was {settings.Url.Scheme}"
+    | Some _ ->
+      this.Credentials <-
+        let callCred = CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
+          settings.CreateLndAuth() |> metadata.AddLndAuthentication
+        })
+        ChannelCredentials.Create(SslCredentials(), callCred)
+    | None ->
+      ()
+
+/// grpc-dotnet does not support specifying custom ssl credential which is necessary in case of using LND securely.
+/// ref: https://github.com/grpc/grpc/issues/21554
+/// So we must set custom HttpMessageHandler for HttpClient which performs validation.
+/// But if you pass `HttpClient` in constructor, the handler of this HttpClient instance will override the
+type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
   let channel =
     let opts = GrpcChannelOptions()
-    httpClient
-    |> Option.iter(fun c -> opts.HttpClient <- c)
-    do
-      match settings.Macaroon, settings.TlsCertLocation with
-      | None, None ->
-        opts.Credentials <- ChannelCredentials.Insecure
-      | Some _macaroon, Some certPath ->
-        if settings.Url.Scheme <> "https" then
-          failwith $"the grpc url must be https. it was {settings.Url.Scheme}"
-        else
-          let sslCred =
-            File.ReadAllText(certPath)
-            |> SslCredentials
-          let callCred =
-            CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
-              settings.CreateLndAuth()
-              |> metadata.AddLndAuthentication
-            })
-          opts.Credentials <- ChannelCredentials.Create(sslCred, callCred)
-      | None, Some _
-      | Some _ , None _ ->
-        failwith $"You must specify both TLS certification and macaroon for lnd. Unless --allowinsecure is on."
+    opts.ApplyLndSettings(settings)
     GrpcChannel.ForAddress(settings.Url, opts)
   let client =
     Lightning.LightningClient(channel)
@@ -118,7 +166,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
     // metadata
 
   member this.Deadline =
-    Nullable(DateTime.Now + TimeSpan.FromSeconds(20.))
+    Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(20.))
 
   interface INLoopLightningClient with
     member this.ConnectPeer(nodeId, host, ct) =
@@ -188,7 +236,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network, ?httpClient
         let req = Invoice()
         let ct = defaultArg ct CancellationToken.None
         req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
-        req.AmtPaidSat <- amount.Satoshi
+        req.Value <- amount.Satoshi
         req.Expiry <- expiry.Seconds |> int64
         req.Memo <- memo
         let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)

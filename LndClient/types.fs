@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open System.Runtime.CompilerServices
+open System.Security.Cryptography.X509Certificates
 open FSharp.Control
 open Macaroons
 open NBitcoin.DataEncoders
@@ -45,6 +46,11 @@ module private Helpers =
       Error($"{ex}")
 
   let hex = HexEncoder()
+
+  let getHash (cert: X509Certificate2) =
+    use alg = System.Security.Cryptography.SHA256.Create()
+    alg.ComputeHash(cert.RawData)
+
 [<Extension;AbstractClass;Sealed>]
 type GrpcTypeExt =
   [<Extension>]

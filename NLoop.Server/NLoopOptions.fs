@@ -103,19 +103,19 @@ type NLoopOptions() =
 
   member this.DBPath = Path.Join(this.DataDir, "nloop.db")
 
-  member val LndCert = null with get, set
+  member val LndCertThumbPrint = null with get, set
   member val LndMacaroon = null with get, set
   member val LndMacaroonFilePath = null with get, set
   member val LndGrpcServer = "https://localhost:10009" with get, set
-
-  member val LndAllowUnsafe = false with get, set
+  member val LndAllowInsecure = false with get, set
 
   member this.GetLndGrpcSettings() =
     LndGrpcSettings.Create(
       this.LndGrpcServer,
-      this.LndCert |> Option.ofObj,
       this.LndMacaroon |> Option.ofObj,
-      this.LndMacaroonFilePath |> Option.ofObj
+      this.LndMacaroonFilePath |> Option.ofObj,
+      this.LndCertThumbPrint |> Option.ofObj,
+      this.LndAllowInsecure
     )
     |>
       function

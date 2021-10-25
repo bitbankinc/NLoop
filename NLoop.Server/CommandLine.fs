@@ -219,8 +219,8 @@ module NLoopServerCommandLine =
       o
       // --- lnd ---
 
-      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCert).ToLowerInvariant()}",
-                             "Path to the TLS certification of the LND")
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCertThumbPrint).ToLowerInvariant()}",
+                             "Hex encoded sha256 thumbnail of the lnd certificate")
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ZeroOrOne
@@ -251,7 +251,7 @@ module NLoopServerCommandLine =
         a
       o
 
-      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.LndAllowUnsafe).ToLowerInvariant()}",
+      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.LndAllowInsecure).ToLowerInvariant()}",
                              "Allow connection to the LND without ssl/tls (intended for test use)")
       o.Argument <-
         let a = Argument<bool>()

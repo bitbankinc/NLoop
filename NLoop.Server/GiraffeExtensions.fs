@@ -26,7 +26,7 @@ module CustomHandlers =
   type HttpContext with
     member this.SetBlockHeight(cc, height: uint64) =
       this.Items.Add($"{cc}-BlockHeight", BlockHeight(uint32 height))
-    member this.GetBlockHeight(cc) =
+    member this.GetBlockHeight(cc: SupportedCryptoCode) =
       match this.Items.TryGetValue($"{cc}-BlockHeight") with
       | false, _ -> failwithf "Unreachable! could not get block height for %A" cc
       | true, v -> v :?> BlockHeight

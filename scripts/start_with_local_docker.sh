@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu
 
 SCRIPT_DIR="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 echo $SCRIPT_DIR
@@ -21,7 +21,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --ltc.rpcpassword=unsafepassword \
   --ltc.rpchost=localhost \
   --ltc.rpcport=43783 \
-  --lndserver https://localhost:32736 \
+  --lndgrpcserver https://localhost:32777 \
   --lndmacaroonfilepath ${admin_macaroon} \
   --lndcertthumbprint ${certthumbprint} \
   --eventstoreurl tcp://admin:changeit@localhost:1113 \

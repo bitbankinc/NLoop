@@ -486,7 +486,7 @@ module Swap =
             | true, _ ->
               let tx = psbt.ExtractTransaction()
               let fee = feeRate.GetFee(tx)
-              if fee < loopIn.MaxMinerFee then
+              if loopIn.MaxMinerFee < fee then
                 // we give up executing the swap here rather than dealing with the fee-market nitty-gritty.
                 return [
                   let msg = $"OnChain FeeRate is too high. (actual fee: {fee}. Our maximum: {loopIn.MaxMinerFee})"
@@ -502,6 +502,9 @@ module Swap =
             // Ball is on their side. Just wait till they claim their on-chain share.
             return []
           | SwapStatusType.TxClaimed ->
+            // Why not publish `SuccessTxConfirmed` event? Because if we do so, there is no way for us to know the
+            // actual amount they got by the Success TX. Thus we can not know the exact amount they got and a miner fee.
+            // Watching the blockchain itself is more reliable way to know the confirmation event.
             return [] |> enhance
           | SwapStatusType.InvoiceFailedToPay ->
             // The counterparty says that they have failed to receive preimage before timeout. This should never happen.
