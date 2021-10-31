@@ -16,6 +16,34 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open FsToolkit.ErrorHandling
 
+[<AutoOpen>]
+module Helpers =
+  type LoopOut with
+    member this.Normalize(baseAsset) =
+      { this with
+          Id = SwapId(Guid.NewGuid().ToString())
+          ChainName = Network.RegTest.ChainName.ToString()
+          PairId = (baseAsset, SupportedCryptoCode.BTC)
+          IsOffchainOfferResolved = false
+          IsClaimTxConfirmed = false
+          ClaimTransactionId = None
+          LockupTransactionHex = None
+          Status = SwapStatusType.SwapCreated
+          MaxMinerFee = Money.Coins(10m)
+          OnChainAmount = Money.Max(this.OnChainAmount, Money.Satoshis(10000m))
+          LockupTransactionHeight = None
+        }
+  type LoopIn with
+    member this.Normalize() =
+      { this with
+          Id = SwapId(Guid.NewGuid().ToString())
+          ChainName = Network.RegTest.ChainName.ToString()
+          LockupTransactionOutPoint = None
+          RefundTransactionId = None
+          Status = SwapStatusType.SwapCreated
+          MaxMinerFee = Money.Coins(10m)
+        }
+
 type SwapDomainTests() =
   let useRealDB = false
   let assureRunSynchronously = useRealDB
@@ -221,14 +249,8 @@ type SwapDomainTests() =
   member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool, acceptZeroConf: bool) =
     let baseAsset =
        if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
-    let loopOut =
-      { loopOut with
-          Id = SwapId(Guid.NewGuid().ToString())
-          ChainName = Network.RegTest.ChainName.ToString()
-          PairId = (baseAsset, SupportedCryptoCode.BTC)
-          IsOffchainOfferResolved = false
-          IsClaimTxConfirmed = false
-        }
+    let loopOut = loopOut.Normalize(baseAsset)
+
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
     let timeoutBlockHeight = BlockHeight(30u)
     let onChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
@@ -253,15 +275,11 @@ type SwapDomainTests() =
           ClaimKey = claimKey
           OnChainAmount = onChainAmount
           RedeemScript = redeemScript
-          ClaimTransactionId = None
-          LockupTransactionHex = None
           SwapTxConfRequirement =
             if acceptZeroConf then
               BlockHeightOffset32.Zero
             else
               BlockHeightOffset32(3u)
-          Status = SwapStatusType.SwapCreated
-          MaxMinerFee = Money.Coins(10m)
           ClaimAddress = claimAddr.ToString(); }
     let swapTx =
       let fee = Money.Satoshis(30m)
@@ -387,21 +405,12 @@ type SwapDomainTests() =
   [<Property(MaxTest=10)>]
   member this.TestLoopOut_Timeout(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams) =
     let currentHeight = loopOutParams.Height
-    let loopOut = {
-      loopOut with
-        Id = SwapId(Guid.NewGuid().ToString())
-        OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(10000m))
-        ChainName = ChainName.Regtest.ToString()
-        PairId = (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
-        ClaimTransactionId = None
-        LockupTransactionHex = None
-        LockupTransactionHeight = None
-        TimeoutBlockHeight = currentHeight + BlockHeightOffset32(30u)
-    }
+    let loopOut = loopOut.Normalize(SupportedCryptoCode.BTC)
     let loopOut = {
       loopOut with
         Invoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
         PrepayInvoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
+        TimeoutBlockHeight = BlockHeight(30u)
     }
     let commands =
       [
@@ -429,14 +438,8 @@ type SwapDomainTests() =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let baseAsset = SupportedCryptoCode.BTC
     let loopIn =
-      { loopIn with
-          Id = SwapId(Guid.NewGuid().ToString())
-          ChainName = Network.RegTest.ChainName.ToString()
+      { loopIn.Normalize() with
           PairId = (baseAsset, quoteAsset)
-          LockupTransactionOutPoint = None
-          RefundTransactionId = None
-          Status = SwapStatusType.SwapCreated
-          MaxMinerFee = Money.Coins(10m)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
@@ -541,14 +544,8 @@ type SwapDomainTests() =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let baseAsset = SupportedCryptoCode.BTC
     let loopIn =
-      { loopIn with
-          Id = SwapId(Guid.NewGuid().ToString())
-          ChainName = Network.RegTest.ChainName.ToString()
+      { loopIn.Normalize() with
           PairId = (baseAsset, quoteAsset)
-          LockupTransactionOutPoint = None
-          RefundTransactionId = None
-          Status = SwapStatusType.SwapCreated
-          MaxMinerFee = Money.Coins(10m)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
@@ -632,5 +629,5 @@ type SwapDomainTests() =
 
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopOut_Reorg(loopIn: LoopOut, testAltcoin: bool) =
+  member this.TestLoopOut_Reorg(loopOut: LoopOut, testAltcoin: bool) =
     ()

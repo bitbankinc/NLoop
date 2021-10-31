@@ -385,8 +385,8 @@ module Swap =
           let e =
             swapTxHex |> TheirSwapTxPublished
 
-          let tx = Transaction.Parse(swapTxHex, loopOut.QuoteAssetNetwork)
           if loopOut.AcceptZeroConf then
+            let tx = Transaction.Parse(swapTxHex, loopOut.QuoteAssetNetwork)
             match! sweepOrBump deps height tx loopOut with
             | Some claimTxId ->
               return [e; ClaimTxPublished(claimTxId)] |> enhance
@@ -398,7 +398,7 @@ module Swap =
         | NewLoopIn(h, loopIn), HasNotStarted ->
           do! loopIn.Validate() |> expectInputError
           let! additionalEvents = taskResult {
-              let struct (quoteAsset, _) = loopIn.PairId
+              let struct (_baseAsset, quoteAsset) = loopIn.PairId
               let! utxos =
                 utxoProvider.GetUTXOs(loopIn.ExpectedAmount, quoteAsset)
                 |> TaskResult.mapError(UTXOProviderError)
