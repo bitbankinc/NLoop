@@ -50,5 +50,14 @@ module Constants =
   let AssemblyVersion =
     Bar.GetType().Assembly.GetName().Version.ToString()
 
+  /// HtlcConfTarget for estimating swap tx (htlc tx) fee rate.
+  /// Used for Loop In
   let [<Literal>] DefaultHtlcConfTarget = 8
+
+  /// Confirmation we require for swap tx in loop out.
+  let [<Literal>] DefaultHtlcConf = 2
+
+  /// Conf Target for estimating sweep tx (claim tx) fee rate.
+  /// Used in loop out.
   let [<Literal>] DefaultSweepConfTarget = 8
+

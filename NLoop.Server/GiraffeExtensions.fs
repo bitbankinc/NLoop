@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open FsToolkit.ErrorHandling
 open System.Text.Json
 open DotNetLightning.Utils
 open Giraffe
@@ -94,3 +95,41 @@ module CustomHandlers =
         logger.LogDebug($"paying through following channel ({chanIds})")
         return! next ctx
     }
+
+  let internal validateFeeLimitAgainstServerQuote(req: LoopOutRequest) =
+    fun (next : HttpFunc) (ctx : HttpContext) -> task {
+      let pairId =
+        req.PairId
+        |> Option.defaultValue PairId.Default
+      let boltzClient = ctx.GetService<BoltzClient>()
+      let! quote =
+        let r = { LoopOutQuoteRequest.Amount = req.Amount
+                  SweepConfTarget =
+                    req.SweepConfTarget
+                    |> ValueOption.defaultValue(Constants.DefaultSweepConfTarget)
+                    |> uint32
+                    |> BlockHeightOffset32
+                  pair = pairId }
+        boltzClient.GetLoopOutQuote(r)
+      let r =
+        quote.Validate(req.Limits)
+        |> Result.mapError(fun e -> e.Message)
+      match r with
+      | Error e -> return! validationError400 [e] next ctx
+      | Ok () -> return! next ctx
+  }
+
+  let internal validateLoopInFeeLimitAgainstServerQuote(req: LoopInRequest) =
+    fun (next : HttpFunc) (ctx : HttpContext) -> task {
+      let pairId =
+        req.PairId
+        |> Option.defaultValue PairId.Default
+      let boltzClient = ctx.GetService<BoltzClient>()
+      let! quote =
+        let r = { LoopInQuoteRequest.Amount = req.Amount }
+        boltzClient.GetLoopInQuote(r)
+      let r = quote.Validate(req.Limits) |> Result.mapError(fun e -> e.Message)
+      match r with
+      | Error e -> return! validationError400 [e] next ctx
+      | Ok () -> return! next ctx
+  }

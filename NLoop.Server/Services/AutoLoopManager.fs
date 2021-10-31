@@ -400,7 +400,7 @@ type SwapBuilder = {
           ChannelId = channels
           PairId = pairId |> Some
           Amount = amount
-          ConfTarget = parameters.HTLCConfTarget.Value |> int32 |> Some
+          HtlcConfTarget = parameters.HTLCConfTarget.Value |> int32 |> Some
           Label =
             if autoloop then
               Labels.autoLoopLabel(Swap.Category.Out) |> Some
@@ -414,7 +414,7 @@ type SwapBuilder = {
           SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
         }
         let! _ =
-          cfg.SwapActor.ExecNewLoopOut(f, req, height)
+          cfg.SwapActor.ExecNewLoopOut(req, height)
           |> TaskResult.mapError(fun _ -> failwith "todo")
         return
           failwith "todo"
@@ -590,7 +590,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       else
         let height = failwith ""
         let req = boltzClient.CreateReverseSwapAsync
-        let! _ = cfg.SwapActor.ExecNewLoopOut(req, swap, height) |> TaskResult.mapError(fun _ -> failwith "todo")
+        let! _ = cfg.SwapActor.ExecNewLoopOut(swap, height) |> TaskResult.mapError(fun _ -> failwith "todo")
         return failwith "todo"
   }
 

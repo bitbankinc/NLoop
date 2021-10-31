@@ -10,6 +10,10 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Server
 
+type LoopInLimits = {
+  MaxSwapFee: Money
+  MaxMinerFee: Money
+}
 type LoopInRequest = {
   [<JsonPropertyName "amount">]
   Amount: Money
@@ -29,6 +33,22 @@ type LoopInRequest = {
   [<JsonPropertyName "htlc_conf_target">]
   HtlcConfTarget: int voption
 }
+  with
+  member this.Limits = {
+    MaxSwapFee =
+      this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
+    MaxMinerFee =
+      this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
+  }
+
+type LoopOutLimits = {
+  MaxPrepay: Money
+  MaxSwapFee: Money
+  MaxRoutingFee: Money
+  MaxPrepayRoutingFee: Money
+  MaxMinerFee: Money
+  HTLCConfTarget: BlockHeightOffset32
+}
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]
@@ -44,8 +64,8 @@ type LoopOutRequest = {
   [<JsonPropertyName "amount">]
   Amount: Money
   /// Confirmation target before we make an offer. zero-conf by default.
-  [<JsonPropertyName "conf_target">]
-  ConfTarget: int option
+  [<JsonPropertyName "htlc_conf_target">]
+  HtlcConfTarget: int option
   Label: string option
 
   [<JsonPropertyName "max_swap_routing_fee">]
@@ -69,10 +89,27 @@ type LoopOutRequest = {
   with
 
   member this.AcceptZeroConf =
-    match this.ConfTarget with
+    match this.HtlcConfTarget with
     | None
     | Some 0 -> true
     | _ -> false
+
+  member this.Limits = {
+    MaxPrepay =
+      this.MaxPrepayAmount |> ValueOption.defaultToVeryHighFee
+    MaxSwapFee =
+      this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
+    MaxRoutingFee =
+      this.MaxSwapRoutingFee |> ValueOption.defaultToVeryHighFee
+    MaxPrepayRoutingFee =
+      this.MaxPrepayRoutingFee |> ValueOption.defaultToVeryHighFee
+    MaxMinerFee =
+      this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
+    HTLCConfTarget =
+      this.HtlcConfTarget
+      |> Option.defaultValue(Constants.DefaultHtlcConf)
+      |> uint32 |> BlockHeightOffset32
+  }
 
 type LoopInResponse = {
   /// Unique id for the swap.

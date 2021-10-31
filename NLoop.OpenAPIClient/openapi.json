@@ -374,7 +374,7 @@
             "description": "< amount in satoshi.",
             "format": "int64"
           },
-          "conf_target": {
+          "htlc_conf_target": {
             "type": "integer",
             "description": "< The number of confirmation before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop.",
             "default": "0",

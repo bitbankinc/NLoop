@@ -44,7 +44,8 @@ type LoopOut = {
   [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
   Status: SwapStatusType
 
-  AcceptZeroConf: bool
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  SwapTxConfRequirement: BlockHeightOffset32
 
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   ClaimKey: Key
@@ -59,7 +60,11 @@ type LoopOut = {
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
 
+  /// a.k.a. "swap tx", "htlc tx" created and published by the counter party
   LockupTransactionHex: string option
+
+  /// The height at which Lockup Tx is confirmed.
+  LockupTransactionHeight: BlockHeight option
 
   ClaimTransactionId: uint256 option
   IsClaimTxConfirmed: bool
@@ -86,12 +91,20 @@ type LoopOut = {
     let struct (_, cryptoCode) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
+  member this.AcceptZeroConf =
+    this.SwapTxConfRequirement = BlockHeightOffset32.Zero
+  member this.IsLockupTxConfirmedEnough(currentHeight: BlockHeight) =
+    this.AcceptZeroConf ||
+      match this.LockupTransactionHeight with
+      | None -> false
+      | Some x ->
+        x + this.SwapTxConfRequirement > currentHeight
   member this.LockupTransaction =
     this.LockupTransactionHex
     |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
 
   member this.Validate() =
-    if this.OnChainAmount <= Money.Zero then Error ("LoopOut has non-positive on chain amount") else
+    if this.OnChainAmount <= Money.Zero then Error "LoopOut has non-positive on chain amount" else
     Ok()
 
 type LoopIn = {
@@ -141,5 +154,5 @@ type LoopIn = {
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
   member this.Validate() =
-    if this.ExpectedAmount <= Money.Zero then Error ($"LoopIn has non-positive expected amount {this.ExpectedAmount}") else
+    if this.ExpectedAmount <= Money.Zero then Error $"LoopIn has non-positive expected amount {this.ExpectedAmount}" else
     Ok()

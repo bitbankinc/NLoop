@@ -97,6 +97,15 @@ type SwapDomainTests() =
         Block.CreateBlock(loopIn.QuoteAssetNetwork)
       | _ -> failwith "unreachable"
     block
+  let getBlockOut (loopOut: LoopOut) =
+    let struct (baseAsset, _) = loopOut.PairId
+    match baseAsset with
+    | SupportedCryptoCode.LTC ->
+      Altcoins.Litecoin.LitecoinBlock.CreateBlock(loopOut.BaseAssetNetwork)
+    | SupportedCryptoCode.BTC ->
+      Block.CreateBlock(loopOut.BaseAssetNetwork)
+    | _ -> failwith "unreachable"
+
 
   let executeCommand deps repo swapId useRealDB =
     fun cmd -> taskResult {
@@ -190,6 +199,7 @@ type SwapDomainTests() =
         OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(10000m))
         ChainName = ChainName.Regtest.ToString()
         PairId = (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
+        LockupTransactionHeight = None
     }
     let loopOut = {
       loopOut with
@@ -208,7 +218,7 @@ type SwapDomainTests() =
     Assertion.isOk events
 
   [<Property(MaxTest=10)>]
-  member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool) =
+  member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool, acceptZeroConf: bool) =
     let baseAsset =
        if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let loopOut =
@@ -220,7 +230,7 @@ type SwapDomainTests() =
           IsClaimTxConfirmed = false
         }
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-    let timeoutBlockHeight = BlockHeight(3u)
+    let timeoutBlockHeight = BlockHeight(30u)
     let onChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
     let loopOut =
       let claimKey = new Key()
@@ -245,10 +255,26 @@ type SwapDomainTests() =
           RedeemScript = redeemScript
           ClaimTransactionId = None
           LockupTransactionHex = None
-          AcceptZeroConf = true
+          SwapTxConfRequirement =
+            if acceptZeroConf then
+              BlockHeightOffset32.Zero
+            else
+              BlockHeightOffset32(3u)
           Status = SwapStatusType.SwapCreated
           MaxMinerFee = Money.Coins(10m)
           ClaimAddress = claimAddr.ToString(); }
+    let swapTx =
+      let fee = Money.Satoshis(30m)
+      let txb =
+        loopOut
+          .BaseAssetNetwork
+          .CreateTransactionBuilder()
+      txb
+        .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
+        .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
+        .SendFees(fee)
+        .SetChange((new Key()).PubKey.WitHash)
+        .BuildTransaction(true)
     let commands =
       [
         let loopOutParams = {
@@ -257,24 +283,12 @@ type SwapDomainTests() =
         }
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(loopOutParams, loopOut))
         let update =
-          let swapTx =
-            let fee = Money.Satoshis(30m)
-            let txb =
-              loopOut
-                .BaseAssetNetwork
-                .CreateTransactionBuilder()
-            txb
-              .AddRandomFunds(loopOut.OnChainAmount + fee + Money.Coins(1m))
-              .Send(loopOut.RedeemScript.WitHash.ScriptPubKey, loopOut.OnChainAmount)
-              .SendFees(fee)
-              .SetChange((new Key()).PubKey.WitHash)
-              .BuildTransaction(true)
           {
-            Swap.Data.SwapStatusResponseData._Status = "transaction.confirmed"
+            Swap.Data.SwapStatusResponseData._Status = "transaction.mempool"
             Swap.Data.SwapStatusResponseData.Transaction =
               Some({ Tx = swapTx
                      TxId = swapTx.GetHash()
-                     Eta = Some 1 })
+                     Eta = None })
             Swap.Data.SwapStatusResponseData.FailureReason = None
           }
 
@@ -298,33 +312,61 @@ type SwapDomainTests() =
           Broadcaster = broadcaster }
     let repo = getTestRepository()
     let _ =
-      let lastEvent =
+      let events =
         commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
-        |> getLastEvent
-      Assert.Equal(Swap.Event.ClaimTxPublished(null).Type, lastEvent.Data.Type)
+      Assert.Contains(Swap.Event.TheirSwapTxPublished(swapTx.ToHex()), events |> Result.deref |> List.map(fun e -> e.Data))
 
-    let claimTx = Assert.Single(txBroadcasted)
+      let lastEvent =
+        events |> getLastEvent
+      let expected =
+        if acceptZeroConf then
+          Swap.Event.ClaimTxPublished(null).Type
+        else
+          Swap.Event.TheirSwapTxPublished(null).Type
+      Assert.Equal(expected, lastEvent.Data.Type)
+
+    let _ =
+      // first confirmation
+      let commands =
+        [
+          let block = getBlockOut(loopOut)
+          block.AddTransaction(swapTx) |> ignore
+          (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(BlockHeight(2u), block, baseAsset))
+        ]
+        |> List.map(fun x -> x ||> getCommand)
+      let events =
+        commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+      Assert.Contains(Swap.Event.TheirSwapTxConfirmedFirstTime, events |> Result.deref |> List.map(fun e -> e.Data))
+      if acceptZeroConf then
+        let lastEvent = events |> getLastEvent
+        let expected = Swap.Event.ClaimTxPublished(null).Type
+        Assert.Equal(expected, lastEvent.Data.Type)
+
+    let _ =
+      // confirm until our claim tx gets published for sure.
+      let commands =
+        [
+          for i in 1..3 ->
+            let h = BlockHeight((i + 2) |> uint)
+            (DateTime(2001, 01, 30, 3 + i, 0, 0), Swap.Command.NewBlock(h, getBlockOut(loopOut), baseAsset))
+        ]
+        |> List.map(fun x -> x ||> getCommand)
+      let events =
+        commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+        |> Result.deref
+      if not <| acceptZeroConf then
+        let expected =
+          Swap.Event.ClaimTxPublished(null).Type
+        Assert.Contains(expected, events |> List.map(fun e -> e.Data.Type))
+
+    let claimTx =
+      txBroadcasted |> Seq.last
     let confirmationCommands =
       [
-        let emptyBlock =
-          match baseAsset with
-          | SupportedCryptoCode.LTC ->
-            Altcoins.Litecoin.LitecoinBlock.CreateBlock(Network.RegTest)
-          | SupportedCryptoCode.BTC ->
-            Block.CreateBlock(loopOut.BaseAssetNetwork)
-          | _ -> failwith "unreachable"
-        (DateTime(2001, 01, 30, 2, 0, 0), Swap.Command.NewBlock(BlockHeight(2u), emptyBlock, baseAsset))
-        let block =
-          match baseAsset with
-          | SupportedCryptoCode.LTC ->
-            Altcoins.Litecoin.LitecoinBlock.CreateBlock(loopOut.BaseAssetNetwork)
-          | SupportedCryptoCode.BTC ->
-            Block.CreateBlock(loopOut.BaseAssetNetwork)
-          | _ -> failwith "unreachable"
+        let block = getBlockOut(loopOut)
         block.AddTransaction(claimTx) |> ignore
-        let nextHeight = BlockHeight(3u)
-        assert(nextHeight = timeoutBlockHeight)
-        (DateTime(2001, 01, 30, 3, 0, 0), Swap.Command.NewBlock(nextHeight, block, baseAsset))
+        let nextHeight = BlockHeight(6u)
+        (DateTime(2001, 01, 30, 7, 0, 0), Swap.Command.NewBlock(nextHeight, block, baseAsset))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let lastEvent =
@@ -343,7 +385,7 @@ type SwapDomainTests() =
           let routingFee = LNMoney.Satoshis(100L)
           { Swap.PayInvoiceResult.AmountPayed = onChainAmount.ToLNMoney() + serverFee
             Swap.PayInvoiceResult.RoutingFee = routingFee }
-        (DateTime(2001, 01, 30, 4, 0, 0), Swap.Command.OffChainOfferResolve(r))
+        (DateTime(2001, 01, 30, 8, 0, 0), Swap.Command.OffChainOfferResolve(r))
       ]
       |> List.map(fun x -> x ||> getCommand)
     let lastEvent =
@@ -364,6 +406,7 @@ type SwapDomainTests() =
         PairId = (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
         ClaimTransactionId = None
         LockupTransactionHex = None
+        LockupTransactionHeight = None
         TimeoutBlockHeight = currentHeight + BlockHeightOffset32(30u)
     }
     let loopOut = {
@@ -378,7 +421,8 @@ type SwapDomainTests() =
         yield!
           [ for h in currentHeight.Value..loopOut.TimeoutBlockHeight.Value ->
               i <- i + 1
-              (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), Altcoins.Litecoin.LitecoinBlock.CreateBlock(Network.RegTest), SupportedCryptoCode.LTC))
+              let struct(baseAsset, _) = loopOut.PairId
+              (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), getBlockOut(loopOut), baseAsset))
             ]
       ]
       |> List.map(fun x -> x ||> getCommand)
@@ -402,6 +446,8 @@ type SwapDomainTests() =
           PairId = (baseAsset, quoteAsset)
           LockupTransactionOutPoint = None
           RefundTransactionId = None
+          Status = SwapStatusType.SwapCreated
+          MaxMinerFee = Money.Coins(10m)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
@@ -457,7 +503,7 @@ type SwapDomainTests() =
 
     // assert
     Assertion.isOk events
-    let swapTx = Assert.Single(txBroadcasted) // swap tx and refund tx
+    let swapTx = Assert.Single(txBroadcasted)
     let lastEvent = events |> getLastEvent
     Assert.Equal(Swap.Event.OurSwapTxPublished(Money.Zero, "").Type, lastEvent.Data.Type)
 
@@ -519,6 +565,8 @@ type SwapDomainTests() =
           PairId = (baseAsset, quoteAsset)
           LockupTransactionOutPoint = None
           RefundTransactionId = None
+          Status = SwapStatusType.SwapCreated
+          MaxMinerFee = Money.Coins(10m)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
@@ -609,3 +657,7 @@ type SwapDomainTests() =
     // assert
     Assert.Equal(Swap.Event.FinishedSuccessfully(loopIn.Id).Type, lastEvent.Data.Type)
 
+
+  [<Property(MaxTest=10)>]
+  member this.TestLoopOut_Reorg(loopIn: LoopOut, testAltcoin: bool) =
+    ()

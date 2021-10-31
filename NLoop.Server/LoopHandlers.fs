@@ -29,21 +29,18 @@ open Giraffe
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
-      let opts = ctx.GetService<IOptions<NLoopOptions>>()
-      let boltzCli = ctx.GetService<BoltzClient>()
-      let struct(baseCryptoCode, quoteCryptoCode) as pairId =
+      let struct(baseCryptoCode, _quoteCryptoCode) =
         req.PairId
         |> Option.defaultValue PairId.Default
       let height = ctx.GetBlockHeight(baseCryptoCode)
       let actor = ctx.GetService<SwapActor>()
-      let f = boltzCli.CreateReverseSwapAsync
       let obs =
         ctx
           .GetService<IEventAggregator>()
           .GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
           .Replay()
 
-      match! actor.ExecNewLoopOut(f, req, height) with
+      match! actor.ExecNewLoopOut(req, height) with
       | Error e ->
         return! (error503 e) next ctx
       | Ok loopOut ->
@@ -84,7 +81,6 @@ let handleLoopOutCore (req: LoopOutRequest) =
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
-      let opts = ctx.GetService<IOptions<NLoopOptions>>()
       let pairId =
         req.PairId
         |> Option.defaultValue PairId.Default
@@ -93,6 +89,7 @@ let handleLoopOut (req: LoopOutRequest) =
       return!
         (checkBlockchainIsSyncedAndSetTipHeight pairId
          >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
+         >=> validateFeeLimitAgainstServerQuote req
          >=> handleLoopOutCore req)
           next ctx
     }
@@ -104,11 +101,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
         loopIn.PairId
         |> Option.defaultValue PairId.Default
       ctx.GetBlockHeight quoteAsset
-    let request =
-      ctx
-        .GetService<BoltzClient>()
-        .CreateSwapAsync
-    actor.ExecNewLoopIn(request, loopIn, height)
+    actor.ExecNewLoopIn(loopIn, height)
     |> Task.bind(function | Ok resp -> json resp next ctx | Error e -> (error503 e) next ctx)
 
 let handleLoopIn (loopIn: LoopInRequest) =
@@ -117,6 +110,8 @@ let handleLoopIn (loopIn: LoopInRequest) =
     let pairId =
       loopIn.PairId
       |> Option.defaultValue PairId.Default
-    (checkBlockchainIsSyncedAndSetTipHeight pairId >=> handle)
+    (checkBlockchainIsSyncedAndSetTipHeight pairId
+       >=> validateLoopInFeeLimitAgainstServerQuote loopIn
+       >=> handle)
       next ctx
 

@@ -1,4 +1,4 @@
-namespace NLoop.Server.Services
+namespace NLoop.Server
 
 open System
 open FSharp.Control

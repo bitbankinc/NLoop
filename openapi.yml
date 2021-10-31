@@ -261,7 +261,7 @@ components:
           format: int64
           description: <
             amount in satoshi.
-        conf_target:
+        htlc_conf_target:
           type: integer
           description: <
             The number of confirmation before we make an off-chain offer.

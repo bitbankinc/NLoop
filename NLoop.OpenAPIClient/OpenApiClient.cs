@@ -835,8 +835,8 @@ namespace NLoopClient
         public long Amount { get; set; }
     
         /// <summary>&lt; The number of confirmation before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop.</summary>
-        [Newtonsoft.Json.JsonProperty("conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int? Conf_target { get; set; } = 0;
+        [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Htlc_conf_target { get; set; } = 0;
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

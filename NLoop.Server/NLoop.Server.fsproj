@@ -32,6 +32,8 @@
     <Compile Include="RPCDTOs\AutoLoop.fs" />
     <Compile Include="RPCDTOs\Query.fs" />
     <Compile Include="BoltzRequestResponse.fs" />
+    <Compile Include="BoltzClient.fs" />
+    <Compile Include="BoltzClientExtensions.fs" />
     <Compile Include="EventAggregator.fs" />
     <Compile Include="Interfaces.fs" />
     <Compile Include="LightningClientProvider.fs" />
@@ -39,9 +41,7 @@
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />
     <Compile Include="Projections\SwapStateProjection.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
-    <Compile Include="Services\BoltzClient.fs" />
     <Compile Include="Services\LightningInvoiceProvider.fs" />
-    <Compile Include="Services\BoltzClientExtensions.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
     <Compile Include="Services\BoltzListener.fs" />
