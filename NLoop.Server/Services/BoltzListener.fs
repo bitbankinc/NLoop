@@ -39,7 +39,10 @@ type BoltzListener(boltzClient: BoltzClient,
             if not <| statuses.TryUpdate(swapId, (resp.SwapStatus |> ValueSome), kv.Value) then
               logger.LogWarning($"Failed to update ({swapId})! Probably already finished?")
             else
-              do! actor.Execute(swapId, Swap.Command.SwapUpdate(resp.ToDomain))
+              match resp.Transaction with
+              | Some {Tx = tx} ->
+                do! actor.Execute(swapId, Swap.Command.GotSwapTxInfoFromCounterParty(tx.ToHex()))
+              | None -> ()
       with
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")

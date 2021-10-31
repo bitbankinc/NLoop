@@ -282,18 +282,7 @@ type SwapDomainTests() =
             Swap.LoopOutParams.Height = BlockHeight.One
         }
         (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopOut(loopOutParams, loopOut))
-        let update =
-          {
-            Swap.Data.SwapStatusResponseData._Status = "transaction.mempool"
-            Swap.Data.SwapStatusResponseData.Transaction =
-              Some({ Tx = swapTx
-                     TxId = swapTx.GetHash()
-                     Eta = None })
-            Swap.Data.SwapStatusResponseData.FailureReason = None
-          }
-
-        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(update))
-
+        (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.GotSwapTxInfoFromCounterParty(swapTx.ToHex()))
       ]
       |> List.map(fun x -> x ||> getCommand)
 
@@ -490,13 +479,6 @@ type SwapDomainTests() =
 
           (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopIn(initialBlockHeight, loopIn))
 
-          let swapUpdate =
-            {
-              Swap.Data.SwapStatusResponseData._Status = "invoice.set"
-              Swap.Data.SwapStatusResponseData.Transaction = None
-              Swap.Data.SwapStatusResponseData.FailureReason = None
-            }
-          (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
         ]
         |> List.map(fun x -> x ||> getCommand)
       commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands
@@ -606,16 +588,7 @@ type SwapDomainTests() =
     let events =
       let commands =
         [
-
           (DateTime(2001, 01, 30, 0, 0, 0), Swap.Command.NewLoopIn(initialBlockHeight, loopIn))
-
-          let swapUpdate =
-            {
-              Swap.Data.SwapStatusResponseData._Status = "invoice.set"
-              Swap.Data.SwapStatusResponseData.Transaction = None
-              Swap.Data.SwapStatusResponseData.FailureReason = None
-            }
-          (DateTime(2001, 01, 30, 1, 0, 0), Swap.Command.SwapUpdate(swapUpdate))
         ]
         |> List.map(fun x -> x ||> getCommand)
       commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB commands

@@ -87,12 +87,7 @@ type TxInfo = {
   Tx: Transaction
   Eta: int option
 }
-  with
-  member this.ToDomain = {
-    Swap.Data.TxInfo.TxId = this.TxId
-    Swap.Data.TxInfo.Tx = this.Tx
-    Swap.Data.TxInfo.Eta = this.Eta
-  }
+
 type SwapStatusResponse = {
   [<JsonPropertyName("status")>]
   _Status: string
@@ -110,11 +105,6 @@ type SwapStatusResponse = {
     | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
     | "transaction.claimed" -> SwapStatusType.TxClaimed
     | _x -> SwapStatusType.Unknown
-
-  member this.ToDomain =
-    { Swap.Data.SwapStatusResponseData._Status = this._Status
-      Swap.Data.SwapStatusResponseData.Transaction = this.Transaction |> Option.map(fun t -> t.ToDomain)
-      Swap.Data.SwapStatusResponseData.FailureReason = this.FailureReason }
 
 type CreateSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]

@@ -66,52 +66,6 @@ module Swap =
       | NoTx _ -> "no swap tx in response"
       | TxDoesNotPayToClaimAddress -> "Swap TX does not pay to the address we have specified"
       | PaymentAmountMismatch (e, a) -> $"Swap tx output amount mismatch. (expected: {e}, actual: {a})"
-  module Data =
-    type TxInfo = {
-      TxId: uint256
-      Tx: Transaction
-      Eta: int option
-    }
-    and SwapStatusResponseData = {
-      _Status: string
-      Transaction: TxInfo option
-      FailureReason: string option
-    }
-      with
-      member this.SwapStatus =
-        SwapStatusType.FromString(this._Status)
-
-      member this.ValidateAndGetTx(loopOut: LoopOut ) =
-        result {
-          let! swapTx =
-            this.Transaction
-            |> Option.map(fun txInfo -> txInfo.Tx)
-            |>
-              function
-              | Some x -> Ok x
-              | None -> Error BogusResponseError.NoTx
-
-          let! swapTxAmount =
-            swapTx.Outputs
-            |> Seq.tryPick(fun o ->
-              if o.ScriptPubKey.Equals(loopOut.RedeemScript.WitHash.ScriptPubKey) then
-                Some o.Value
-              else
-                None
-              )
-            |>
-              function
-              | Some x -> Ok x
-              | None ->
-                Error BogusResponseError.TxDoesNotPayToClaimAddress
-
-          return!
-            if swapTxAmount <> loopOut.OnChainAmount then
-              Error (BogusResponseError.PaymentAmountMismatch(loopOut.OnChainAmount, swapTxAmount))
-            else
-              Ok swapTx
-        }
-
   [<Literal>]
   let entityType = "swap"
 
@@ -139,6 +93,7 @@ module Swap =
   type Command =
     // -- loop out --
     | NewLoopOut of LoopOutParams * LoopOut
+    | GotSwapTxInfoFromCounterParty of swapTxHex: string
     | OffChainOfferResolve of PayInvoiceResult
 
     // -- loop in --
@@ -146,7 +101,6 @@ module Swap =
     | CommitReceivedOffChainPayment of amt: Money
 
     // -- both
-    | SwapUpdate of Data.SwapStatusResponseData
     | MarkAsErrored of err: string
     | NewBlock of height: BlockHeight * block: Block * cryptoCode: SupportedCryptoCode
 
@@ -180,7 +134,6 @@ module Swap =
 
     // -- general --
     | NewTipReceived of BlockHeight
-    | SwapStatusUpdate of SwapStatusType
 
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
@@ -208,7 +161,6 @@ module Swap =
       | SuccessTxConfirmed _ -> 256us + 5us
 
       | NewTipReceived _ -> 512us + 0us
-      | SwapStatusUpdate _ -> 512us + 1us
 
       | FinishedSuccessfully _ -> 1024us + 0us
       | FinishedByRefund _ -> 1024us + 1us
@@ -237,7 +189,6 @@ module Swap =
       | SuccessTxConfirmed _ -> "success_tx_confirmed"
 
       | NewTipReceived _ -> "new_tip_received"
-      | SwapStatusUpdate _ -> "swap_status_update"
 
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
@@ -430,63 +381,33 @@ module Swap =
             if loopOut.IsClaimTxConfirmed then
               FinishedSuccessfully(loopOut.Id)
           ] |> enhance
-        | SwapUpdate u, Out(height, loopOut) ->
-          if (u.SwapStatus = loopOut.Status) then
-            return []
-          else
-          let updateEvent = SwapStatusUpdate(u.SwapStatus)
-          let! additionalEvents = taskResult {
-            match u.SwapStatus with
-            | SwapStatusType.TxMempool when loopOut.AcceptZeroConf ->
-              let! tx =
-                u.ValidateAndGetTx(loopOut)
-                |> Result.mapError(Error.CounterPartyReturnedBogusResponse)
-              let e =
-                tx
-                |> fun swapTx -> swapTx.ToHex() |> TheirSwapTxPublished
-              match! sweepOrBump deps height tx loopOut with
-              | Some claimTxId ->
-                return [e; ClaimTxPublished(claimTxId)]
-              | None -> return [e]
+        | GotSwapTxInfoFromCounterParty swapTxHex, Out(height, loopOut) ->
+          let e =
+            swapTxHex |> TheirSwapTxPublished
 
-            | SwapStatusType.TxMempool
-            | SwapStatusType.TxConfirmed ->
-              return!
-                u.ValidateAndGetTx(loopOut)
-                |> Result.mapError(Error.CounterPartyReturnedBogusResponse)
-                |> Result.map(fun swapTx -> swapTx.ToHex() |> TheirSwapTxPublished |> List.singleton)
-            | SwapStatusType.SwapExpired ->
-              let reason =
-                u.FailureReason
-                |> Option.defaultValue "Counterparty claimed that the loop out is expired but we don't know the exact reason."
-              return [FinishedByTimeout(loopOut.Id, $"Swap expired (Reason: %s{reason})");]
-            | _ ->
-              return []
-          }
-          return updateEvent :: additionalEvents |> enhance
+          let tx = Transaction.Parse(swapTxHex, loopOut.QuoteAssetNetwork)
+          if loopOut.AcceptZeroConf then
+            match! sweepOrBump deps height tx loopOut with
+            | Some claimTxId ->
+              return [e; ClaimTxPublished(claimTxId)] |> enhance
+            | None -> return [e] |> enhance
+          else
+            return [e] |> enhance
 
         // --- loop in ---
         | NewLoopIn(h, loopIn), HasNotStarted ->
           do! loopIn.Validate() |> expectInputError
-          return [NewLoopInAdded(h, loopIn)] |> enhance
-        | SwapUpdate u, In(_height, loopIn) ->
-          if (loopIn.Status = u.SwapStatus) then
-            return []
-          else
-          let updateStatusEvent = SwapStatusUpdate(u.SwapStatus)
           let! additionalEvents = taskResult {
-            match u.SwapStatus with
-            | SwapStatusType.InvoiceSet ->
-              let struct (baseAsset, _) = loopIn.PairId
+              let struct (quoteAsset, _) = loopIn.PairId
               let! utxos =
-                utxoProvider.GetUTXOs(loopIn.ExpectedAmount, baseAsset)
+                utxoProvider.GetUTXOs(loopIn.ExpectedAmount, quoteAsset)
                 |> TaskResult.mapError(UTXOProviderError)
               let! feeRate =
                 feeEstimator.Estimate
                   loopIn.HTLCConfTarget
-                  baseAsset
+                  quoteAsset
               let! change =
-                getChangeAddress.Invoke(baseAsset)
+                getChangeAddress.Invoke(quoteAsset)
                 |> TaskResult.mapError(FailedToGetAddress)
               let psbt =
                 Transactions.createSwapPSBT
@@ -497,7 +418,7 @@ module Swap =
                   change
                   loopIn.QuoteAssetNetwork
                 |> function | Ok x -> x | Error e -> failwith $"%A{e}"
-              let! psbt = utxoProvider.SignSwapTxPSBT(psbt, baseAsset)
+              let! psbt = utxoProvider.SignSwapTxPSBT(psbt, quoteAsset)
               match psbt.TryFinalize() with
               | false, e ->
                 return raise <| Exception $"%A{e |> Seq.toList}"
@@ -511,35 +432,12 @@ module Swap =
                     FinishedByError(loopIn.Id, msg)
                   ]
                 else
-                  do! broadcaster.BroadcastTx(tx, baseAsset)
+                  do! broadcaster.BroadcastTx(tx, quoteAsset)
                   return [
                     OurSwapTxPublished(fee, tx.ToHex())
                   ]
-            | SwapStatusType.TxConfirmed
-            | SwapStatusType.InvoicePayed ->
-              // Ball is on their side. Just wait till they claim their on-chain share.
-              return []
-            | SwapStatusType.TxClaimed ->
-              // Why not publish `SuccessTxConfirmed` event? Because if we do so, there is no way for us to know the
-              // actual amount they got by the Success TX. Thus we can not know the exact amount they got and a miner fee.
-              // Watching the blockchain itself is more reliable way to know the confirmation event.
-              return []
-            | SwapStatusType.InvoiceFailedToPay ->
-              // The counterparty says that they have failed to receive preimage before timeout. This should never happen.
-              // But even if it does, we will just reclaim the swap tx when the timeout height has reached.
-              // So nothing to do here.
-              return []
-            | SwapStatusType.SwapExpired ->
-              // This means we have not send SwapTx. Or they did not recognize it.
-              // This can be caused only by our bug.
-              // (e.g. boltz-server did not recognize our swap script.)
-              // So just ignore it.
-              return []
-            | _ ->
-              return []
           }
-          return updateStatusEvent :: additionalEvents |> enhance
-
+          return [NewLoopInAdded(h, loopIn)] @ additionalEvents |> enhance
         | CommitReceivedOffChainPayment amt, In _ ->
           return [ OffChainPaymentReceived(amt) ] |> enhance
         // --- ---
@@ -797,11 +695,6 @@ module Swap =
       Out(h, x)
     | NewTipReceived h, In(_, x) ->
       In(h, x)
-    | SwapStatusUpdate status, Out(h, x) ->
-      Out(h, { x with Status = status })
-    | SwapStatusUpdate status, In(h, x) ->
-      In(h, { x with Status = status })
-
     | _, x -> x
 
   type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>

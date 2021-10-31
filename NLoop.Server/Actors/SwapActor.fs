@@ -255,14 +255,6 @@ type SwapActor(broadcaster: IBroadcaster,
             LockupTransactionOutPoint = None
           }
           do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
-          do!
-            let swapUpdate =
-              {
-                Swap.Data.SwapStatusResponseData._Status = "invoice.set"
-                Swap.Data.SwapStatusResponseData.Transaction = None
-                Swap.Data.SwapStatusResponseData.FailureReason = None
-              }
-            this.Execute(swapId, Swap.Command.SwapUpdate(swapUpdate))
           let response = {
             LoopInResponse.Id = inResponse.Id
             Address = inResponse.Address
