@@ -16,7 +16,9 @@ open FsToolkit.ErrorHandling
 open NLoop.Domain.Utils.EventStore
 
 [<RequireQualifiedAccess>]
-/// List of ubiquitous languages
+/// Swap domain.
+///
+/// Below is the list of ubiquitous languages
 /// * SwapTx (LockupTx) ... On-Chain TX which offers funds with HTLC.
 /// * ClaimTx ... TX to take funds from SwapTx in exchange of preimage. a.k.a "sweep" (loop out)
 /// * RefundTx ... TX to take funds from SwapTx in case of the timeout (loop in).
@@ -93,7 +95,7 @@ module Swap =
   type Command =
     // -- loop out --
     | NewLoopOut of LoopOutParams * LoopOut
-    | GotSwapTxInfoFromCounterParty of swapTxHex: string
+    | CommitSwapTxInfoFromCounterParty of swapTxHex: string
     | OffChainOfferResolve of PayInvoiceResult
 
     // -- loop in --
@@ -119,6 +121,7 @@ module Swap =
     | OffchainOfferResolved of PayInvoiceResult
     | TheirSwapTxPublished of txHex: string
     | TheirSwapTxConfirmedFirstTime
+    | TheirSwapTxReorgedOut
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
@@ -152,6 +155,7 @@ module Swap =
       | TheirSwapTxPublished _ -> 6us
       | OffChainPaymentReceived _ -> 7us
       | TheirSwapTxConfirmedFirstTime -> 8us
+      | TheirSwapTxReorgedOut -> 9us
 
       | NewLoopInAdded _ -> 256us + 0us
       | OurSwapTxPublished _ -> 256us + 1us
@@ -180,6 +184,7 @@ module Swap =
       | TheirSwapTxPublished _ -> "their_swap_tx_published"
       | OffChainPaymentReceived _ -> "offchain_payment_received"
       | TheirSwapTxConfirmedFirstTime -> "their_swap_tx_confirmed_first_time"
+      | TheirSwapTxReorgedOut -> "their_swap_tx_reorged_out"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
       | OurSwapTxPublished _ -> "our_swap_tx_published"
@@ -212,6 +217,7 @@ module Swap =
     | CanNotSafelyRevealPreimage
     | CounterPartyReturnedBogusResponse of BogusResponseError
     | BogusSwapTransaction of msg: string
+    | APIMisuseError of string
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
     r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)
@@ -240,7 +246,7 @@ module Swap =
         try
           let e =
             match Utils.ToUInt16(b.[0..1], false) with
-            | 0us | 1us | 2us | 3us | 4us | 5us | 6us | 7us | 8us
+            | 0us | 1us | 2us | 3us | 4us | 5us | 6us | 7us | 8us |9us
             | 256us | 257us | 258us | 259us | 260us | 261us
             | 512us | 513us
             | 1024us | 1025us | 1026us | 1027us ->
@@ -336,10 +342,16 @@ module Swap =
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
         let checkHeight (height: BlockHeight) (oldHeight: BlockHeight) =
-          if height.Value > oldHeight.Value then
+          if height.Value = oldHeight.Value + 1u then
+            [NewTipReceived(height)] |> enhance |> Ok
+          elif height.Value > oldHeight.Value + 1u then
+            $"Bogus block height. The block has been skipped. This should never happen."
+            |> APIMisuseError |> Error
+          elif height <= oldHeight then
+            // reorg
             [NewTipReceived(height)] |> enhance |> Ok
           else
-            [] |> Ok
+            failwith "unreachable"
 
         match cmd.Data, s with
         // --- loop out ---
@@ -381,7 +393,7 @@ module Swap =
             if loopOut.IsClaimTxConfirmed then
               FinishedSuccessfully(loopOut.Id)
           ] |> enhance
-        | GotSwapTxInfoFromCounterParty swapTxHex, Out(height, loopOut) ->
+        | CommitSwapTxInfoFromCounterParty swapTxHex, Out(height, loopOut) ->
           let e =
             swapTxHex |> TheirSwapTxPublished
 
@@ -448,6 +460,14 @@ module Swap =
         | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
+
+            let reorgEvent =
+              match loopOut.LockupTransactionHeight with
+              | Some h when height <= h && height <= oldHeight ->
+                // reorg
+                [TheirSwapTxReorgedOut] |> enhance
+              | _ -> []
+
             // To make it reorg-safe, we must track the confirmation of swap tx.
             let maybeSwapTx =
               loopOut.LockupTransaction
@@ -456,11 +476,11 @@ module Swap =
               match maybeSwapTx with
               | Some _ ->
                 // First confirmation.
-                [TheirSwapTxConfirmedFirstTime]
+                [TheirSwapTxConfirmedFirstTime] |> enhance
               | None ->
                 []
 
-            let events = events @ (maybeSwapTxConfirmedEvent |> enhance)
+            let events = events @ reorgEvent @ maybeSwapTxConfirmedEvent
 
             let maybeClaimTx =
               maybePrevClaimTxId
@@ -480,14 +500,14 @@ module Swap =
                 SweepTxConfirmed(sweepTx.GetHash(), sweepTxAmount)
                 // We do not mark it as finished until the counterparty receives their share.
                 // This is because we don't know how much we have payed as off-chain routing fee until counterparty
-                // receives. (Usually they receive way before the sweep tx is confirmed so it is very rare case that
+                // receives. (Usually they receive it way before the sweep tx is confirmed so it is very rare case that
                 // this will be false.)
                 if loopOut.IsOffchainOfferResolved then
                   FinishedSuccessfully(loopOut.Id)
               ]
               return events @ (additionalEvents |> enhance)
             | None ->
-            // we have to create or bump the sweep tx.
+            // we may have to create or bump the sweep tx.
             let! additionalEvents = taskResult {
               let remainingBlocks = timeout - height
               let haveWeRevealedThePreimage = maybePrevClaimTxId.IsSome
@@ -501,7 +521,7 @@ module Swap =
                 return [FinishedByTimeout(loopOut.Id, msg)] |> enhance
               else
                 match loopOut.LockupTransaction with
-                | Some tx when loopOut.IsLockupTxConfirmedEnough(height) ->
+                | Some tx when loopOut.IsLockupTxConfirmedEnough(height) && reorgEvent.IsEmpty ->
                   match! sweepOrBump deps height tx loopOut with
                   | Some txid ->
                     return [ClaimTxPublished(txid);] |> enhance
@@ -653,6 +673,8 @@ module Swap =
       Out (h, { x with LockupTransactionHex = Some tx })
     | TheirSwapTxConfirmedFirstTime, Out(h, x) ->
       Out(h, { x with LockupTransactionHeight = Some h })
+    | TheirSwapTxReorgedOut, Out(h, x) ->
+      Out(h, { x with LockupTransactionHeight = None })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
                  Cost = updateCost state event x.Cost })
@@ -706,8 +728,6 @@ module Swap =
     Aggregate.Apply = applyChanges
     Filter = id
     Enrich = id
-    SortBy = fun event ->
-      event.Data.EventTag, event.Meta.EffectiveDate.Value
   }
 
   let getRepository eventStoreUri =

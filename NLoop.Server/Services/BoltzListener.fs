@@ -41,7 +41,7 @@ type BoltzListener(boltzClient: BoltzClient,
             else
               match resp.Transaction with
               | Some {Tx = tx} ->
-                do! actor.Execute(swapId, Swap.Command.GotSwapTxInfoFromCounterParty(tx.ToHex()))
+                do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()))
               | None -> ()
       with
       | :? OperationCanceledException ->

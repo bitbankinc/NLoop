@@ -96,8 +96,8 @@ type SwapActor(broadcaster: IBroadcaster,
 
   /// Helper function for creating new loop out.
   /// Technically, the logic of this function should be in the Domain layer, but we want
-  /// swapId to be the StreamId of the event stream, we must
-  /// get the StreamId outside of the Domain, So we must call `BoltzClient.CreateReverseSwap` and get the swapId before
+  /// swapId to be the StreamId of the event stream, thus we have to
+  /// get the `StreamId` outside of the Domain, So we must call `BoltzClient.CreateReverseSwap` and get the swapId before
   /// sending the command into the domain layer.
   /// If we define some internal UUID for swapid instead of using the one given by the boltz server, the logic of this
   /// function can go into the domain layer. But that complicates things by having two kinds of IDs for each swaps.
