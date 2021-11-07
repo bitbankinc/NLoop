@@ -17,7 +17,7 @@ open NLoop.Server.Actors
 
 type BoltzFeeEstimator(boltzClient: BoltzClient) =
   interface IFeeEstimator with
-    member this.Estimate confTarget (cryptoCode) = task {
+    member this.Estimate _confTarget (cryptoCode) = task {
       let! feeMap = boltzClient.GetFeeEstimation()
       match feeMap.TryGetValue(cryptoCode.ToString()) with
       | true, fee ->

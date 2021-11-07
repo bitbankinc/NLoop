@@ -109,6 +109,8 @@ type NLoopOptions() =
   member val LndGrpcServer = "https://localhost:10009" with get, set
   member val LndAllowInsecure = false with get, set
 
+  member val TargetIncomingLiquidityRatio = 50s<percent> with get, set
+
   member this.GetLndGrpcSettings() =
     LndGrpcSettings.Create(
       this.LndGrpcServer,

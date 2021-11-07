@@ -26,6 +26,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
 
   let mutable currentHeight = BlockHeight 0u
 
+  member this.CurrentHeight = currentHeight
+
   override this.ExecuteAsync(ct) = unitTask {
     try
       let clis: (RPCClient * _) seq =
