@@ -127,6 +127,10 @@ type PrimitiveGenerator() =
   static member BitcoinWitPubKeyAddressGen() : Arbitrary<BitcoinWitPubKeyAddress> =
     bitcoinWitPubKeyAddressGen |> Arb.fromGen
 
+  static member BitcoinPubKeyGen(): Arbitrary<PubKey> =
+    gen { return (new Key()).PubKey }
+    |> Arb.fromGen
+
   static member NodeIdGen() : Arbitrary<NodeId> =
     nodeIdGen |> Arb.fromGen
 

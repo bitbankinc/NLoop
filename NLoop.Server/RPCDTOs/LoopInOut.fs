@@ -8,6 +8,7 @@ open Giraffe.HttpStatusCodeHandlers
 open Giraffe.ModelValidation
 open NBitcoin
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Server
 
 type LoopInLimits = {
@@ -32,6 +33,12 @@ type LoopInRequest = {
 
   [<JsonPropertyName "htlc_conf_target">]
   HtlcConfTarget: int voption
+
+  [<JsonPropertyName "last_hop">]
+  LastHop: PubKey option
+
+  [<JsonPropertyName "route_hints">]
+  RouteHints: HopHint array
 }
   with
   member this.Limits = {
@@ -40,6 +47,23 @@ type LoopInRequest = {
     MaxMinerFee =
       this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
   }
+and HopHint = {
+  [<JsonPropertyName "node_id">]
+  NodeId: PubKey
+
+  [<JsonPropertyName "chan_id">]
+  ChanId: ShortChannelId
+
+  [<JsonPropertyName "fee_base_msat">]
+  FeeBaseMSat: int64
+
+  [<JsonPropertyName "fee_proportional_millionths">]
+  FeeProportionalMillionths: int64
+
+  [<JsonPropertyName "cltv_expiry_delta">]
+  CltvExpiryDelta: int
+}
+
 
 type LoopOutLimits = {
   MaxPrepay: Money

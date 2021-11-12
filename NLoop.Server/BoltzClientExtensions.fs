@@ -38,6 +38,7 @@ type LoopOutQuote = {
   MinerFee: Money
   SwapPaymentDest: PubKey
   CltvDelta: BlockHeightOffset32
+  PrepayAmount: Money
 }
   with
   member this.Validate(limits: LoopOutLimits) =
@@ -87,6 +88,7 @@ type BoltzClientExtensions =
       SwapPaymentDest =
         nodes.Nodes |> Seq.head |> fun i -> i.Value.NodeKey
       CltvDelta = p.Limits.MaxCLTVDelta |> uint32 |> BlockHeightOffset32
+      PrepayAmount = failwith "todo"
     }
   }
 

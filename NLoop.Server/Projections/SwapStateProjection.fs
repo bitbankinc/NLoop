@@ -42,7 +42,11 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
           )
           |> Map.change
             r.StreamId
-            (Option.map(fun s -> actor.Aggregate.Apply s r.Data))
+            (Option.map(fun s ->
+              actor.Aggregate.Apply s r.Data
+            ))
+          // We don't hold finished swaps on-memory for the scalability.
+          |> Map.filter(fun _ -> function | Swap.State.Finished _ -> false | _ -> true)
         log.LogTrace($"Publishing RecordedEvent {r}")
 
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
@@ -55,7 +59,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
   let subscription =
     EventStoreDBSubscription(
       { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-      "swap listener",
+      nameof(SwapStateProjection),
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator)

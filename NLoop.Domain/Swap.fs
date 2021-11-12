@@ -83,7 +83,6 @@ module Swap =
   type LoopOutParams = {
     MaxPrepayFee: Money
     MaxPaymentFee: Money
-    OutgoingChanIds: ShortChannelId []
     Height: BlockHeight
   }
 
@@ -361,7 +360,7 @@ module Swap =
             if loopOut.PrepayInvoice |> String.IsNullOrEmpty |> not then
               let prepaymentParams =
                 { PayInvoiceParams.MaxFee =  p.MaxPrepayFee
-                  OutgoingChannelIds = p.OutgoingChanIds }
+                  OutgoingChannelIds = loopOut.OutgoingChanIds }
               loopOut.PrepayInvoice
               |> PaymentRequest.Parse
               |> ResultUtils.Result.deref
@@ -382,7 +381,7 @@ module Swap =
               yield! additionalEvents
               let paymentParams = {
                 MaxFee = p.MaxPrepayFee
-                OutgoingChannelIds = p.OutgoingChanIds
+                OutgoingChannelIds = loopOut.OutgoingChanIds
               }
               OffChainOfferStarted(loopOut.Id, loopOut.PairId, invoice, paymentParams)
             ]

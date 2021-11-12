@@ -302,7 +302,6 @@
       "PubKey": {
         "type": "string",
         "description": "Bitcoin public key in 33 bytes length",
-        "format": "binary",
         "maxLength": 33,
         "minLength": 33,
         "example": "03afbba930dc74d6412b71c31f72bfb8d4615121174dd4290cbbf83960961ba9ab"
@@ -345,6 +344,38 @@
       },
       "swapId": {
         "type": "string"
+      },
+      "HopHint": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "description": "The pubkey key of the node at the start of the channel",
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "chan_id": {
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "fee_base_msat": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fee_proportional_millionths": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cltv_expiry_delta": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RouteHints": {
+        "type": "array",
+        "description": "< Route hints which will be included in the invoice. See bolt11 for the detail.",
+        "maxItems": 6,
+        "items": {
+          "$ref": "#/components/schemas/HopHint"
+        }
       },
       "LoopOutRequest": {
         "type": "object",
@@ -466,6 +497,16 @@
             "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
             "format": "int32",
             "nullable": true
+          },
+          "last_hop": {
+            "description": "< Optionally the client can specify the last hop pubkey when requesting loop-in. This is useful to get better off-chain routing fee from the server.",
+            "nullable": true,
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "route_hints": {
+            "description": "< route hints included in the invoice.",
+            "nullable": true,
+            "$ref": "#/components/schemas/RouteHints"
           }
         }
       },
@@ -538,7 +579,11 @@
       "Cost": {
         "type": "object",
         "properties": {
-          "server": {
+          "server_onchain": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "server_offchain": {
             "type": "integer",
             "format": "int64"
           },

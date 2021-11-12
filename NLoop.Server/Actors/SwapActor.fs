@@ -130,8 +130,8 @@ type SwapActor(broadcaster: IBroadcaster,
           lnClient.GetDepositAddress()
       let loopOut = {
         LoopOut.Id = outResponse.Id |> SwapId
-        LoopOut.Status = SwapStatusType.SwapCreated
         LoopOut.ClaimKey = claimKey
+        OutgoingChanIds = req.ChannelId
         Preimage = preimage
         RedeemScript = outResponse.RedeemScript
         Invoice = outResponse.Invoice.ToString()
@@ -169,7 +169,6 @@ type SwapActor(broadcaster: IBroadcaster,
         return! Error e
       | Ok () ->
         let loopOutParams = {
-          Swap.LoopOutParams.OutgoingChanIds = req.ChannelId
           Swap.LoopOutParams.MaxPrepayFee = req.MaxPrepayRoutingFee |> ValueOption.defaultValue(Money.Coins 100000m)
           Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
           Swap.LoopOutParams.Height = height
@@ -230,7 +229,6 @@ type SwapActor(broadcaster: IBroadcaster,
         | Ok _events ->
           let loopIn = {
             LoopIn.Id = swapId
-            Status = SwapStatusType.SwapCreated
             RefundPrivateKey = refundKey
             Preimage = None
             RedeemScript = inResponse.RedeemScript
@@ -253,6 +251,7 @@ type SwapActor(broadcaster: IBroadcaster,
             MaxSwapFee =
               loopIn.Limits.MaxSwapFee
             LockupTransactionOutPoint = None
+            LastHop = loopIn.LastHop
           }
           do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
           let response = {

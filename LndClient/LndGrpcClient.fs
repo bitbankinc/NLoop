@@ -12,6 +12,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FSharp.Control
 open Google.Protobuf
+open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
 open Invoicesrpc

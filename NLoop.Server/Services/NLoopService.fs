@@ -65,11 +65,7 @@ type NLoopExtensions() =
       this
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
-          client.BaseAddress <-
-            let u = UriBuilder($"{opts.BoltzHost}:{opts.BoltzPort}")
-            u.Scheme <- if opts.BoltzHttps then "https" else "http"
-            u.Uri
+          client.BaseAddress <- sp.GetRequiredService<IOptions<NLoopOptions>>().Value.BoltzUrl
         )
         |> ignore
       this

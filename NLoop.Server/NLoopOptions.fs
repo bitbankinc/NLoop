@@ -70,7 +70,12 @@ type NLoopOptions() =
   member val BoltzHost = Constants.DefaultBoltzServer with get, set
   member val BoltzPort = Constants.DefaultBoltzPort with get, set
   member val BoltzHttps = Constants.DefaultBoltzHttps with get, set
+  member this.BoltzUrl =
+    let u = UriBuilder($"{this.BoltzHost}:{this.BoltzPort}")
+    u.Scheme <- if this.BoltzHttps then "https" else "http"
+    u.Uri
   // -- --
+
 
   // -- eventstore db --
   member val EventStoreUrl =

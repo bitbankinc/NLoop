@@ -197,7 +197,6 @@ components:
     PubKey:
       description: Bitcoin public key in 33 bytes length
       type: string
-      format: binary
       maxLength: 33
       minLength: 33
       example:
@@ -233,6 +232,33 @@ components:
       example: 140x10x1
     swapId:
       type: string
+
+    HopHint:
+      type: object
+      properties:
+        node_id:
+          $ref: '#/components/schemas/PubKey'
+          description: The pubkey key of the node at the start of the channel
+        chan_id:
+          $ref: "#/components/schemas/ShortChannelId"
+        fee_base_msat:
+          type: integer
+          format: int64
+        fee_proportional_millionths:
+          type: integer
+          format: int64
+        cltv_expiry_delta:
+          type: integer
+          format: int64
+
+    RouteHints:
+      type: array
+      maxItems: 6
+      items:
+        $ref: '#/components/schemas/HopHint'
+      description: <
+        Route hints which will be included in the invoice.
+        See bolt11 for the detail.
 
     # -----
     # ----- requests
@@ -370,6 +396,17 @@ components:
           description: <
             Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
           nullable: true
+        last_hop:
+          description: <
+            Optionally the client can specify the last hop pubkey when requesting
+            loop-in. This is useful to get better off-chain routing fee from the server.
+          nullable: true
+          $ref: "#/components/schemas/PubKey"
+        route_hints:
+          $ref: '#/components/schemas/RouteHints'
+          nullable: true
+          description: <
+            route hints included in the invoice.
       required:
         - amount
 
@@ -428,7 +465,10 @@ components:
     Cost:
       type: object
       properties:
-        server:
+        server_onchain:
+          type: integer
+          format: int64
+        server_offchain:
           type: integer
           format: int64
         onchain:

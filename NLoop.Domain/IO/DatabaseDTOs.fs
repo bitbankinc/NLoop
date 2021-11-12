@@ -41,8 +41,8 @@ type SwapCost = {
 type LoopOut = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
-  Status: SwapStatusType
+
+  OutgoingChanIds: ShortChannelId []
 
   [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
   SwapTxConfRequirement: BlockHeightOffset32
@@ -110,8 +110,6 @@ type LoopOut = {
 type LoopIn = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
-  Status: SwapStatusType
 
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   RefundPrivateKey: Key
@@ -142,6 +140,8 @@ type LoopIn = {
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   MaxSwapFee: Money
+
+  LastHop: PubKey option
 
   Cost: SwapCost
 }

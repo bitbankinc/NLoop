@@ -817,6 +817,64 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class HopHint 
+    {
+        /// <summary>The pubkey key of the node at the start of the channel</summary>
+        [Newtonsoft.Json.JsonProperty("node_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Node_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("chan_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
+        public string Chan_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("fee_base_msat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Fee_base_msat { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("fee_proportional_millionths", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Fee_proportional_millionths { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("cltv_expiry_delta", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Cltv_expiry_delta { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static HopHint FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<HopHint>(data);
+        }
+    
+    }
+    
+    /// <summary>&lt; Route hints which will be included in the invoice. See bolt11 for the detail.</summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class RouteHints : System.Collections.ObjectModel.Collection<HopHint>
+    {
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static RouteHints FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<RouteHints>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
         /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
@@ -918,6 +976,16 @@ namespace NLoopClient
         /// <summary>&lt; Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)</summary>
         [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Htlc_conf_target { get; set; }
+    
+        /// <summary>&lt; Optionally the client can specify the last hop pubkey when requesting loop-in. This is useful to get better off-chain routing fee from the server.</summary>
+        [Newtonsoft.Json.JsonProperty("last_hop", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Last_hop { get; set; }
+    
+        /// <summary>&lt; route hints included in the invoice.</summary>
+        [Newtonsoft.Json.JsonProperty("route_hints", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.MaxLength(6)]
+        public RouteHints Route_hints { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -1052,8 +1120,11 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class Cost 
     {
-        [Newtonsoft.Json.JsonProperty("server", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Server { get; set; }
+        [Newtonsoft.Json.JsonProperty("server_onchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Server_onchain { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("server_offchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Server_offchain { get; set; }
     
         [Newtonsoft.Json.JsonProperty("onchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long Onchain { get; set; }
@@ -1181,7 +1252,7 @@ namespace NLoopClient
     
         [Newtonsoft.Json.JsonProperty("channel_pubkey", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
-        public byte[] Channel_pubkey { get; set; }
+        public string Channel_pubkey { get; set; }
     
         [Newtonsoft.Json.JsonProperty("short_channel_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
