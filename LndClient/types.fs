@@ -51,43 +51,27 @@ module private Helpers =
     use alg = System.Security.Cryptography.SHA256.Create()
     alg.ComputeHash(cert.RawData)
 
-[<Extension;AbstractClass;Sealed>]
-type GrpcTypeExt =
-  [<Extension>]
-  static member ToOutPoint(a: Lnrpc.ChannelPoint) =
-    let o = OutPoint()
-    o.Hash <-
-      if a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.FundingTxidBytes then
-        a.FundingTxidBytes.ToByteArray() |> uint256
-      elif a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.FundingTxidStr then
-        a.FundingTxidStr |> uint256.Parse
-      else
-        assert(a.FundingTxidCase = Lnrpc.ChannelPoint.FundingTxidOneofCase.None)
-        null
-    o.N <- a.OutputIndex
-    o
-  [<Extension>]
-  static member ToOutPoint(a: Lnrpc.PendingUpdate) =
-    let o = OutPoint()
-    o.Hash <-
-      a.Txid.ToByteArray() |> uint256
-    o.N <-
-      a.OutputIndex
-    o
-
 type ListChannelResponse = {
   Id: ShortChannelId
   Cap: Money
   LocalBalance: Money
   NodeId: PubKey
 }
-  with
-  static member FromGrpcType(o: Lnrpc.Channel) =
-      {
-        ListChannelResponse.Id = o.ChanId |> ShortChannelId.FromUInt64
-        Cap = o.Capacity |> Money.Satoshis
-        LocalBalance = o.LocalBalance |> Money.Satoshis
-        NodeId = o.RemotePubkey |> PubKey }
+
+type GetChannelInfoResponse = {
+  Capacity: Money
+  Node1Policy: NodePolicy
+  Node2Policy: NodePolicy
+}
+and NodePolicy = {
+  Id: PubKey
+  TimeLockDelta: BlockHeightOffset16
+  MinHTLC: LNMoney
+  FeeBase: LNMoney
+  FeeRatePerMillionths: LNMoney
+  Disabled: bool
+}
+
 type ChannelEventUpdate =
   | OpenChannel of ListChannelResponse
   | PendingOpenChannel of OutPoint
@@ -95,33 +79,6 @@ type ChannelEventUpdate =
   | ActiveChannel of OutPoint
   | InActiveChannel of OutPoint
   | FullyResolvedChannel of OutPoint
-  static member FromGrpcType(r: Lnrpc.ChannelEventUpdate) =
-    match r.Type with
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.ActiveChannel ->
-      r.ActiveChannel.ToOutPoint()
-      |> ChannelEventUpdate.ActiveChannel
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.InactiveChannel ->
-      r.InactiveChannel.ToOutPoint()
-      |> ChannelEventUpdate.InActiveChannel
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.OpenChannel ->
-      r.OpenChannel
-      |> ListChannelResponse.FromGrpcType
-      |> OpenChannel
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.PendingOpenChannel ->
-      r.PendingOpenChannel.ToOutPoint()
-      |> PendingOpenChannel
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.ClosedChannel ->
-      let c = r.ClosedChannel
-      {|
-        Id = c.ChanId |> ShortChannelId.FromUInt64
-        CloseTxHeight = c.CloseHeight |> BlockHeight
-        TxId = c.ClosingTxHash |> hex.DecodeData |> uint256
-      |}
-      |> ClosedChannel
-    | Lnrpc.ChannelEventUpdate.Types.UpdateType.FullyResolvedChannel ->
-      r.FullyResolvedChannel.ToOutPoint()
-      |> FullyResolvedChannel
-    | x -> failwith $"Unreachable! Unknown type {x}"
 
 type ILightningChannelEventsListener =
   inherit IDisposable
@@ -160,12 +117,24 @@ type InvoiceSubscription = {
   InvoiceState: InvoiceStateEnum
   AmountPayed: Money
 }
+type RouteHint = {
+  Hops: HopHint []
+}
+and HopHint = {
+  NodeId: NodeId
+  ShortChannelId: ShortChannelId
+  FeeBase: LNMoney
+  FeeProportionalMillionths: uint32
+  CLTVExpiryDelta: BlockHeightOffset16
+}
+
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
     paymentHash: Primitives.PaymentHash *
     value: LNMoney *
     expiry: TimeSpan *
+    routeHint: RouteHint *
     memo: string *
     ?ct: CancellationToken
       -> Task<PaymentRequest>
@@ -173,6 +142,7 @@ type INLoopLightningClient =
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
     expiry: TimeSpan *
+    routeHint: RouteHint *
     memo: string *
     ?ct: CancellationToken
      -> Task<PaymentRequest>
@@ -184,3 +154,4 @@ type INLoopLightningClient =
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
   abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
   abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
+  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>

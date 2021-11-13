@@ -7,12 +7,10 @@ open System.Net.Http
 open System.Runtime.CompilerServices
 open System.Security.Cryptography.X509Certificates
 open System.Threading
-open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FSharp.Control
 open Google.Protobuf
-open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
 open Invoicesrpc
@@ -147,6 +145,73 @@ type GrpcClientExtensions =
     | None ->
       ()
 
+[<Extension;AbstractClass;Sealed>]
+type GrpcTypeExt =
+  [<Extension>]
+  static member ToOutPoint(a: ChannelPoint) =
+    let o = OutPoint()
+    o.Hash <-
+      if a.FundingTxidCase = ChannelPoint.FundingTxidOneofCase.FundingTxidBytes then
+        a.FundingTxidBytes.ToByteArray() |> uint256
+      elif a.FundingTxidCase = ChannelPoint.FundingTxidOneofCase.FundingTxidStr then
+        a.FundingTxidStr |> uint256.Parse
+      else
+        assert(a.FundingTxidCase = ChannelPoint.FundingTxidOneofCase.None)
+        null
+    o.N <- a.OutputIndex
+    o
+  [<Extension>]
+  static member ToOutPoint(a: PendingUpdate) =
+    let o = OutPoint()
+    o.Hash <-
+      a.Txid.ToByteArray() |> uint256
+    o.N <-
+      a.OutputIndex
+    o
+
+
+[<AutoOpen>]
+module Extensions =
+  type ListChannelResponse
+    with
+    static member FromGrpcType(o: Channel) =
+      {
+        ListChannelResponse.Id = o.ChanId |> ShortChannelId.FromUInt64
+        Cap = o.Capacity |> Money.Satoshis
+        LocalBalance = o.LocalBalance |> Money.Satoshis
+        NodeId = o.RemotePubkey |> PubKey
+      }
+  type LndClient.ChannelEventUpdate
+    with
+    static member FromGrpcType(r: ChannelEventUpdate) =
+      match r.Type with
+      | ChannelEventUpdate.Types.UpdateType.ActiveChannel ->
+        r.ActiveChannel.ToOutPoint()
+        |> LndClient.ChannelEventUpdate.ActiveChannel
+      | ChannelEventUpdate.Types.UpdateType.InactiveChannel ->
+        r.InactiveChannel.ToOutPoint()
+        |> ChannelEventUpdate.InActiveChannel
+      | ChannelEventUpdate.Types.UpdateType.OpenChannel ->
+        r.OpenChannel
+        |> ListChannelResponse.FromGrpcType
+        |> OpenChannel
+      | ChannelEventUpdate.Types.UpdateType.PendingOpenChannel ->
+        r.PendingOpenChannel.ToOutPoint()
+        |> PendingOpenChannel
+      | ChannelEventUpdate.Types.UpdateType.ClosedChannel ->
+        let c = r.ClosedChannel
+        {|
+          Id = c.ChanId |> ShortChannelId.FromUInt64
+          CloseTxHeight = c.CloseHeight |> BlockHeight
+          TxId = c.ClosingTxHash |> hex.DecodeData |> uint256
+        |}
+        |> ClosedChannel
+      | ChannelEventUpdate.Types.UpdateType.FullyResolvedChannel ->
+        r.FullyResolvedChannel.ToOutPoint()
+        |> FullyResolvedChannel
+      | x -> failwith $"Unreachable! Unknown type {x}"
+
+
 /// grpc-dotnet does not support specifying custom ssl credential which is necessary in case of using LND securely.
 /// ref: https://github.com/grpc/grpc/issues/21554
 /// So we must set custom HttpMessageHandler for HttpClient which performs validation.
@@ -189,7 +254,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
         return BitcoinAddress.Create(m.Address, network)
       }
-    member this.GetHodlInvoice(paymentHash, value, expiry, memo, ct) =
+    member this.GetHodlInvoice(paymentHash, value, expiry, routeHint, memo, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = AddHoldInvoiceRequest()
@@ -199,6 +264,18 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         req.Value <- value.Satoshi
         req.Expiry <- expiry.Seconds |> int64
         req.Memo <- memo
+        let routeHint =
+          let r = RouteHint()
+          for h in routeHint.Hops do
+            let lnHopHint = HopHint()
+            lnHopHint.NodeId <- h.NodeId.Value.ToHex()
+            lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
+            lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
+            lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
+            lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
+            r.HopHints.Add(lnHopHint)
+          r
+        req.RouteHints.Add(routeHint)
         let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
       }
@@ -232,13 +309,25 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref }
         )
 
-    member this.GetInvoice(paymentPreimage, amount, expiry, memo, ct) =
+    member this.GetInvoice(paymentPreimage, amount, expiry, routeHint, memo, ct) =
       task {
         let req = Invoice()
         let ct = defaultArg ct CancellationToken.None
         req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
         req.Value <- amount.Satoshi
         req.Expiry <- expiry.Seconds |> int64
+        let routeHint =
+          let r = RouteHint()
+          for h in routeHint.Hops do
+            let lnHopHint = HopHint()
+            lnHopHint.NodeId <- h.NodeId.Value.ToHex()
+            lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
+            lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
+            lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
+            lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
+            r.HopHints.Add(lnHopHint)
+          r
+        req.RouteHints.Add(routeHint)
         req.Memo <- memo
         let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
@@ -258,6 +347,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
             })
           |> Seq.toList
       }
+
     member this.Offer(param, ct) =
       let ct = defaultArg ct CancellationToken.None
       task {
@@ -347,3 +437,26 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         .ReadAllAsync(ct)
       |> AsyncSeq.ofAsyncEnum
       |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
+
+    member this.GetChannelInfo(channelId: ShortChannelId, ?ct: CancellationToken) = task {
+      let ct = defaultArg ct CancellationToken.None
+      let! resp =
+        let req = ChanInfoRequest()
+        req.ChanId <- channelId.ToUInt64()
+        client.GetChanInfoAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
+      let convertNodePolicy (nodeIdStr: string) (p: RoutingPolicy) = {
+        NodePolicy.Disabled = p.Disabled
+        Id = nodeIdStr |> PubKey
+        TimeLockDelta =
+          // cltv_expiry_delta must be `u16` according to the [bolt07](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md)
+          p.TimeLockDelta |> uint16 |> BlockHeightOffset16
+        MinHTLC = p.MinHtlc |> LNMoney.MilliSatoshis
+        FeeBase = p.FeeBaseMsat |> LNMoney.MilliSatoshis
+        FeeRatePerMillionths = p.FeeRateMilliMsat |> LNMoney.MilliSatoshis
+      }
+      return {
+        GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis
+        Node1Policy = resp.Node1Policy |> convertNodePolicy resp.Node1Pub
+        Node2Policy = resp.Node2Policy |> convertNodePolicy resp.Node2Pub
+      }
+    }
