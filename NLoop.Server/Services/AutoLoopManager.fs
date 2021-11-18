@@ -1,35 +1,61 @@
 namespace NLoop.Server.Services
 
 open System
-open System.Collections.Concurrent
-open System.IO
+open System.Collections.Generic
 open System.Linq
 open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
-open DotNetLightning.Utils.Primitives
 open FsToolkit.ErrorHandling
-open LndClient
 open LndClient
 open Microsoft.Extensions.Hosting
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
+open Microsoft.Extensions.DependencyInjection
 open NBitcoin
 open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
-open NLoop.Domain.Utils
-open NLoop.Domain.Utils.EventStore
 open NLoop.Server
-open NLoop.Server.Actors
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
-(*
+[<AutoOpen>]
+module private Constants =
+  /// We use static fee rate to estimate our sweep fee, because we can't realistically
+  /// estimate what our fee estimate will be by the time we reach timeout. We set this to a
+  /// high estimate so that we can account for worst-case fees, (1250 * 4 / 1000) = 50 sat/byte
+  let defaultLoopInSweepFee = FeeRate(1250m)
 
+[<AutoOpen>]
+module private Helpers =
+
+  /// Calculates the largest possible fees for a loop out swap,
+  /// comparing the fees for a successful swap to the cost when the client pays
+  /// the prepay because they failed to sweep the on chain htlc. This is unlikely,
+  let worstCaseOutFees
+    ({ LoopOutLimits.MaxPrepayRoutingFee = maxPrepayRoutingFee
+       MaxSwapFee = maxSwapFee
+       MaxRoutingFee = maxSwapRoutingFee
+       MaxMinerFee = maxMinerFee
+       MaxPrepay = maxPrepayAmount
+        }) : Money =
+    let successFees = maxPrepayRoutingFee + maxMinerFee + maxSwapFee + maxSwapRoutingFee
+    let noShowFees = maxPrepayRoutingFee + maxPrepayAmount
+    if noShowFees > successFees then noShowFees else successFees
+
+  let worstCaseInFees
+    ({ LoopInLimits.MaxMinerFee = maxMinerFee
+       MaxSwapFee = swapFee }) (sweepFeeEst: FeeRate) =
+    let failureFee = maxMinerFee + Transactions.dummyRefundTxFee sweepFeeEst
+    let successFee = maxMinerFee + swapFee
+    Money.Max(failureFee, successFee)
+
+[<Struct>]
 /// minimum incoming and outgoing liquidity threshold
 type ThresholdRule = {
   MinimumIncoming: int16<percent>
@@ -45,21 +71,6 @@ type ThresholdRule = {
       Error $"Invalid liquidity threshold sum {this}"
     else
       Ok()
-
-[<RequireQualifiedAccess>]
-type SwapDisqualifiedReason =
-  | None
-  | BudgetNotStarted
-  | SweepFeesTooHigh
-  | BudgetElapsed
-  | InFlightLimitReached
-  | SwapFeeTooHigh
-  | MinerFeeTooHigh
-  | PrepayTooHigh
-  | FailureBackoff
-  | LoopOutAlreadyInTheChannel
-  | LoopInAlreadyInTheChannel
-  | LiquidityOk
 
 [<RequireQualifiedAccess>]
 type AutoLoopError =
@@ -85,6 +96,48 @@ type AutoLoopError =
     | ExclusiveRules ->
       $"channel and peer rules must be exclusive"
     | FailedToDispatchLoop msg -> msg
+
+[<RequireQualifiedAccess>]
+type SwapSuggestion =
+  | Out of LoopOutRequest
+  | In of LoopInRequest
+  with
+  member this.Fees(): Money =
+    match this with
+    | Out req ->
+      req.Limits
+      |> worstCaseOutFees
+    | In req ->
+      worstCaseInFees
+        req.Limits
+        defaultLoopInSweepFee
+
+  member this.Amount: Money =
+    match this with
+    | Out req ->
+      req.Amount
+    | In req -> req.Amount
+
+  member this.Channels: ShortChannelId [] =
+    match this with
+    | Out req ->
+      req.ChannelId
+    | In _ -> [||]
+
+  member this.Peers(knownChannels: Map<ShortChannelId, NodeId>, logger: ILogger): NodeId[] =
+    match this with
+    | Out req ->
+      let knownPeers, unKnownPeers =
+        req.ChannelId
+        |> Array.partition(fun c -> knownChannels.Any(fun kc -> kc.Key = c))
+
+      unKnownPeers
+      |> Array.iter(fun c -> logger.LogWarning($"peer for channel: {c} (%d{c.ToUInt64()}) unknown"))
+
+      knownPeers
+      |> Array.map(fun shortChannelId -> knownChannels.TryGetValue(shortChannelId) |> snd)
+    | In req ->
+      req.LastHop |> Option.map(NodeId) |> Option.toArray
 
 type SwapSuggestions = {
   OutSwaps: LoopOutRequest[]
@@ -177,15 +230,8 @@ type Restrictions = {
   }
 
 [<AutoOpen>]
-module private Constants =
-  /// We use static fee rate to estimate our sweep fee, because we can't realistically
-  /// estimate what our fee estimate will be by the time we reach timeout. We set this to a
-  /// high estimate so that we can account for worst-case fees, (1250 * 4 / 1000) = 50 sat/byte
-  let defaultLoopInSweepFee = FeeRate(1250m)
+module private Extensions =
 
-
-[<AutoOpen>]
-module private Helpers =
   type ThresholdRule with
     /// SwapAmount suggests a swap based on the liquidity thresholds configured,
     /// returning zero if no swap is recommended.
@@ -238,31 +284,6 @@ module private Helpers =
     else
       Ok()
 
-  /// Calculates the largest possible fees for a loop out swap,
-  /// comparing the fees for a successful swap to the cost when the client pays
-  /// the prepay because they failed to sweep the on chain htlc. This is unlikely,
-  let worstCaseOutFees
-    (maxPrepayRoutingFee: Money voption)
-    (maxSwapRoutingFee: Money voption)
-    (maxSwapFee: Money voption)
-    (maxMinerFee: Money voption)
-    (maxPrepayAmount: Money voption): Money voption =
-    maxPrepayRoutingFee |> ValueOption.bind(fun f1 ->
-      maxMinerFee |> ValueOption.bind(fun f2 ->
-        maxSwapFee |> ValueOption.bind(fun f3 ->
-          maxSwapRoutingFee |> ValueOption.bind(fun f4 ->
-            maxPrepayAmount |> ValueOption.map(fun f5 ->
-              let successFees = f1 + f2 + f3 + f4
-              let noShowFees = f1 + f5
-              if noShowFees > successFees then
-                noShowFees
-              else successFees
-            )
-          )
-        )
-      )
-    )
-
 type Rules = {
   ChannelRules: Map<ShortChannelId, ThresholdRule>
   PeerRules: Map<NodeId, ThresholdRule>
@@ -273,53 +294,15 @@ type Rules = {
     PeerRules = Map.empty
   }
 
-[<RequireQualifiedAccess>]
-type SwapSuggestion =
-  | Out of LoopOutRequest
-  | In of LoopInRequest
-  with
-  member this.Fees(): Money =
-    match this with
-    | Out req ->
-      worstCaseOutFees
-        req.MaxPrepayRoutingFee
-        req.MaxSwapRoutingFee
-        req.MaxSwapFee
-        req.MaxMinerFee
-        req.MaxPrepayAmount
-      |> function _ -> failwith "todo"
-
-  member this.Amount: Money =
-    match this with
-    | Out req ->
-      req.Amount
-
-  member this.Channels: ShortChannelId [] =
-    match this with
-    | Out req ->
-      req.ChannelId
-
-  member this.Peers(knownChannels: Map<ShortChannelId, NodeId>, logger: ILogger): NodeId[] =
-    match this with
-    | Out req ->
-      let knownPeers, unKnownPeers =
-        req.ChannelId
-        |> Array.partition(fun c -> knownChannels.Any(fun kc -> kc.Key = c))
-
-      unKnownPeers
-      |> Array.iter(fun c -> logger.LogWarning($"peer for channel: {c} (%d{c.ToUInt64()}) unknown"))
-
-      knownPeers
-      |> Array.map(fun shortChannelId -> knownChannels.TryGetValue(shortChannelId) |> snd)
 
 [<AutoOpen>]
 module private Fees =
   type IFeeLimit =
     abstract member Validate: unit -> Result<unit, string>
     /// Checks whether we may dispatch a loop out swap based on the current fee conditions.
-    abstract member MayLoopOut: FeeRate -> Result<unit, SwapDisqualifiedReason>
+    abstract member MayLoopOut: feeRate: FeeRate -> Result<unit, SwapDisqualifiedReason>
     /// Checks whether the quote provided is within our fee limits for the swap amount.
-    abstract member LoopOutLimits: swapAmount: Money * LoopOutQuote -> Task<Result<unit, SwapDisqualifiedReason>>
+    abstract member LoopOutLimits: swapAmount: Money * quote: LoopOutQuote -> Task<Result<unit, SwapDisqualifiedReason>>
     abstract member LoopOutFees: amount: Money * quote: LoopOutQuote -> Money * Money * Money
     abstract member LoopInLimits: amount: Money * quote: LoopInQuote -> Task<Result<unit, SwapDisqualifiedReason>>
 
@@ -341,6 +324,8 @@ module private Fees =
         failwith "todo"
       member this.LoopInLimits(amount, quote) =
         failwith "todo"
+
+      member this.MayLoopOut(feeRate) = failwith "todo"
 
 /// run-time modifiable part of the auto loop parameters.
 type Parameters = private {
@@ -537,7 +522,7 @@ type SwapBuilder = {
           MaxSwapRoutingFee = routeMaxFee |> ValueSome
           MaxPrepayRoutingFee = prepayMaxFee |> ValueSome
           MaxSwapFee = quote.SwapFee |> ValueSome
-          MaxPrepayAmount = quote.PrepayAmount
+          MaxPrepayAmount = quote.PrepayAmount |> ValueSome
           MaxMinerFee = minerFee |> ValueSome
           SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
         }
@@ -577,6 +562,7 @@ type SwapBuilder = {
           MaxMinerFee = quote.MinerFee |> ValueSome
           MaxSwapFee = quote.SwapFee |> ValueSome
           HtlcConfTarget = parameters.HTLCConfTarget.Value |> int |> ValueSome
+          RouteHints = failwith "todo"
         }
         return
           SwapSuggestion.In(req)
@@ -585,7 +571,8 @@ type SwapBuilder = {
 
 type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      opts: IOptions<NLoopOptions>,
-                     projection: SwapStateProjection,
+                     swapStateProjection: SwapStateProjection,
+                     recentSwapFailureProjection: RecentSwapFailureProjection,
                      boltzClient: BoltzClient,
                      cfg: Config,
                      blockChainListener: BlockchainListener,
@@ -622,10 +609,10 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     this.Parameters <- v
   }
 
-  /// Queries the server for its latest swap size restrictions,
+  /// Query the server for its latest swap size restrictions,
   /// validates client restrictions (if present) against these values and merges the client's custom
   /// requirements with the server's limits to produce a single set of limitations for our swap.
-  member private this.GetSwapRestrictions(swapType: Swap.Category, cryptoPair: PairId) = taskResult {
+  member private this.GetSwapRestrictions(swapType: Swap.Category, cryptoPair: PairId): Task<Result<_, AutoLoopError>> = taskResult {
       let! p = boltzClient.GetPairsAsync()
       let restrictions = p.Pairs.[PairId.toString(&cryptoPair)].Limits
       do!
@@ -634,14 +621,14 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
             this.Parameters.ClientRestrictions
           )
       return
-        { restrictions with
-            Minimal = Math.Max(this.Parameters.ClientRestrictions.Minimum.Satoshi, restrictions.Minimal)
-            Maximal =
-              if this.Parameters.ClientRestrictions.Maximum.Satoshi <> 0L && this.Parameters.ClientRestrictions.Maximum.Satoshi < restrictions.Maximal then
-                this.Parameters.ClientRestrictions.Maximum.Satoshi
-              else
-                restrictions.Maximal
-          }
+        {
+          Minimum = Money.Max(this.Parameters.ClientRestrictions.Minimum, restrictions.Minimal |> Money.Satoshis)
+          Maximum =
+            if this.Parameters.ClientRestrictions.Maximum <> Money.Zero && this.Parameters.ClientRestrictions.Maximum.Satoshi < restrictions.Maximal then
+              this.Parameters.ClientRestrictions.Maximum
+            else
+              restrictions.Maximal |> Money.Satoshis
+        }
     }
 
   member private this.SingleReasonSuggestion(reason: SwapDisqualifiedReason): SwapSuggestions =
@@ -671,15 +658,17 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
           |> Result.mapError(this.SingleReasonSuggestion)
     }
 
-  member this.SuggestSwaps(autoloop: bool, ?ct: CancellationToken): Task<SwapSuggestions> = task {
+  member this.SuggestSwaps(autoloop: bool, ?ct: CancellationToken): Task<Result<SwapSuggestions, AutoLoopError>> = task {
     let ct = defaultArg ct CancellationToken.None
     match! this.Builder.MaySwap(this.Parameters) with
     | Error e ->
-      return this.SingleReasonSuggestion(e)
+      return this.SingleReasonSuggestion(e) |> Ok
     | Ok() ->
-      let! restrictions = this.GetSwapRestrictions(this.Parameters.SwapCategory, this.Parameters.PairId)
-      let onGoingLoopOuts: _ list = projection.OngoingLoopOuts |> Seq.toList
-      let onGoingLoopIns: _ list = projection.OngoingLoopIns |> Seq.toList
+      match! this.GetSwapRestrictions(this.Parameters.SwapCategory, this.Parameters.PairId) with
+      | Error e -> return Error e
+      | Ok restrictions ->
+      let onGoingLoopOuts: _ list = swapStateProjection.OngoingLoopOuts |> Seq.toList
+      let onGoingLoopIns: _ list = swapStateProjection.OngoingLoopIns |> Seq.toList
       let summary =
         ExistingAutoLoopSummary.FromLoopInOuts(onGoingLoopIns, onGoingLoopOuts)
       let existingAutoLoopOuts =
@@ -687,7 +676,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         |> Seq.toList
       match this.CheckAutoLoopIsPossible(existingAutoLoopOuts, summary) with
       | Error e ->
-        return e
+        return e |> Ok
       | Ok () ->
         let! channels =
           this.LightningClient
@@ -702,7 +691,6 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
           channels
           |> List.map(fun c -> c.Id, c.NodeId |> NodeId)
           |> Map.ofList
-
         let peersWithRules =
           peerToChannelBalance
           |> Map.toSeq
@@ -712,47 +700,128 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
             |> Option.map(fun rule -> (nodeId, balance, rule))
           )
 
-        let failedLoopIns =
-          projection.State
-
         let mutable resp = SwapSuggestions.Zero
         let mutable suggestions: ResizeArray<SwapSuggestion> = ResizeArray()
         let traffic = {
-          SwapTraffic.FailedLoopOut = this.FailedLoopOuts
-          OngoingLoopOut = onGoingLoopOuts
-          OngoingLoopIn = onGoingLoopIns
-          FailedLoopIn = failwith "todo"
+          SwapTraffic.FailedLoopOut = recentSwapFailureProjection.FailedLoopOuts
+          FailedLoopIn = recentSwapFailureProjection.FailedLoopIns
+          OngoingLoopOut =
+            onGoingLoopOuts
+            |> List.map(fun o -> o.OutgoingChanIds |> Array.toList) |> List.concat
+          OngoingLoopIn =
+            onGoingLoopIns
+            |> List.map(fun i -> i.LastHop |> Option.map(NodeId) |> Option.toList)
+            |> List.concat
         }
 
         for nodeId, balances, rule in peersWithRules do
-          match! this.SuggestSwap(traffic, balances, rule, restrictions, autoloop) |> TaskResult.mapError(fun e -> failwith "todo") with
+          match! this.SuggestSwap(traffic, balances, rule, restrictions, this.Parameters.PairId,  autoloop) |> TaskResult.mapError(fun e -> failwith "todo") with
           | Error(SwapDisqualified e) ->
             resp <- { resp with DisqualifiedPeers = resp.DisqualifiedPeers |> Map.add nodeId e }
           | Error e ->
             failwith "todo"
             //return! Error e
+          | Ok (SwapSuggestion.In s) ->
+            // Create a route_hint for every channel against the last_hop
+            // to tell them which channel we want the inbound liquidity for.
+            let targetChannels =
+              channels
+              |> List.filter(fun c -> match s.LastHop with | None -> false | Some lastHop -> lastHop = c.NodeId)
+            let! chanInfos =
+              targetChannels
+              |> Seq.map(fun c -> task {
+                let! resp = this.LightningClient.GetChannelInfo(c.Id)
+                return (resp, c.Id)
+              })
+              |> Task.WhenAll
+            let s =
+              let routeHints: RouteHint[] =
+                chanInfos
+                |> Seq.map(fun (c, cId) -> {
+                  HopHint.NodeId = c.Node1Policy.Id
+                  HopHint.ChanId = cId
+                  FeeBaseMSat = c.Node1Policy.FeeBase.MilliSatoshi
+                  FeeProportionalMillionths = c.Node1Policy.FeeProportionalMillionths.MilliSatoshi
+                  CltvExpiryDelta = c.Node1Policy.TimeLockDelta.Value |> int
+                })
+                |> Seq.map(fun h -> { RouteHint.Hops = [|h|] })
+                |> Seq.toArray
+              { s with RouteHints = routeHints }
+            suggestions.Add (SwapSuggestion.In s)
           | Ok s ->
-            suggestions.Add s
+            suggestions.Add(s)
 
         for c in channels do
           let balance = Balances.FromLndResponse c
           match this.Parameters.Rules.ChannelRules.TryGetValue c.Id with
           | false, _ -> ()
           | true, rule ->
-            match! this.SuggestSwap(traffic, balance, rule, restrictions, autoloop) with
-            | Error(SwapDisqualified e) ->
-              resp <- { resp with DisqualifiedChannels = resp.DisqualifiedChannels |> Map.add c.Id e }
+            match! this.SuggestSwap(traffic, balance, rule, restrictions, this.Parameters.PairId, autoloop) with
             | Error e ->
-              failwith "todo"
-              //return! Error e
+              resp <- { resp with DisqualifiedChannels = resp.DisqualifiedChannels |> Map.add c.Id e }
             | Ok s ->
               suggestions.Add s
+
         if suggestions.Count = 0 then
-          ()
+          return Ok resp
         else
           let suggestions = suggestions |> Seq.sortBy(fun s -> s.Amount)
-          ()
-        return failwith "todo"
+
+          let setReason
+            (reason: SwapDisqualifiedReason)
+            (swapSuggestion: SwapSuggestion)
+            (response: SwapSuggestions) =
+            {
+              response
+                with
+                DisqualifiedPeers =
+                  swapSuggestion.Peers(chanToPeers, logger)
+                  |> Seq.filter(fun p -> this.Parameters.Rules.PeerRules |> Map.containsKey p)
+                  |> Seq.fold(fun acc p ->
+                    acc |> Map.add p reason
+                  ) response.DisqualifiedPeers
+                DisqualifiedChannels =
+                  swapSuggestion.Channels
+                  |> Seq.filter(fun c -> this.Parameters.Rules.ChannelRules |> Map.containsKey c)
+                  |> Seq.fold(fun acc c ->
+                    acc |> Map.add c reason
+                  ) response.DisqualifiedChannels
+            }
+
+          // Run through our suggested swaps  in descending order of amount and return all of the swaps which will
+          // fit within our remaining budget.
+          let mutable available = this.Parameters.AutoFeeBudget - summary.TotalFees
+          let allowedSwaps = this.Parameters.MaxAutoInFlight - existingAutoLoopOuts.Count()
+          let resp =
+            suggestions
+            |> Seq.fold(fun (acc, available) s ->
+              let fees = s.Fees()
+              let subtractFee a =
+                if (fees <= a) then
+                  a - fees
+                else
+                  a
+              if available = Money.Zero then
+                (setReason SwapDisqualifiedReason.BudgetInsufficient s acc), available
+              elif resp.OutSwaps.Length = allowedSwaps || resp.InSwaps.Length = allowedSwaps then
+                (setReason SwapDisqualifiedReason.InFlightLimitReached s acc), available
+              else
+                acc, (subtractFee available)
+            ) (resp, available)
+
+          let _ =
+            suggestions
+            |> Seq.map(fun s ->
+              /// If the maximum fee we expect our swap to use is less than the amount we have available, we add it to
+              /// our set of swaps that fall within the budget and decrement our available amount.
+              if s.Fees() <= available then
+                available
+                ()
+              else
+                ()
+            )
+
+          return failwith "todo"
   }
 
   member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: Restrictions, pairId, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
@@ -797,10 +866,25 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
 
 
-type AutoLoopManagers() =
+type AutoLoopManagers(logger: ILogger<AutoLoopManagers>, sp: IServiceProvider) =
   inherit BackgroundService()
 
+  let managers = Dictionary<_,_>()
+
   override this.ExecuteAsync(stoppingToken) = unitTask {
-    return failwith "todo"
+    try
+      while not <| stoppingToken.IsCancellationRequested do
+        return failwith "todo"
+    with
+    | :? OperationCanceledException ->
+      logger.LogInformation($"Stopping {nameof(BlockchainListener)}...")
+    | ex ->
+      logger.LogError($"{ex}")
   }
-*)
+
+  member this.AddManager(parameters: Parameters) = taskResult {
+    let man = sp.GetRequiredService<AutoLoopManager>()
+    do! man.SetParameters(parameters)
+    managers.Add(parameters.PairId, man)
+    ()
+  }

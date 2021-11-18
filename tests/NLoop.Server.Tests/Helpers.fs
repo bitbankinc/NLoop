@@ -99,7 +99,10 @@ let getTestRepository(n) =
 let getDummyLightningClientProvider() =
   { new ILightningClientProvider with
       member this.TryGetClient(cryptoCode) =
-        failwith "" }
+        failwith ""
+      member this.GetAllClients() =
+        failwith ""
+      }
 let getTestRepositoryProvider() =
   let repos = Dictionary<SupportedCryptoCode, ISecretRepository>()
   repos.Add(SupportedCryptoCode.BTC, getTestRepository(Bitcoin.Instance.Regtest))

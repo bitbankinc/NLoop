@@ -11,6 +11,7 @@ open LndClient
 open NBitcoin
 open FSharp.Control.Tasks
 open NLoop.Domain
+open NLoop.Server.DTOs
 
 type ISwapEventListener =
   abstract member RegisterSwap: swapId: SwapId -> unit
@@ -49,6 +50,7 @@ type ILightningInvoiceProvider =
     preimage: PaymentPreimage *
     amt: LNMoney *
     label: string *
+    routeHints: LndClient.RouteHint[] *
     onPaymentFinished: OnPaymentReception *
     onCancellation: OnPaymentCancellation *
     ct: CancellationToken option

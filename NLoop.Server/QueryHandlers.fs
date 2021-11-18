@@ -43,9 +43,8 @@ module QueryHandlers =
 
   let handleGetSwapHistory =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
-      let state = ctx.GetService<SwapStateProjection>().State
       let resp: GetSwapHistoryResponse =
-        state
+        ctx.GetService<SwapStateProjection>().State
         |> Map.toSeq
         |> Seq.choose(fun (streamId, v) ->
           let r =
@@ -70,9 +69,8 @@ module QueryHandlers =
 
   let handleGetOngoingSwap =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
-      let state = ctx.GetService<SwapStateProjection>().State
       let resp: GetOngoingSwapResponse =
-        state
+        ctx.GetService<SwapStateProjection>().State
         |> Map.toList
         |> List.choose(fun (_, v) ->
           match v with

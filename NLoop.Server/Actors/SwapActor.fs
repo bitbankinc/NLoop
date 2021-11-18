@@ -207,7 +207,13 @@ type SwapActor(broadcaster: IBroadcaster,
           | None ->
             // This will never happen unless they pay us unconditionally.
             Task.CompletedTask
-        invoiceProvider.GetAndListenToInvoice(baseCryptoCode, preimage, amt, loopIn.Label |> Option.defaultValue(String.Empty), onPaymentFinished, onPaymentCanceled, None)
+        invoiceProvider.GetAndListenToInvoice(
+          baseCryptoCode,
+          preimage,
+          amt,
+          loopIn.Label |> Option.defaultValue(String.Empty),
+          loopIn.LndClientRouteHints,
+          onPaymentFinished, onPaymentCanceled, None)
       try
         let! inResponse =
           let req =
@@ -251,7 +257,8 @@ type SwapActor(broadcaster: IBroadcaster,
             MaxSwapFee =
               loopIn.Limits.MaxSwapFee
             LockupTransactionOutPoint = None
-            LastHop = loopIn.LastHop
+            LastHop =
+              loopIn.LastHop
           }
           do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
           let response = {

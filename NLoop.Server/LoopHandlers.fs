@@ -80,19 +80,17 @@ let handleLoopOutCore (req: LoopOutRequest) =
 
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    task {
-      let pairId =
-        req.PairId
-        |> Option.defaultValue PairId.Default
-      let struct(_baseAsset, quoteAsset) =
-        pairId
-      return!
-        (checkBlockchainIsSyncedAndSetTipHeight pairId
-         >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
-         >=> validateFeeLimitAgainstServerQuote req
-         >=> handleLoopOutCore req)
-          next ctx
-    }
+    let pairId =
+      req.PairId
+      |> Option.defaultValue PairId.Default
+    let struct(_baseAsset, quoteAsset) =
+      pairId
+    (checkBlockchainIsSyncedAndSetTipHeight pairId
+     >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
+     >=> validateFeeLimitAgainstServerQuote req
+     >=> handleLoopOutCore req)
+      next ctx
+
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     let actor = ctx.GetService<SwapActor>()

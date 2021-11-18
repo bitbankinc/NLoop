@@ -29,9 +29,9 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
 
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun event -> unitTask {
+      if not <| event.StreamId.Value.StartsWith(Swap.entityType) then () else
       match event.ToRecordedEvent(Swap.serializer) with
       | Error _ -> ()
-      | Ok r when not <| r.StreamId.Value.StartsWith(Swap.entityType) -> ()
       | Ok r ->
         this.State <-
           (

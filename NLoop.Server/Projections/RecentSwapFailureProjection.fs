@@ -11,11 +11,12 @@ open NLoop.Domain.Utils
 open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 
-/// Cache recently failed swap on memory
-/// Used in AutoLoop to backpressure the failure
+/// Cache recently failed swaps on memory
+/// Used in AutoLoop to backoff the failure
 type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFactory) as this =
   inherit BackgroundService()
-  let [<Literal>] InMemoryHistorySize = 1000
+  /// We have no big reason to choose this number.
+  let [<Literal>] InMemoryHistorySize = 255
   let log = loggerFactory.CreateLogger<RecentSwapFailureProjection>()
 
   let dropOldest(m: Map<_, struct(_ * UnixDateTime voption)>) =
@@ -33,9 +34,9 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: IL
     Map.remove oldestId m
 
   let handleEvent (re: SerializedRecordedEvent) = unitTask {
+    if not <| re.StreamId.Value.StartsWith(Swap.entityType) then () else
     match re.ToRecordedEvent(Swap.serializer) with
     | Error _ -> ()
-    | Ok r when not <| r.StreamId.Value.StartsWith(Swap.entityType) -> ()
     | Ok r ->
       match r.Data with
       | Swap.Event.NewLoopOutAdded(_h, o) ->
@@ -44,7 +45,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: IL
           |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
 
         // We only need information about the recent swap failure.
-        // discard old ones so that we don't use too much memory.
+        // discard old ones so that we don't waste too much memory.
         if this.FailedLoopOutSwapState.Count > InMemoryHistorySize then
           this.FailedLoopOutSwapState <-
             this.FailedLoopOutSwapState

@@ -6,14 +6,12 @@ open NLoop.Domain
 open RandomUtils
 open System
 open System.Threading.Tasks
-open DotNetLightning.Utils.Primitives
 open NLoop.Domain.Utils
 open Xunit
 open FsCheck
 open FsCheck.Xunit
 open Generators
 open NBitcoin
-open NLoop.Domain
 open NLoop.Domain.IO
 open FsToolkit.ErrorHandling
 
@@ -37,7 +35,6 @@ module Helpers =
           IsClaimTxConfirmed = false
           ClaimTransactionId = None
           LockupTransactionHex = None
-          Status = SwapStatusType.SwapCreated
           MaxMinerFee = Money.Coins(10m)
           OnChainAmount = Money.Max(this.OnChainAmount, Money.Satoshis(10000m))
           LockupTransactionHeight = None
@@ -76,7 +73,6 @@ module Helpers =
           ChainName = Network.RegTest.ChainName.ToString()
           LockupTransactionOutPoint = None
           RefundTransactionId = None
-          Status = SwapStatusType.SwapCreated
           MaxMinerFee = Money.Coins(10m)
         }
 

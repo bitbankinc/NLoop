@@ -63,7 +63,7 @@ let tests =
     testProp "LiquidityParameters" <| fun (serverDto: LiquidityParameters) ->
       serverDto |> checkCompatibilityWith<NLoopClient.LiquidityParameters, LiquidityParameters>
 
-    ptestProp "SetLiquidityParametersRequest" <| fun (serverDto: SetLiquidityParametersRequest) ->
+    testProp "SetLiquidityParametersRequest" <| fun (serverDto: SetLiquidityParametersRequest) ->
       serverDto |> checkCompatibilityWith<NLoopClient.SetLiquidityParametersRequest, SetLiquidityParametersRequest>
   ]
 

@@ -153,6 +153,10 @@ type LoopIn = {
     let struct (_, cryptoCode) = this.PairId
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
+  member this.PaymentRequest =
+    PaymentRequest.Parse(this.Invoice)
+    |> ResultUtils.Result.deref
+
   member this.Validate() =
     if this.ExpectedAmount <= Money.Zero then Error $"LoopIn has non-positive expected amount {this.ExpectedAmount}" else
     Ok()

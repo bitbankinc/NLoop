@@ -24,11 +24,11 @@ let private handle (host: IHost) =
     let pr = host.Services.GetRequiredService<ParseResult>()
     let req =
       let r = LoopOutRequest()
-      r.Channel_id <- pr.ValueForOption<string>("channel")
+      r.Channel_id <- pr.ValueForOption<string[]>("channel")
       r.Pair_id <- pr.ValueForOption<string>("pair_id")
       r.Address <- pr.ValueForOption<string>("address")
       r.Amount <- pr.ValueForOption<int64>("amount")
-      r.Conf_target <- pr.ValueForOption<int>("conf-target")
+      r.Htlc_conf_target <- pr.ValueForOption<int>("htlc-conf-target")
       r.Label <- pr.ValueForOption<string>("label")
       r
 
