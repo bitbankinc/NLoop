@@ -68,7 +68,7 @@ and NodePolicy = {
   TimeLockDelta: BlockHeightOffset16
   MinHTLC: LNMoney
   FeeBase: LNMoney
-  FeeRatePerMillionths: LNMoney
+  FeeProportionalMillionths: LNMoney
   Disabled: bool
 }
 
@@ -134,7 +134,7 @@ type INLoopLightningClient =
     paymentHash: Primitives.PaymentHash *
     value: LNMoney *
     expiry: TimeSpan *
-    routeHint: RouteHint *
+    routeHints: RouteHint[] *
     memo: string *
     ?ct: CancellationToken
       -> Task<PaymentRequest>
@@ -142,7 +142,7 @@ type INLoopLightningClient =
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
     expiry: TimeSpan *
-    routeHint: RouteHint *
+    routeHint: RouteHint[] *
     memo: string *
     ?ct: CancellationToken
      -> Task<PaymentRequest>

@@ -34,19 +34,35 @@ type LoopInRequest = {
   [<JsonPropertyName "htlc_conf_target">]
   HtlcConfTarget: int voption
 
-  [<JsonPropertyName "last_hop">]
-  LastHop: PubKey option
-
   [<JsonPropertyName "route_hints">]
-  RouteHints: HopHint array
+  RouteHints: RouteHint array
 }
   with
+  member this.LastHop =
+    let lastHops = this.RouteHints |> Array.map(fun rh -> rh.Hops.[0].NodeId)
+    if lastHops |> Seq.distinct |> Seq.length = 1 then
+      lastHops.[0] |> Some
+    else
+      // if we don't have unique last hop in route hints, we don't know what will be
+      // the last hop. (it is up to the counterparty)
+      None
+
   member this.Limits = {
     MaxSwapFee =
       this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
     MaxMinerFee =
       this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
   }
+  member this.LndClientRouteHints =
+    this.RouteHints
+    |> Array.map(fun h ->
+      {
+        LndClient.RouteHint.Hops = h.Hops |> Array.map(fun r -> r.LndClientHopHint)
+      }
+    )
+and RouteHint = {
+  Hops: HopHint[]
+}
 and HopHint = {
   [<JsonPropertyName "node_id">]
   NodeId: PubKey
@@ -63,6 +79,14 @@ and HopHint = {
   [<JsonPropertyName "cltv_expiry_delta">]
   CltvExpiryDelta: int
 }
+  with
+  member this.LndClientHopHint = {
+    LndClient.HopHint.NodeId = this.NodeId |> NodeId
+    ShortChannelId = this.ChanId
+    FeeBase = this.FeeBaseMSat |> LNMoney.MilliSatoshis
+    FeeProportionalMillionths = this.FeeProportionalMillionths |> uint32
+    CLTVExpiryDelta = this.CltvExpiryDelta |> uint16 |> BlockHeightOffset16
+  }
 
 
 type LoopOutLimits = {

@@ -29,9 +29,9 @@ let checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
   JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
   |> ignore
 
-let testProp testName = testPropertyWithConfig propConfig testName
-let ftestProp testName = ftestPropertyWithConfig propConfig testName
-let ptestProp testName = ptestPropertyWithConfig propConfig testName
+let inline testProp testName = testPropertyWithConfig propConfig testName
+let inline ftestProp testName = ftestPropertyWithConfig propConfig testName
+let inline ptestProp testName = ptestPropertyWithConfig propConfig testName
 
 [<Tests>]
 let tests =
@@ -53,7 +53,17 @@ let tests =
 
     testProp "OngoingSwap" <| fun (serverDto: GetOngoingSwapResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.GetOngoingSwapResponse, GetOngoingSwapResponse>
+
     testProp "SwapHistory" <| fun (serverDto: GetSwapHistoryResponse) ->
       serverDto |> checkCompatibilityWith<NLoopClient.GetSwapHistoryResponse, GetSwapHistoryResponse>
+
+    testProp "SuggestSwapsResponse" <| fun (serverDto: SuggestSwapsResponse) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.SuggestSwapsResponse, SuggestSwapsResponse>
+
+    testProp "LiquidityParameters" <| fun (serverDto: LiquidityParameters) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.LiquidityParameters, LiquidityParameters>
+
+    ptestProp "SetLiquidityParametersRequest" <| fun (serverDto: SetLiquidityParametersRequest) ->
+      serverDto |> checkCompatibilityWith<NLoopClient.SetLiquidityParametersRequest, SetLiquidityParametersRequest>
   ]
 

@@ -59,7 +59,6 @@ module App =
           POST >=>
             route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
             route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> handleLoopIn
-            route "/rule" >=> mustAuthenticate >=> bindJson<SetRuleRequest> AutoLoopHandlers.handleSetRule
         ])
         subRoute "/swaps" (choose [
           GET >=>
@@ -67,6 +66,16 @@ module App =
             route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
             routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
         ])
+        subRoute "/auto" (choose [
+          GET >=>
+            route "/suggest" >=> AutoLoopHandlers.suggestSwaps
+        ])
+        subRoute "/liquidity" (
+          route "/params" >=> choose [
+            GET >=> AutoLoopHandlers.getLiquidityParams
+            POST >=> bindJson<SetLiquidityParametersRequest> AutoLoopHandlers.setLiquidityParams
+          ]
+        )
       ])
       setStatusCode 404 >=> text "Not Found"
     ]

@@ -147,16 +147,45 @@ paths:
                     minItems: 1
                     items:
                       type: string
-  /v1/loop/rule:
-    post:
+
+  /v1/auto/suggest:
+    get:
+      description: >
+        Get suggestion for the swaps.
       tags:
         - loop
         - autoloop
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestSwapsResponse'
+
+  /v1/liquidity/params:
+    get:
+      description: >
+        Get the parameters that the daemon's liquidity manager is currently configured with.
+        This may be nil if nothing is configured.
+      tags:
+        - autoloop
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiquidityParameters'
+
+    post:
+      description: >
+        Overwrites the current set of parameters for the daemon's liquidity manager.
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetRuleRequest'
+              $ref: '#/components/schemas/SetLiquidityParametersRequest'
       responses:
         '200':
           description: OK
@@ -251,14 +280,17 @@ components:
           type: integer
           format: int64
 
-    RouteHints:
-      type: array
-      maxItems: 6
-      items:
-        $ref: '#/components/schemas/HopHint'
-      description: <
-        Route hints which will be included in the invoice.
-        See bolt11 for the detail.
+    RouteHint:
+      type: object
+      properties:
+        hops:
+          type: array
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/HopHint'
+          description: <
+            Route hints which will be included in the invoice.
+            See bolt11 for the detail.
 
     # -----
     # ----- requests
@@ -396,17 +428,15 @@ components:
           description: <
             Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
           nullable: true
-        last_hop:
-          description: <
-            Optionally the client can specify the last hop pubkey when requesting
-            loop-in. This is useful to get better off-chain routing fee from the server.
-          nullable: true
-          $ref: "#/components/schemas/PubKey"
         route_hints:
-          $ref: '#/components/schemas/RouteHints'
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteHint'
           nullable: true
           description: <
-            route hints included in the invoice.
+            route hints included in the invoice. Usually used in case of the private channel.
+            But in NLoop, we also use it as a means of communication against the server, i.e.
+            to tell them which channel do we want inbound liqidity for.
       required:
         - amount
 
@@ -510,7 +540,12 @@ components:
             The address of the on-chain HTLC
           $ref:  "#/components/schemas/P2WSH"
 
-    SetRuleRequest:
+    LiquidityRuleType:
+      enum:
+        - UNKNOWN
+        - THRESHOLD
+
+    LiquidityRule:
       type: object
       properties:
         incoming_threshold:
@@ -519,7 +554,123 @@ components:
         outgoing_threshold:
           type: integer
           format: int64
-        channel_pubkey:
+        pubkey:
           $ref: '#/components/schemas/PubKey'
-        short_channel_id:
+        channel_id:
           $ref: "#/components/schemas/ShortChannelId"
+        type:
+          $ref:  "#/components/schemas/LiquidityRuleType"
+
+    LiquidityParameters:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiquidityRule'
+        fee_ppm:
+          type: integer
+          description: >
+            The parts per million of swap amount that is allowed to be allocated to swap fees.
+            This valie is applied across swap categories and may not be set in conjunction with sweep fee rate,
+            swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
+        sweep_fee_rate_sat_per_vbyte:
+          type: integer
+          description: >
+            The limit we place on our estimated sweep cost for a swap in sat/vByte. If the estimated fee for our
+            sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
+        max_swap_fee_ppm:
+          type: integer
+          description: >
+            The maximum fee paid to the server for facilitating the swap, expressed
+            as parts per million of the swap volume.
+        max_routing_fee_ppm:
+          type: integer
+        max_prepay_routing_fee_ppm:
+          type: integer
+        max_prepay_sat:
+          type: integer
+          format: int64
+        max_miner_fee_sat:
+          type: integer
+          format: int64
+        sweep_conf_target:
+          type: integer
+          description: The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within.
+        failure_backoff_sec:
+          type: integer
+          description: >
+            The amount of time we require to pass since a channel was part of a failed swap due to off chain payment
+            failure until it will be considered for swap suggestions again, expressed in seconds.
+        autoloop:
+          type: boolean
+          description: >
+            Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
+            and total expenditure will be limited to the autoloop budget.
+        autoloop_budget_sat:
+          type: integer
+          format: int64
+        autoloop_budget_start_sec:
+          type: integer
+          description: >
+            The start time for autoloop budget, expressed as a unix timestamp in seconds.
+            If this value is 0, the budget will be applied for all automatically dispatched swaps.
+            Swaps that were completed before this date will not be included in budget calculations.
+        auto_max_in_flight:
+          type: integer
+          description: The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.
+        min_swap_amount:
+          type: integer
+          format: int64
+          description: >
+            The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
+        max_swap_amount:
+          type: integer
+          format: int64
+          description: The maximum swap amount, expressed in satoshis.
+
+    SetLiquidityParametersRequest:
+      type: object
+      properties:
+        parameters:
+          $ref: "#/components/schemas/LiquidityParameters"
+
+    Disqualified:
+      type: object
+      properties:
+        channel_id:
+          $ref: '#/components/schemas/ShortChannelId'
+        pubkey:
+          $ref: "#/components/schemas/PubKey"
+        reason:
+          enum:
+            - Unknown
+            - BudgetNotStarted
+            - SweepFeesTooHigh
+            - BudgetElapsed
+            - InFlightLimitReached
+            - SwapFeeTooHigh
+            - MinerFeeTooHigh
+            - PrepayTooHigh
+            - FailureBackoff
+            - LoopOutAlreadyInTheChannel
+            - LoopInAlreadyInTheChannel
+            - LiquidityOk
+            - BudgetInsufficient
+            - FeePPMInsufficient
+
+    SuggestSwapsResponse:
+      type: object
+      properties:
+        loop_out:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoopOutRequest"
+        loop_in:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoopInRequest"
+        disqualified:
+          type: array
+          items:
+            $ref:  "#/components/schemas/Disqualified"

@@ -181,6 +181,16 @@ module Extensions =
         LocalBalance = o.LocalBalance |> Money.Satoshis
         NodeId = o.RemotePubkey |> PubKey
       }
+  type LndClient.HopHint with
+    member h.ToGrpcType() =
+      let lnHopHint = HopHint()
+      lnHopHint.NodeId <- h.NodeId.Value.ToHex()
+      lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
+      lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
+      lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
+      lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
+      lnHopHint
+
   type LndClient.ChannelEventUpdate
     with
     static member FromGrpcType(r: ChannelEventUpdate) =
@@ -254,7 +264,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
         return BitcoinAddress.Create(m.Address, network)
       }
-    member this.GetHodlInvoice(paymentHash, value, expiry, routeHint, memo, ct) =
+    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = AddHoldInvoiceRequest()
@@ -264,18 +274,10 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         req.Value <- value.Satoshi
         req.Expiry <- expiry.Seconds |> int64
         req.Memo <- memo
-        let routeHint =
-          let r = RouteHint()
-          for h in routeHint.Hops do
-            let lnHopHint = HopHint()
-            lnHopHint.NodeId <- h.NodeId.Value.ToHex()
-            lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
-            lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
-            lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
-            lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
-            r.HopHints.Add(lnHopHint)
-          r
-        req.RouteHints.Add(routeHint)
+        for r in routeHints do
+          let lnRouteHint = RouteHint()
+          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+          req.RouteHints.Add(lnRouteHint)
         let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
       }
@@ -309,25 +311,17 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref }
         )
 
-    member this.GetInvoice(paymentPreimage, amount, expiry, routeHint, memo, ct) =
+    member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
       task {
         let req = Invoice()
         let ct = defaultArg ct CancellationToken.None
         req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
         req.Value <- amount.Satoshi
         req.Expiry <- expiry.Seconds |> int64
-        let routeHint =
-          let r = RouteHint()
-          for h in routeHint.Hops do
-            let lnHopHint = HopHint()
-            lnHopHint.NodeId <- h.NodeId.Value.ToHex()
-            lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
-            lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
-            lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
-            lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
-            r.HopHints.Add(lnHopHint)
-          r
-        req.RouteHints.Add(routeHint)
+        for r in routeHints do
+          let lnRouteHint = RouteHint()
+          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+          req.RouteHints.Add(lnRouteHint)
         req.Memo <- memo
         let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
         return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
@@ -452,7 +446,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           p.TimeLockDelta |> uint16 |> BlockHeightOffset16
         MinHTLC = p.MinHtlc |> LNMoney.MilliSatoshis
         FeeBase = p.FeeBaseMsat |> LNMoney.MilliSatoshis
-        FeeRatePerMillionths = p.FeeRateMilliMsat |> LNMoney.MilliSatoshis
+        FeeProportionalMillionths = p.FeeRateMilliMsat |> LNMoney.MilliSatoshis
       }
       return {
         GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis
