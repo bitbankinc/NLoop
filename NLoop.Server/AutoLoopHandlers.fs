@@ -32,7 +32,8 @@ let getLiquidityParams : HttpHandler =
       AutoLoopBudgetStartSecond = failwith "todo"
       AutoMaxInFlight = failwith "todo"
       MinSwapAmount = failwith "todo"
-      MaxSwapAmount = failwith "todo" }
+      MaxSwapAmount = failwith "todo"
+      PairId = failwith "todo" }
     return! json resp next ctx
   }
 

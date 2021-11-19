@@ -56,6 +56,9 @@ type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: 
       logger.LogError($"{ex}")
   }
 
+  interface IBlockChainListener with
+    member this.CurrentHeight = this.CurrentHeight
+
   interface ISwapEventListener with
     member this.RegisterSwap(id: SwapId) =
       if not <| swaps.TryAdd(id, ()) then

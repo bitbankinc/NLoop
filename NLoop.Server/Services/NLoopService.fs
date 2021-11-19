@@ -21,6 +21,7 @@ open NLoop.Server.Projections
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
+
   [<Extension>]
   static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
       let test = defaultArg test false
@@ -52,16 +53,32 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
-
-          .AddSingleton<ISwapEventListener, BoltzListener>()
-          .AddSingleton<ISwapEventListener, BlockchainListener>()
           .AddHostedService<SwapEventListeners>()
-
-          .AddSingleton<SwapStateProjection>()
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<SwapStateProjection>() :> IHostedService
-          )
           |> ignore
+
+      this
+        .AddSingleton<ISwapEventListener, BoltzListener>()
+        .AddSingleton<ISwapEventListener, BlockchainListener>()
+        .AddSingleton<IBlockChainListener, BlockchainListener>()
+        |> ignore
+
+      this
+        .AddSingleton<SwapStateProjection>()
+        .AddSingleton<IHostedService>(fun p ->
+          p.GetRequiredService<SwapStateProjection>() :> IHostedService
+        )
+
+        .AddSingleton<RecentSwapFailureProjection>()
+        .AddSingleton<IHostedService>(fun p ->
+          p.GetRequiredService<RecentSwapFailureProjection>() :> IHostedService
+        )
+
+        .AddSingleton<AutoLoopManager>()
+        .AddSingleton<IHostedService>(fun p ->
+          p.GetRequiredService<AutoLoopManager>() :> IHostedService
+        )
+        |> ignore
+
       this
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->

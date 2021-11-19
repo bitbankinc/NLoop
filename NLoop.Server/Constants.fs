@@ -61,3 +61,5 @@ module Constants =
   /// Used in loop out.
   let [<Literal>] DefaultSweepConfTarget = 8
 
+  /// Minimum confirmation target user can specify.
+  let [<Literal>] MinConfTarget = 2

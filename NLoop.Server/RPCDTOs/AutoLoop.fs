@@ -78,6 +78,9 @@ type LiquidityParameters = {
   MinSwapAmount: Money
   [<JsonPropertyName "max_swap_amount">]
   MaxSwapAmount: Money
+
+  [<JsonPropertyName "pair_id">]
+  PairId: PairId
 }
 
 type SetLiquidityParametersRequest = {

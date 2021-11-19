@@ -34,9 +34,10 @@ module private Helpers =
   let getLNDClient (path) port  =
     let (uri, lndCertThumbprint, lndMacaroonPath) = getLndRestSettings path port
     let settings =
-      LndRestSettings.Create(uri, lndCertThumbprint |> Some, None, Some <| lndMacaroonPath, false)
+      LndGrpcSettings.Create(uri, lndCertThumbprint |> Some, None, Some <| lndMacaroonPath, false)
       |> function | Ok x -> x | Error e -> failwith e
-    LndNSwagClient(Network.RegTest, settings)
+    NLoopLndGrpcClient(settings, Network.RegTest)
+
 type Clients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
@@ -84,7 +85,7 @@ type Clients = {
           CloseAddress = None }
       let! r = this.User.Lnd.OpenChannel(req) |> Async.AwaitTask
       match r with
-      | Ok () ->
+      | Ok _fundingOutPoint ->
         let rec waitToSync(count) = async {
           do! Async.Sleep(500)
           let! btcAddr = this.Bitcoin.GetNewAddressAsync() |> Async.AwaitTask

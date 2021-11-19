@@ -9,6 +9,8 @@ module internal NLoop.Server.Labels
   let [<Literal>] autoOut = "autoloop-out"
   let [<Literal>] autoIn = "autoloop-in"
 
+  let [<Literal>] MaxLength = 500
+
   let autoLoopLabel(category: Swap.Category) =
     match category with
     | Swap.Category.Out ->

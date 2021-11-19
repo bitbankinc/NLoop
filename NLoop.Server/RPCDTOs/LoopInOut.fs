@@ -2,14 +2,31 @@ namespace NLoop.Server.DTOs
 
 open System.Text.Json.Serialization
 open DotNetLightning.Utils
-open DotNetLightning.Utils.Primitives
-open Giraffe
-open Giraffe.HttpStatusCodeHandlers
-open Giraffe.ModelValidation
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open FsToolkit.ErrorHandling
+
+[<AutoOpen>]
+module private ValidationHelpers =
+  let validateLabel(maybeLabel: string option) =
+    match maybeLabel with
+    | None -> Ok()
+    | Some l ->
+      if l.Length > Labels.MaxLength then
+        Error $"Label's length must not be longer than {Labels.MaxLength}. it was {l.Length}"
+      elif l.StartsWith Labels.reserved then
+        Error $"{Labels.reserved} is a reserved prefix"
+      else
+        Ok()
+
+  let checkConfTarget maybeConfTarget =
+    match maybeConfTarget with
+    | None -> Ok()
+    | Some x ->
+      Constants.MinConfTarget <= x
+      |> Result.requireTrue $"A confirmation target must be larger than {Constants.MinConfTarget - 1}, it was {x}"
 
 type LoopInLimits = {
   MaxSwapFee: Money
@@ -47,6 +64,10 @@ type LoopInRequest = {
       // the last hop. (it is up to the counterparty)
       None
 
+  member this.PairIdValue =
+    this.PairId
+    |> Option.defaultValue PairId.Default
+
   member this.Limits = {
     MaxSwapFee =
       this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
@@ -60,6 +81,10 @@ type LoopInRequest = {
         LndClient.RouteHint.Hops = h.Hops |> Array.map(fun r -> r.LndClientHopHint)
       }
     )
+  member this.Validate() =
+    (this.HtlcConfTarget |> ValueOption.toNullable |> Option.ofNullable) |> checkConfTarget
+    |> Result.mapError(fun e -> [e])
+
 and RouteHint = {
   Hops: HopHint[]
 }
@@ -87,6 +112,7 @@ and HopHint = {
     FeeProportionalMillionths = this.FeeProportionalMillionths |> uint32
     CLTVExpiryDelta = this.CltvExpiryDelta |> uint16 |> BlockHeightOffset16
   }
+
 
 
 type LoopOutLimits = {
@@ -158,6 +184,25 @@ type LoopOutRequest = {
       |> Option.defaultValue(Constants.DefaultHtlcConf)
       |> uint32 |> BlockHeightOffset32
   }
+  member this.PairIdValue =
+    this.PairId
+    |> Option.defaultValue PairId.Default
+
+  member this.Validate(opts: NLoopOptions): Result<unit, string list> =
+    let struct (onChain, _offChain) = this.PairIdValue
+    let checkAddressHasCorrectNetwork =
+      match this.Address with
+      | Some a when a.Network <> opts.GetNetwork(onChain) ->
+        Error $"on-chain address must be the one for network: {opts.GetNetwork(onChain)}. It was {a.Network}"
+      | _ ->
+        Ok()
+
+    validation {
+      let! () = checkAddressHasCorrectNetwork
+      and! () = checkConfTarget(this.HtlcConfTarget)
+      and! () = validateLabel this.Label
+      return ()
+    }
 
 type LoopInResponse = {
   /// Unique id for the swap.

@@ -78,14 +78,21 @@ let handleLoopOutCore (req: LoopOutRequest) =
           return! json response next ctx
     }
 
+let private validateLoopOut opts (req: LoopOutRequest) =
+  fun (next: HttpFunc) (ctx: HttpContext) ->
+    match req.Validate(opts) with
+    | Ok() ->
+      next ctx
+    | Error errorMsg ->
+      validationError400 errorMsg next ctx
+
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let pairId =
-      req.PairId
-      |> Option.defaultValue PairId.Default
     let struct(_baseAsset, quoteAsset) =
-      pairId
-    (checkBlockchainIsSyncedAndSetTipHeight pairId
+      req.PairIdValue
+    let opts = ctx.GetService<IOptions<NLoopOptions>>()
+    (validateLoopOut opts.Value req
+     >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
      >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
      >=> validateFeeLimitAgainstServerQuote req
      >=> handleLoopOutCore req)
@@ -96,20 +103,20 @@ let handleLoopInCore (loopIn: LoopInRequest) =
     let actor = ctx.GetService<SwapActor>()
     let height =
       let struct(_, quoteAsset) =
-        loopIn.PairId
-        |> Option.defaultValue PairId.Default
+        loopIn.PairIdValue
       ctx.GetBlockHeight quoteAsset
     actor.ExecNewLoopIn(loopIn, height)
     |> Task.bind(function | Ok resp -> json resp next ctx | Error e -> (error503 e) next ctx)
 
-let handleLoopIn (loopIn: LoopInRequest) =
-  fun (next : HttpFunc) (ctx : HttpContext) ->
-    let handle = (handleLoopInCore loopIn)
-    let pairId =
-      loopIn.PairId
-      |> Option.defaultValue PairId.Default
-    (checkBlockchainIsSyncedAndSetTipHeight pairId
-       >=> validateLoopInFeeLimitAgainstServerQuote loopIn
-       >=> handle)
+let private validateLoopIn (req: LoopInRequest) =
+  fun (next: HttpFunc) (ctx: HttpContext) ->
+    match req.Validate() with
+    | Ok() ->
       next ctx
+    | Error errorMsg ->
+      validationError400 errorMsg next ctx
 
+let handleLoopIn (loopIn: LoopInRequest) =
+  (checkBlockchainIsSyncedAndSetTipHeight loopIn.PairIdValue
+    >=> validateLoopInFeeLimitAgainstServerQuote loopIn
+     >=> (handleLoopInCore loopIn))

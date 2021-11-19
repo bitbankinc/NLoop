@@ -628,6 +628,10 @@ components:
           type: integer
           format: int64
           description: The maximum swap amount, expressed in satoshis.
+        pair_id:
+          $ref: '#/components/schemas/pairId'
+      required:
+        - "pair_id"
 
     SetLiquidityParametersRequest:
       type: object

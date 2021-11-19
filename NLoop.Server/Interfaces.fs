@@ -21,6 +21,9 @@ type ILightningClientProvider =
   abstract member TryGetClient: crypto: SupportedCryptoCode -> INLoopLightningClient option
   abstract member GetAllClients: unit -> INLoopLightningClient seq
 
+type IBlockChainListener =
+  abstract member CurrentHeight: BlockHeight
+
 [<AbstractClass;Sealed;Extension>]
 type ILightningClientProviderExtensions =
   [<Extension>]

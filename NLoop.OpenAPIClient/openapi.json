@@ -703,6 +703,9 @@
       },
       "LiquidityParameters": {
         "type": "object",
+        "required": [
+          "pair_id"
+        ],
         "properties": {
           "rules": {
             "type": "array",
@@ -769,6 +772,9 @@
             "type": "integer",
             "description": "The maximum swap amount, expressed in satoshis.",
             "format": "int64"
+          },
+          "pair_id": {
+            "$ref": "#/components/schemas/pairId"
           }
         }
       },
