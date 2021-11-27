@@ -81,6 +81,9 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   member this.GetPairsAsync([<O;D(null)>] ct: CancellationToken): Task<GetPairsResponse> =
     this.SendCommandAsync<_>("getpairs", HttpMethod.Get, null, ct)
 
+  member this.GetTimeoutsAsync([<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetTimeOutsResponse>("timeouts", HttpMethod.Get, null, ct)
+
   member this.GetNodesAsync([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
 

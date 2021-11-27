@@ -45,7 +45,7 @@ module CustomHandlers =
 
       let opts = ctx.GetService<IOptions<NLoopOptions>>()
       let ccs =
-        let struct(ourCryptoCode, theirCryptoCode) = cryptoCodePair
+        let struct (ourCryptoCode, theirCryptoCode) = cryptoCodePair.Value
         [ourCryptoCode; theirCryptoCode] |> Seq.distinct
       let mutable errorMsg = null
       for cc in ccs do
@@ -98,18 +98,14 @@ module CustomHandlers =
 
   let internal validateFeeLimitAgainstServerQuote(req: LoopOutRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) -> task {
-      let pairId =
-        req.PairId
-        |> Option.defaultValue PairId.Default
       let boltzClient = ctx.GetService<BoltzClient>()
       let! quote =
         let r = { LoopOutQuoteRequest.Amount = req.Amount
                   SweepConfTarget =
                     req.SweepConfTarget
-                    |> ValueOption.defaultValue(Constants.DefaultSweepConfTarget)
-                    |> uint32
-                    |> BlockHeightOffset32
-                  pair = pairId }
+                    |> ValueOption.map (uint32 >> BlockHeightOffset32)
+                    |> ValueOption.defaultValue(req.PairIdValue.DefaultLoopOutParameters.SweepConfTarget)
+                  Pair = req.PairIdValue }
         boltzClient.GetLoopOutQuote(r)
       let r =
         quote.Validate(req.Limits)
@@ -126,7 +122,7 @@ module CustomHandlers =
         |> Option.defaultValue PairId.Default
       let boltzClient = ctx.GetService<BoltzClient>()
       let! quote =
-        let r = { LoopInQuoteRequest.Amount = req.Amount }
+        let r = { LoopInQuoteRequest.Amount = req.Amount; Pair = pairId }
         boltzClient.GetLoopInQuote(r)
       let r = quote.Validate(req.Limits) |> Result.mapError(fun e -> e.Message)
       match r with

@@ -64,15 +64,27 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
+[<Struct>]
+type PairId =
+  PairId of (struct (SupportedCryptoCode * SupportedCryptoCode))
+  with
+  member this.Value =
+    match this with
+    | PairId(a, b) -> struct(a, b)
+
+  member this.Base = let struct (b, _)= this.Value in b
+  member this.Quote = let struct(_, q) = this.Value in q
 
 [<RequireQualifiedAccess>]
 module PairId =
-  let Default = struct (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+  let Default = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
 
   let toString (pairId: inref<PairId>) =
-    let struct (a, b) = pairId
+    let struct (a, b)= pairId.Value
     $"{a}/{b}"
+
+  let toStringFromVal(pairId: PairId) =
+    toString(&pairId)
 
 type SwapId = SwapId of string
   with

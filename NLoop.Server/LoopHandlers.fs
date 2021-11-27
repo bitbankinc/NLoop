@@ -30,8 +30,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
       let struct(baseCryptoCode, _quoteCryptoCode) =
-        req.PairId
-        |> Option.defaultValue PairId.Default
+        req.PairIdValue.Value
       let height = ctx.GetBlockHeight(baseCryptoCode)
       let actor = ctx.GetService<SwapActor>()
       let obs =
@@ -78,22 +77,20 @@ let handleLoopOutCore (req: LoopOutRequest) =
           return! json response next ctx
     }
 
-let private validateLoopOut opts (req: LoopOutRequest) =
-  fun (next: HttpFunc) (ctx: HttpContext) ->
+let private validateLoopOutRequest opts (req: LoopOutRequest) =
+  fun (next: HttpFunc) ->
     match req.Validate(opts) with
     | Ok() ->
-      next ctx
+      next
     | Error errorMsg ->
-      validationError400 errorMsg next ctx
+      validationError400 errorMsg next
 
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let struct(_baseAsset, quoteAsset) =
-      req.PairIdValue
     let opts = ctx.GetService<IOptions<NLoopOptions>>()
-    (validateLoopOut opts.Value req
+    (validateLoopOutRequest opts.Value req
      >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
-     >=> checkWeHaveRouteToCounterParty quoteAsset req.Amount
+     >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount
      >=> validateFeeLimitAgainstServerQuote req
      >=> handleLoopOutCore req)
       next ctx
@@ -103,7 +100,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
     let actor = ctx.GetService<SwapActor>()
     let height =
       let struct(_, quoteAsset) =
-        loopIn.PairIdValue
+        loopIn.PairIdValue.Value
       ctx.GetBlockHeight quoteAsset
     actor.ExecNewLoopIn(loopIn, height)
     |> Task.bind(function | Ok resp -> json resp next ctx | Error e -> (error503 e) next ctx)

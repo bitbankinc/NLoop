@@ -121,14 +121,19 @@ and ServerLimit = {
   Maximal: int64
   Minimal: int64
   MaximalZeroConf: BaseAndQuote<int64>
-  MaxCLTVDelta: int64
 }
 and BaseAndQuote<'T> = {
   BaseAsset: 'T
   QuoteAsset: 'T
 }
 
-
+type GetTimeOutsResponse = {
+  Timeouts: Map<string, TimeoutInfo>
+}
+and TimeoutInfo = {
+  Base: int
+  Quote: int
+}
 
 type GetNodesResponse = {
   Nodes: Map<string, NodeInfo>

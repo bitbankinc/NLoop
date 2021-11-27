@@ -28,7 +28,7 @@ let private handle (host: IHost) =
       r.Pair_id <- pr.ValueForOption<string>("pair_id")
       r.Address <- pr.ValueForOption<string>("address")
       r.Amount <- pr.ValueForOption<int64>("amount")
-      r.Htlc_conf_target <- pr.ValueForOption<int>("htlc-conf-target")
+      r.Swap_tx_conf_requirement <- pr.ValueForOption<int>("swap-tx-conf-requirement")
       r.Label <- pr.ValueForOption<string>("label")
       r
 
@@ -50,9 +50,10 @@ let command: Command =
     .AddPairIdOption()
     .AddAddressOption()
     .AddAmountOption()
-    .AddConfTargetOption()
+    .AddConfRequirementOption()
     .AddLabelOption()
     |> ignore
+
   command.Handler <-
     CommandHandler.Create(Func<IHost,_>(handle))
   command

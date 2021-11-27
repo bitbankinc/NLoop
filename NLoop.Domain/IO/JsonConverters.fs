@@ -126,15 +126,14 @@ type BitcoinAddressJsonConverter(n: Network) =
 type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
   override this.Write(writer, value, _options) =
-    let (struct (bid, ask)) = value
+    let (struct (bid, ask)) = value.Value
     $"{bid.ToString()}/{ask.ToString()}"
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
-
     let v = reader.GetString()
     let s = v.Split("/")
     if (s.Length <> 2) then raise <| JsonException() else
-    (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
+    PairId (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
 
 type ScriptJsonConverter() =
   inherit JsonConverter<Script>()

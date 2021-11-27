@@ -33,7 +33,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           match e.Data with
           | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice, paymentParams) -> Some(swapId, pairId, invoice, paymentParams)
           | _ -> None)
-        |> Observable.flatmapTask(fun (swapId, struct(_baseAsset, quoteAsset), invoice, paymentParams) ->
+        |> Observable.flatmapTask(fun (swapId, PairId(_, quoteAsset), invoice, paymentParams) ->
           task {
             try
               let! pr =

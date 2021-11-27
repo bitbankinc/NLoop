@@ -21,11 +21,12 @@
     <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Helpers.fs" />
     <Compile Include="Constants.fs" />
     <Compile Include="Labels.fs" />
-    <Compile Include="Helpers.fs" />
     <Compile Include="NLoopOptions.fs" />
     <Compile Include="Extensions.fs" />
+    <Compile Include="CryptoCodeExtensions.fs" />
     <Compile Include="RPCDTOs\Client.fs" />
     <Compile Include="RPCDTOs\Common.fs" />
     <Compile Include="RPCDTOs\LoopInOut.fs" />
@@ -47,6 +48,7 @@
     <Compile Include="Services\BoltzListener.fs" />
     <Compile Include="Services\BlockchainListener.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
+    <Compile Include="Services\AutoLoopManager.Func.fs" />
     <Compile Include="Services\SwapEventListeners.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />

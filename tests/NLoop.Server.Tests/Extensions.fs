@@ -13,7 +13,6 @@ open FSharp.Control.Tasks
 
 open DotNetLightning.Utils
 open LndClient
-open Helpers
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
@@ -21,6 +20,7 @@ open NBitcoin
 open NBitcoin.RPC
 open NLoop.Server
 open NLoop.Server.Services
+open NLoop.Server.Tests.Helpers
 open NLoopClient
 
 [<AutoOpen>]

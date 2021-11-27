@@ -49,35 +49,34 @@ type NLoopExtensions() =
 
       if (not <| test) then
         this
-          .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+          .AddHostedService<SwapEventListeners>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
-          .AddHostedService<SwapEventListeners>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<SwapStateProjection>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<RecentSwapFailureProjection>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<AutoLoopManager>() :> IHostedService
+          )
           |> ignore
 
       this
+        .AddSingleton<RecentSwapFailureProjection>()
+        .AddSingleton<SwapStateProjection>()
+        .AddSingleton<AutoLoopManager>()
+        |> ignore
+
+      this
+        .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
         .AddSingleton<ISwapEventListener, BlockchainListener>()
         .AddSingleton<IBlockChainListener, BlockchainListener>()
         |> ignore
 
-      this
-        .AddSingleton<SwapStateProjection>()
-        .AddSingleton<IHostedService>(fun p ->
-          p.GetRequiredService<SwapStateProjection>() :> IHostedService
-        )
-
-        .AddSingleton<RecentSwapFailureProjection>()
-        .AddSingleton<IHostedService>(fun p ->
-          p.GetRequiredService<RecentSwapFailureProjection>() :> IHostedService
-        )
-
-        .AddSingleton<AutoLoopManager>()
-        .AddSingleton<IHostedService>(fun p ->
-          p.GetRequiredService<AutoLoopManager>() :> IHostedService
-        )
-        |> ignore
 
       this
         .AddHttpClient<BoltzClient>()

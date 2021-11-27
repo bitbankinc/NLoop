@@ -1049,9 +1049,9 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; The number of confirmation before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop.</summary>
-        [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int? Htlc_conf_target { get; set; } = 0;
+        /// <summary>&lt; The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop. Default number depends on the asset type.</summary>
+        [Newtonsoft.Json.JsonProperty("swap_tx_conf_requirement", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Swap_tx_conf_requirement { get; set; }
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

@@ -21,12 +21,12 @@ module private ValidationHelpers =
       else
         Ok()
 
-  let checkConfTarget maybeConfTarget =
+  let inline checkConfTarget maybeConfTarget =
     match maybeConfTarget with
-    | None -> Ok()
-    | Some x ->
-      Constants.MinConfTarget <= x
-      |> Result.requireTrue $"A confirmation target must be larger than {Constants.MinConfTarget - 1}, it was {x}"
+    | ValueNone -> Ok()
+    | ValueSome x ->
+      Constants.MinConfTarget <= (uint32 x)
+      |> Result.requireTrue $"A confirmation target must be larger than {Constants.MinConfTarget - 1u}, it was {x}"
 
 type LoopInLimits = {
   MaxSwapFee: Money
@@ -68,12 +68,22 @@ type LoopInRequest = {
     this.PairId
     |> Option.defaultValue PairId.Default
 
-  member this.Limits = {
-    MaxSwapFee =
-      this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
-    MaxMinerFee =
-      this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
+  member this.Limits =
+    let defaultParameters = this.PairIdValue.DefaultLoopInParameters
+    {
+      MaxSwapFee =
+        this.MaxSwapFee
+        |> ValueOption.defaultValue(ppmToSat(this.Amount, defaultParameters.MaxSwapFeePPM))
+      MaxMinerFee =
+        this.MaxMinerFee
+        |> ValueOption.defaultValue(defaultParameters.MaxMinerFee)
+    }
+
+  member this.SwapGroup = {
+    Swap.Group.PairId = this.PairIdValue
+    Swap.Group.Category = Swap.Category.In
   }
+
   member this.LndClientRouteHints =
     this.RouteHints
     |> Array.map(fun h ->
@@ -82,7 +92,8 @@ type LoopInRequest = {
       }
     )
   member this.Validate() =
-    (this.HtlcConfTarget |> ValueOption.toNullable |> Option.ofNullable) |> checkConfTarget
+    this.HtlcConfTarget
+    |> checkConfTarget
     |> Result.mapError(fun e -> [e])
 
 and RouteHint = {
@@ -113,15 +124,13 @@ and HopHint = {
     CLTVExpiryDelta = this.CltvExpiryDelta |> uint16 |> BlockHeightOffset16
   }
 
-
-
 type LoopOutLimits = {
   MaxPrepay: Money
   MaxSwapFee: Money
   MaxRoutingFee: Money
   MaxPrepayRoutingFee: Money
   MaxMinerFee: Money
-  HTLCConfTarget: BlockHeightOffset32
+  SwapTxConfRequirement: BlockHeightOffset32
 }
 
 type LoopOutRequest = {
@@ -138,8 +147,8 @@ type LoopOutRequest = {
   [<JsonPropertyName "amount">]
   Amount: Money
   /// Confirmation target before we make an offer. zero-conf by default.
-  [<JsonPropertyName "htlc_conf_target">]
-  HtlcConfTarget: int option
+  [<JsonPropertyName "swap_tx_conf_requirement">]
+  SwapTxConfRequirement: int option
   Label: string option
 
   [<JsonPropertyName "max_swap_routing_fee">]
@@ -163,33 +172,44 @@ type LoopOutRequest = {
   with
 
   member this.AcceptZeroConf =
-    match this.HtlcConfTarget with
+    match this.SwapTxConfRequirement with
     | None
     | Some 0 -> true
     | _ -> false
 
-  member this.Limits = {
-    MaxPrepay =
-      this.MaxPrepayAmount |> ValueOption.defaultToVeryHighFee
-    MaxSwapFee =
-      this.MaxSwapFee |> ValueOption.defaultToVeryHighFee
-    MaxRoutingFee =
-      this.MaxSwapRoutingFee |> ValueOption.defaultToVeryHighFee
-    MaxPrepayRoutingFee =
-      this.MaxPrepayRoutingFee |> ValueOption.defaultToVeryHighFee
-    MaxMinerFee =
-      this.MaxMinerFee |> ValueOption.defaultToVeryHighFee
-    HTLCConfTarget =
-      this.HtlcConfTarget
-      |> Option.defaultValue(Constants.DefaultHtlcConf)
-      |> uint32 |> BlockHeightOffset32
-  }
-  member this.PairIdValue =
+  member this.Limits =
+    let d = this.PairIdValue.DefaultLoopOutParameters
+    {
+      LoopOutLimits.MaxPrepay =
+        this.MaxPrepayAmount
+        |> ValueOption.defaultValue(d.MaxPrepay)
+      MaxSwapFee =
+        this.MaxSwapFee
+        |> ValueOption.defaultValue(ppmToSat(this.Amount, d.MaxSwapFeePPM))
+      MaxRoutingFee =
+        this.MaxSwapRoutingFee
+        |> ValueOption.defaultValue(d.MaxRoutingFee)
+      MaxPrepayRoutingFee =
+        this.MaxPrepayRoutingFee
+        |> ValueOption.defaultValue(d.MaxPrepayRoutingFee)
+      MaxMinerFee =
+        this.MaxMinerFee
+        |> ValueOption.defaultValue(d.MaxMinerFee)
+      SwapTxConfRequirement =
+        this.SwapTxConfRequirement
+        |> Option.map(uint32 >> BlockHeightOffset32)
+        |> Option.defaultValue(d.SwapTxConfRequirement)
+    }
+  member this.PairIdValue: PairId =
     this.PairId
     |> Option.defaultValue PairId.Default
 
+  member this.SwapGroup: Swap.Group = {
+    Swap.Group.PairId = this.PairIdValue
+    Swap.Group.Category = Swap.Category.Out
+  }
   member this.Validate(opts: NLoopOptions): Result<unit, string list> =
-    let struct (onChain, _offChain) = this.PairIdValue
+    let struct (onChain, _offChain) = this.PairIdValue.Value
     let checkAddressHasCorrectNetwork =
       match this.Address with
       | Some a when a.Network <> opts.GetNetwork(onChain) ->
@@ -199,7 +219,7 @@ type LoopOutRequest = {
 
     validation {
       let! () = checkAddressHasCorrectNetwork
-      and! () = checkConfTarget(this.HtlcConfTarget)
+      and! () = checkConfTarget(this.SweepConfTarget)
       and! () = validateLabel this.Label
       return ()
     }

@@ -85,10 +85,10 @@ type LoopOut = {
 }
   with
   member this.BaseAssetNetwork =
-    let struct (cryptoCode, _) = this.PairId
+    let struct (cryptoCode, _) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
   member this.QuoteAssetNetwork =
-    let struct (_, cryptoCode) = this.PairId
+    let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
   member this.AcceptZeroConf =
@@ -147,10 +147,10 @@ type LoopIn = {
 }
   with
   member this.BaseAssetNetwork =
-    let struct (cryptoCode, _) = this.PairId
+    let struct (cryptoCode, _) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
   member this.QuoteAssetNetwork =
-    let struct (_, cryptoCode) = this.PairId
+    let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
   member this.PaymentRequest =

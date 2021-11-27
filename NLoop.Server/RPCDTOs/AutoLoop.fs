@@ -10,18 +10,32 @@ open NLoop.Server.DTOs
 [<RequireQualifiedAccess>]
 type SwapDisqualifiedReason =
   | BudgetNotStarted
-  | SweepFeesTooHigh
+  | SweepFeesTooHigh of estimation: FeeRate * ourLimit: FeeRate
   | BudgetElapsed
   | InFlightLimitReached
-  | SwapFeeTooHigh
-  | MinerFeeTooHigh
-  | PrepayTooHigh
+  | SwapFeeTooHigh of serverRequirement: Money * ourLimit: Money
+  | MinerFeeTooHigh of serverRequirement: Money * ourLimit: Money
+  | PrepayTooHigh of serverRequirement: Money * ourLimit: Money
   | FailureBackoff
   | LoopOutAlreadyInTheChannel
   | LoopInAlreadyInTheChannel
   | LiquidityOk
   | BudgetInsufficient
-  | FeePPMInsufficient
+  | FeePPMInsufficient of required: Money * ourLimit: Money
+  with
+  member this.Message =
+    match this with
+    | SweepFeesTooHigh(estimation, ourLimit) ->
+      $"Current estimated FeeRate is {estimation.SatoshiPerByte |> int64} sat/vbyte. But our limit is {ourLimit.SatoshiPerByte |> int64} sats/vbyte"
+    | MinerFeeTooHigh (serverRequirement, ourLimit)  ->
+      $"miner fee: {serverRequirement} greater than our fee limit {ourLimit}"
+    | SwapFeeTooHigh(serverRequirement, ourLimit) ->
+      $"swap fee: {serverRequirement} greater than our fee limit {ourLimit}"
+    | PrepayTooHigh(serverRequirement, ourLimit) ->
+      $"prepay amount: {serverRequirement} greater than our fee limit {ourLimit}"
+    | FeePPMInsufficient(required, ourLimit) ->
+      $"Total required fees for the swap: ({required}) greater than our fee limit ({ourLimit})"
+    | x -> $"{x}"
 
 type LiquidityRuleType =
   | Threshold

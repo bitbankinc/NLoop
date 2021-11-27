@@ -108,9 +108,10 @@ type SwapActor(broadcaster: IBroadcaster,
       let claimKey = new Key()
       let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
       let preimageHash = preimage.Hash
-      let struct(baseCryptoCode, quoteCryptoCode) as pairId =
+      let pairId =
         req.PairId
         |> Option.defaultValue PairId.Default
+      let struct(baseCryptoCode, quoteCryptoCode) = pairId.Value
 
       let n = opts.Value.GetNetwork(baseCryptoCode)
       let! outResponse =
@@ -150,20 +151,20 @@ type SwapActor(broadcaster: IBroadcaster,
         MaxMinerFee = req.Limits.MaxMinerFee
         SweepConfTarget =
           req.SweepConfTarget
-          |> ValueOption.defaultValue Constants.DefaultSweepConfTarget
-          |> uint |> BlockHeightOffset32
+          |> ValueOption.map(uint >> BlockHeightOffset32)
+          |> ValueOption.defaultValue pairId.DefaultLoopOutParameters.SweepConfTarget
         IsClaimTxConfirmed = false
         IsOffchainOfferResolved = false
         Cost = SwapCost.Zero
         LoopOut.SwapTxConfRequirement =
-          req.Limits.HTLCConfTarget
+          req.Limits.SwapTxConfRequirement
         LockupTransactionHeight = None
       }
       match outResponse.Validate(preimageHash.Value,
                                  claimKey.PubKey,
                                  req.Amount,
-                                 req.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
-                                 req.MaxPrepayAmount |> ValueOption.defaultToVeryHighFee,
+                                 req.Limits.MaxSwapFee,
+                                 req.Limits.MaxPrepay,
                                  n) with
       | Error e ->
         return! Error e
@@ -183,7 +184,7 @@ type SwapActor(broadcaster: IBroadcaster,
         loopIn.PairId
         |> Option.defaultValue PairId.Default
       let struct(baseCryptoCode, quoteCryptoCode) =
-        pairId
+        pairId.Value
       let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
 
       let refundKey = new Key()
@@ -227,7 +228,7 @@ type SwapActor(broadcaster: IBroadcaster,
         match inResponse.Validate(invoice.PaymentHash.Value,
                                   refundKey.PubKey,
                                   loopIn.Amount,
-                                  loopIn.MaxSwapFee |> ValueOption.defaultToVeryHighFee,
+                                  loopIn.Limits.MaxSwapFee,
                                   onChainNetwork) with
         | Error e ->
           do! this.Execute(swapId, Swap.Command.MarkAsErrored(e))
@@ -249,8 +250,8 @@ type SwapActor(broadcaster: IBroadcaster,
             Label = loopIn.Label |> Option.defaultValue String.Empty
             HTLCConfTarget =
               loopIn.HtlcConfTarget
-              |> ValueOption.defaultValue Constants.DefaultHtlcConfTarget
-              |> uint |> BlockHeightOffset32
+              |> ValueOption.map(uint >> BlockHeightOffset32)
+              |> ValueOption.defaultValue (pairId.DefaultLoopInParameters.HTLCConfTarget)
             Cost = SwapCost.Zero
             MaxMinerFee =
               loopIn.Limits.MaxMinerFee

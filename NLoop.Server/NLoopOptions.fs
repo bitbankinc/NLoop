@@ -99,6 +99,36 @@ type NLoopOptions() =
   member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 
+  member this.PairIds(cat: Swap.Category) =
+    match cat with
+    | Swap.Category.Out ->
+      seq [
+        for baseAsset in this.OnChainCrypto do
+          for quoteAsset in this.OffChainCrypto do
+            PairId(baseAsset, quoteAsset)
+      ]
+    | Swap.Category.In ->
+      seq [
+        for baseAsset in this.OffChainCrypto do
+          for quoteAsset in this.OnChainCrypto do
+            PairId(baseAsset, quoteAsset)
+      ]
+
+  member this.SwapGroups =
+    let g cat =
+      seq [
+        for p in this.PairIds(cat) ->
+          {
+            Swap.Group.PairId = p
+            Swap.Group.Category = cat
+          }
+      ]
+
+    seq [
+      yield! g Swap.Category.Out
+      yield! g Swap.Category.In
+    ]
+
   member this.OnChainNetworks =
     this.OnChainCrypto
     |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())

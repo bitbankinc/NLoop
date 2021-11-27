@@ -319,13 +319,12 @@ components:
           format: int64
           description: <
             amount in satoshi.
-        htlc_conf_target:
+        swap_tx_conf_requirement:
           type: integer
           description: <
-            The number of confirmation before we make an off-chain offer.
+            The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer.
             a.k.a. `htlc_confirmations` on lightning loop.
-          default:
-            0
+            Default number depends on the asset type.
           nullable: true
         label:
           type: string

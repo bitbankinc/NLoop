@@ -41,6 +41,29 @@ module Swap =
     | In
     | Out
 
+  [<Struct>]
+  type Group = {
+    Category: Category
+    PairId: PairId
+  }
+    with
+    member this.OffChainAsset =
+      match this.Category with
+      | Out ->
+        let struct(_b, q) = this.PairId.Value
+        q
+      | In ->
+        let struct (b, _q) = this.PairId.Value
+        b
+    member this.OnChainAsset =
+      match this.Category with
+      | Out ->
+        let struct(b, _q) = this.PairId.Value
+        b
+      | In ->
+        let struct (_b, q) = this.PairId.Value
+        q
+
   type State =
     | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
@@ -74,8 +97,14 @@ module Swap =
   module Constants =
     let MinPreimageRevealDelta = BlockHeightOffset32(20u)
 
+    /// Used in loop-out.
+    /// Default confirmation target we will use when sweeping the funds.
+    /// This will be used if we reach too close to the expiration height, thus we must hurry the confirmation.
     let DefaultSweepConfTarget = BlockHeightOffset32 9u
 
+    /// Used in loop-out.
+    /// If the number of remaining blocks until the timeout gets smaller than this value, we start using smaller
+    /// conf target for estimating the fee for a sweep tx.
     let DefaultSweepConfTargetDelta = BlockHeightOffset32 18u
 
   open Constants
@@ -284,7 +313,7 @@ module Swap =
     (height: BlockHeight)
     (lockupTx: Transaction)
     (loopOut: LoopOut): Task<Result<_ option, Error>> = taskResult {
-      let struct (baseAsset, _quoteAsset) = loopOut.PairId
+      let struct (baseAsset, _quoteAsset) = loopOut.PairId.Value
       let! feeRate =
         // the block confirmation target for fee estimation.
         let confTarget =
@@ -409,7 +438,7 @@ module Swap =
         | NewLoopIn(h, loopIn), HasNotStarted ->
           do! loopIn.Validate() |> expectInputError
           let! additionalEvents = taskResult {
-              let struct (_baseAsset, quoteAsset) = loopIn.PairId
+              let struct (_baseAsset, quoteAsset) = loopIn.PairId.Value
               let! utxos =
                 utxoProvider.GetUTXOs(loopIn.ExpectedAmount, quoteAsset)
                 |> TaskResult.mapError(UTXOProviderError)
@@ -456,7 +485,7 @@ module Swap =
         | MarkAsErrored(err), Out(_, { Id = swapId })
         | MarkAsErrored(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
-        | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = struct(baseAsset, _); TimeoutBlockHeight = timeout } as loopOut))
+        | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = PairId(struct(baseAsset, _)); TimeoutBlockHeight = timeout } as loopOut))
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
 
@@ -536,7 +565,7 @@ module Swap =
               }
             return events @ additionalEvents
 
-        | NewBlock (height, block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId in quoteAsset = cc ->
+        | NewBlock (height, block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId.Value in quoteAsset = cc ->
           let! events = (height, oldHeight) ||> checkHeight
           let! maybeSwapTxConfirmedEvent = result {
             let maybeSwapTxInBlock =
@@ -597,7 +626,7 @@ module Swap =
           let! publishEvent = taskResult {
             match maybeSpendTx with
             | None when loopIn.TimeoutBlockHeight <= height ->
-              let struct(_, quoteAsset) = loopIn.PairId
+              let struct(_, quoteAsset) = loopIn.PairId.Value
               let! refundAddress =
                 getRefundAddress.Invoke(quoteAsset)
                 |> TaskResult.mapError(FailedToGetAddress)
