@@ -1,4 +1,4 @@
-namespace NLoop.Server
+namespace NLoop.Server.SwapServerClient
 
 open System.Threading
 open FSharp.Control.Tasks

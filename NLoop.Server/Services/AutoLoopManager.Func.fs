@@ -10,6 +10,7 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.RPCDTOs
+open NLoop.Server.SwapServerClient
 
 
 module Pipelines =

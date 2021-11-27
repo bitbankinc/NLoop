@@ -14,6 +14,7 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.Actors
+open NLoop.Server.SwapServerClient
 
 type BoltzFeeEstimator(boltzClient: BoltzClient) =
   interface IFeeEstimator with

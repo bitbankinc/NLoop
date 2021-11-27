@@ -36,6 +36,7 @@ open Microsoft.AspNetCore.TestHost
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.SwapServerClient
 open NLoop.Server.Projections
 open NLoop.Server.Services
 

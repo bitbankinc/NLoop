@@ -22,6 +22,7 @@ open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
+open NLoop.Server.SwapServerClient
 
 [<AutoOpen>]
 module private Constants =

@@ -13,6 +13,7 @@ open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
+open NLoop.Server.SwapServerClient
 
 type BoltzListener(boltzClient: BoltzClient,
                        logger: ILogger<BoltzListener>,

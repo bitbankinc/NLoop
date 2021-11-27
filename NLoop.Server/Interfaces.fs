@@ -58,3 +58,4 @@ type ILightningInvoiceProvider =
     onCancellation: OnPaymentCancellation *
     ct: CancellationToken option
      -> Task<PaymentRequest>
+

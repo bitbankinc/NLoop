@@ -20,6 +20,7 @@ open NBitcoin
 open NBitcoin.RPC
 open NLoop.Server
 open NLoop.Server.Services
+open NLoop.Server.SwapServerClient
 open NLoop.Server.Tests.Helpers
 open NLoopClient
 

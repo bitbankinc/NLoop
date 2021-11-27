@@ -12,8 +12,7 @@ open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
-open NLoop.Server.Projections
-open NLoop.Server.Services
+open NLoop.Server.SwapServerClient
 
 [<AutoOpen>]
 module CustomHandlers =

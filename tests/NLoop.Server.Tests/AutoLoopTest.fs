@@ -27,6 +27,7 @@ type AutoLoopTests() =
     Restrictions.Minimum = Money.Satoshis 1L
     Maximum = Money.Satoshis 10000L
   }
+
   [<Fact>]
   member this.TestParameters() = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->

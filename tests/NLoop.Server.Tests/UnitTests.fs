@@ -15,6 +15,7 @@ open Microsoft.Extensions.Hosting
 open NBitcoin
 open NLoop.Server
 open NLoop.Server.Services
+open NLoop.Server.SwapServerClient
 open FSharp.Control.Tasks
 
 [<Fact>]

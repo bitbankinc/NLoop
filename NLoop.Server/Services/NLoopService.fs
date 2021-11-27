@@ -15,6 +15,8 @@ open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
+
+open NLoop.Server.SwapServerClient
 open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections

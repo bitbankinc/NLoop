@@ -19,6 +19,7 @@ open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.DTOs
+open NLoop.Server.SwapServerClient
 
 [<AutoOpen>]
 module private Helpers =
