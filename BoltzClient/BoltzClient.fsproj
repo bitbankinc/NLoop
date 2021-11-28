@@ -11,4 +11,8 @@
     <Compile Include="BoltzClient.fs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
+  </ItemGroup>
+
 </Project>

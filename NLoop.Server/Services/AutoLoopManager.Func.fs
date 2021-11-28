@@ -26,7 +26,7 @@ module Pipelines =
 
   type Deps = {
     Logger: ILogger
-    BoltzClient: BoltzClient
+    SwapServerClient: ISwapServerClient
   }
 
   let singleReasonSuggestion reason (p: Parameters) =
@@ -54,34 +54,34 @@ module Pipelines =
     return feeLimit.CheckWithEstimatedFee(resp)
   }
 
-  let private getSwapRestrictions pairId (b: BoltzClient) (par: Parameters) = taskResult {
-    let! p = b.GetPairsAsync()
-    let restrictions = p.Pairs.[PairId.toString(&pairId)].Limits
-    do!
-        Restrictions.Validate(
-          Restrictions.FromBoltzResponse(restrictions),
-          par.ClientRestrictions
-        )
-    return
-      match par.ClientRestrictions with
-      | Some cr ->
-        {
-          Minimum =
-            Money.Max(cr.Minimum, restrictions.Minimal |> Money.Satoshis)
-          Maximum =
-            if cr.Maximum <> Money.Zero && cr.Maximum.Satoshi < restrictions.Maximal then
-              cr.Maximum
-            else
-              restrictions.Maximal |> Money.Satoshis
-        }
-      | None ->
-        {
-          Minimum = restrictions.Minimal |> Money.Satoshis
-          Maximum = restrictions.Maximal |> Money.Satoshis
-        }
+  let private getSwapRestrictions group (swapServerClient: ISwapServerClient) (par: Parameters) = taskResult {
+      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group)
+      do!
+          Restrictions.Validate(
+            restrictions,
+            par.ClientRestrictions
+          )
+          |> Result.mapError(AutoLoopError.RestrictionError)
+      return
+        match par.ClientRestrictions with
+        | Some cr ->
+          {
+            Minimum =
+              Money.Max(cr.Minimum, restrictions.Minimum)
+            Maximum =
+              if cr.Maximum <> Money.Zero && cr.Maximum < restrictions.Maximum then
+                cr.Maximum
+              else
+                restrictions.Maximum
+          }
+        | None ->
+          {
+            Minimum = restrictions.Minimum
+            Maximum = restrictions.Maximum
+          }
   }
 
-  let suggestSwaps { Deps.BoltzClient = boltzClient } (group: Swap.Group) (state: State): Task<Result<SwapSuggestions, Errors>> = taskResult {
+  let suggestSwaps { Deps.SwapServerClient = swapServerClient } (group: Swap.Group) (state: State): Task<Result<SwapSuggestions, Errors>> = taskResult {
     if not <| state.Parameters.HaveRules then return! AutoLoopError.NoRules |> AutoLoopError |> Error else
     do! checkAutoLoopStarted(state.Parameters)
     match group.Category with
@@ -89,7 +89,7 @@ module Pipelines =
       do! checkAgainstFeeMarket group.OnChainAsset state.Config state.Parameters
           |> TaskResult.mapError(SingleReasonError)
     | _ -> ()
-    let restrictions = getSwapRestrictions(group.PairId)
+    let restrictions = getSwapRestrictions(group)
     return failwith "todo"
   }
 

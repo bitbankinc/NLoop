@@ -4,6 +4,7 @@ open System.IO
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Threading
+open BoltzClient
 open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Domain.IO

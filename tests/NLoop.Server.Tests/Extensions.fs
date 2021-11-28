@@ -9,6 +9,7 @@ open System.CommandLine.Parsing
 open System.IO
 open System.Linq
 open System.Net.Http
+open BoltzClient
 open FSharp.Control.Tasks
 
 open DotNetLightning.Utils

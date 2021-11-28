@@ -32,7 +32,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
       let struct(baseCryptoCode, _quoteCryptoCode) =
         req.PairIdValue.Value
       let height = ctx.GetBlockHeight(baseCryptoCode)
-      let actor = ctx.GetService<SwapActor>()
+      let actor = ctx.GetService<ISwapActor>()
       let obs =
         ctx
           .GetService<IEventAggregator>()
@@ -97,7 +97,7 @@ let handleLoopOut (req: LoopOutRequest) =
 
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let actor = ctx.GetService<SwapActor>()
+    let actor = ctx.GetService<ISwapActor>()
     let height =
       let struct(_, quoteAsset) =
         loopIn.PairIdValue.Value

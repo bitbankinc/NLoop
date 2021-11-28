@@ -5,6 +5,7 @@ open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open BoltzClient
 open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -81,11 +82,13 @@ type NLoopExtensions() =
 
 
       this
+        .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
           client.BaseAddress <- sp.GetRequiredService<IOptions<NLoopOptions>>().Value.BoltzUrl
         )
         |> ignore
+
       this
         .AddSignalR()
         .AddJsonProtocol(fun opts ->
@@ -105,5 +108,5 @@ type NLoopExtensions() =
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
         .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
-        .AddSingleton<SwapActor>()
+        .AddSingleton<ISwapActor, SwapActor>()
 

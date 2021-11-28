@@ -15,7 +15,7 @@ open NLoop.Server.Actors
 
 type SwapProcessManager(eventAggregator: IEventAggregator,
                         lightningClientProvider: ILightningClientProvider,
-                        actor: SwapActor,
+                        actor: ISwapActor,
                         logger: ILogger<SwapProcessManager>,
                         listeners: IEnumerable<ISwapEventListener>) =
   let obs = eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()

@@ -19,7 +19,7 @@ open NLoop.Server.Actors
 
 type ComparableOutpoint = uint256 * uint
 
-type BlockchainListener(opts: IOptions<NLoopOptions>, actor: SwapActor, logger: ILogger<BlockchainListener>) =
+type BlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logger: ILogger<BlockchainListener>) =
   inherit BackgroundService()
 
   let swaps = ConcurrentDictionary<SwapId, _>()

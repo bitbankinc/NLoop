@@ -31,7 +31,7 @@ module QueryHandlers =
       }
   let handleGetSwap (swapId: SwapId) =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
-      let handler = ctx.GetService<SwapActor>().Handler
+      let handler = ctx.GetService<ISwapActor>().Handler
       let! eventsR = handler.Replay swapId ObservationDate.Latest
       let stateR = eventsR |> Result.map handler.Reconstitute
       match stateR with

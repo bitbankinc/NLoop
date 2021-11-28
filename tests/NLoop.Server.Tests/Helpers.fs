@@ -17,6 +17,7 @@ open System.CommandLine.Binding
 open System.CommandLine.Builder
 open System.CommandLine.Parsing
 
+open BoltzClient
 open DotNetLightning.Chain
 open FSharp.Control
 open DotNetLightning.Payment
@@ -196,6 +197,7 @@ type TestHelpers =
             .UseMiddleware(Main.useWebHostMiddleware)
             .Build()
         services
+          .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
           .AddHttpClient<BoltzClient>()
           .ConfigureHttpClient(fun _sp _client ->
             () // TODO: Inject Mock ?

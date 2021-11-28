@@ -364,3 +364,12 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
       Reconstitute = reconstitute
       Execute = execute
     }
+
+type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : comparison> =
+  abstract member Handler: Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId>
+  abstract member Aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError, 'T>
+  abstract member Execute:
+    swapId: 'TEntityId *
+    msg: 'TCommand *
+    ?source: string -> Task
+

@@ -41,7 +41,7 @@ type SwapActor(broadcaster: IBroadcaster,
                opts: IOptions<NLoopOptions>,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator,
-               boltzClient: BoltzClient
+               swapServerClient: ISwapServerClient
   )  =
 
   let aggr =
@@ -70,7 +70,7 @@ type SwapActor(broadcaster: IBroadcaster,
   member val Handler = handler with get
   member val Aggregate = aggr with get
 
-  member this.Execute(swapId, msg: Swap.Command, ?source) = task {
+  member this.Execute(swapId, msg: Swap.Command, ?source) = unitTask {
     logger.LogDebug($"New Command {msg}")
     let source = source |> Option.defaultValue (nameof(SwapActor))
     let cmd =
@@ -95,180 +95,189 @@ type SwapActor(broadcaster: IBroadcaster,
       eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }
 
-  /// Helper function for creating new loop out.
-  /// Technically, the logic of this function should be in the Domain layer, but we want
-  /// swapId to be the StreamId of the event stream, thus we have to
-  /// get the `StreamId` outside of the Domain, So we must call `BoltzClient.CreateReverseSwap` and get the swapId before
-  /// sending the command into the domain layer.
-  /// If we define some internal UUID for swapid instead of using the one given by the boltz server, the logic of this
-  /// function can go into the domain layer. But that complicates things by having two kinds of IDs for each swaps.
-  member this.ExecNewLoopOut(
-                             req: LoopOutRequest,
-                             height: BlockHeight
-                             ) = taskResult {
-      let claimKey = new Key()
-      let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
-      let preimageHash = preimage.Hash
-      let pairId =
-        req.PairId
-        |> Option.defaultValue PairId.Default
-      let struct(baseCryptoCode, quoteCryptoCode) = pairId.Value
+  interface ISwapActor with
+    member this.Execute(i, cmd, s) =
+      match s with
+      | None ->
+        this.Execute(i, cmd)
+      | Some s ->
+        this.Execute(i, cmd, s)
 
-      let n = opts.Value.GetNetwork(baseCryptoCode)
-      let! outResponse =
-        let req =
-          { CreateReverseSwapRequest.InvoiceAmount = req.Amount
-            PairId = pairId
-            OrderSide = OrderType.buy
-            ClaimPublicKey = claimKey.PubKey
-            PreimageHash = preimageHash.Value }
-        boltzClient.CreateReverseSwapAsync req
-      let lnClient = lightningClientProvider.GetClient(quoteCryptoCode)
+    member this.Handler = this.Handler
+    member this.Aggregate = this.Aggregate
 
-      let! addr =
-        match req.Address with
-        | Some a -> Task.FromResult a
-        | None ->
-          lnClient.GetDepositAddress()
-      let loopOut = {
-        LoopOut.Id = outResponse.Id |> SwapId
-        LoopOut.ClaimKey = claimKey
-        OutgoingChanIds = req.ChannelId
-        Preimage = preimage
-        RedeemScript = outResponse.RedeemScript
-        Invoice = outResponse.Invoice.ToString()
-        ClaimAddress = addr.ToString()
-        OnChainAmount = outResponse.OnchainAmount
-        TimeoutBlockHeight = outResponse.TimeoutBlockHeight
-        LockupTransactionHex = None
-        ClaimTransactionId = None
-        PairId = pairId
-        ChainName = opts.Value.ChainName.ToString()
-        Label = req.Label |> Option.defaultValue String.Empty
-        PrepayInvoice =
-          outResponse.MinerFeeInvoice
-          |> Option.map(fun s -> s.ToString())
-          |> Option.defaultValue String.Empty
-        MaxMinerFee = req.Limits.MaxMinerFee
-        SweepConfTarget =
-          req.SweepConfTarget
-          |> ValueOption.map(uint >> BlockHeightOffset32)
-          |> ValueOption.defaultValue pairId.DefaultLoopOutParameters.SweepConfTarget
-        IsClaimTxConfirmed = false
-        IsOffchainOfferResolved = false
-        Cost = SwapCost.Zero
-        LoopOut.SwapTxConfRequirement =
-          req.Limits.SwapTxConfRequirement
-        LockupTransactionHeight = None
-      }
-      match outResponse.Validate(preimageHash.Value,
-                                 claimKey.PubKey,
-                                 req.Amount,
-                                 req.Limits.MaxSwapFee,
-                                 req.Limits.MaxPrepay,
-                                 n) with
-      | Error e ->
-        return! Error e
-      | Ok () ->
-        let loopOutParams = {
-          Swap.LoopOutParams.MaxPrepayFee = req.MaxPrepayRoutingFee |> ValueOption.defaultValue(Money.Coins 100000m)
-          Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
-          Swap.LoopOutParams.Height = height
-        }
-        do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
-        return loopOut
-  }
+    /// Helper function for creating new loop out.
+    /// Technically, the logic of this function should be in the Domain layer, but we want
+    /// swapId to be the StreamId of the event stream, thus we have to
+    /// get the `StreamId` outside of the Domain, So we must call `BoltzClient.CreateReverseSwap` and get the swapId before
+    /// sending the command into the domain layer.
+    /// If we define some internal UUID for swapid instead of using the one given by the boltz server, the logic of this
+    /// function can go into the domain layer. But that complicates things by having two kinds of IDs for each swaps.
+    member this.ExecNewLoopOut(
+                               req: LoopOutRequest,
+                               height: BlockHeight
+                               ) = taskResult {
+        let claimKey = new Key()
+        let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
+        let preimageHash = preimage.Hash
+        let pairId =
+          req.PairId
+          |> Option.defaultValue PairId.Default
+        let struct(baseCryptoCode, quoteCryptoCode) = pairId.Value
 
-
-  member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight) = taskResult {
-      let pairId =
-        loopIn.PairId
-        |> Option.defaultValue PairId.Default
-      let struct(baseCryptoCode, quoteCryptoCode) =
-        pairId.Value
-      let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
-
-      let refundKey = new Key()
-      let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
-
-      let mutable maybeSwapId = None
-      let! invoice =
-        let amt = loopIn.Amount.ToLNMoney()
-        let onPaymentFinished = fun (amt: Money) ->
-          match maybeSwapId with
-          | Some i ->
-            this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), nameof(invoiceProvider)) :> Task
-          | None ->
-            // This will never happen unless they pay us unconditionally.
-            Task.CompletedTask
-
-        let onPaymentCanceled = fun (msg: string) ->
-          match maybeSwapId with
-          | Some i ->
-            this.Execute(i, Swap.Command.MarkAsErrored(msg)) :> Task
-          | None ->
-            // This will never happen unless they pay us unconditionally.
-            Task.CompletedTask
-        invoiceProvider.GetAndListenToInvoice(
-          baseCryptoCode,
-          preimage,
-          amt,
-          loopIn.Label |> Option.defaultValue(String.Empty),
-          loopIn.LndClientRouteHints,
-          onPaymentFinished, onPaymentCanceled, None)
-      try
-        let! inResponse =
+        let n = opts.Value.GetNetwork(baseCryptoCode)
+        let! outResponse =
           let req =
-            { CreateSwapRequest.Invoice = invoice
-              PairId = pairId
-              OrderSide = OrderType.buy
-              RefundPublicKey = refundKey.PubKey }
-          boltzClient.CreateSwapAsync req
-        let swapId = inResponse.Id |> SwapId
-        maybeSwapId <- swapId |> Some
-        match inResponse.Validate(invoice.PaymentHash.Value,
-                                  refundKey.PubKey,
-                                  loopIn.Amount,
-                                  loopIn.Limits.MaxSwapFee,
-                                  onChainNetwork) with
+            { SwapDTO.LoopOutRequest.InvoiceAmount = req.Amount
+              SwapDTO.LoopOutRequest.PairId = pairId
+              SwapDTO.LoopOutRequest.ClaimPublicKey = claimKey.PubKey
+              SwapDTO.LoopOutRequest.PreimageHash = preimageHash.Value }
+          swapServerClient.LoopOut req
+        let lnClient = lightningClientProvider.GetClient(quoteCryptoCode)
+
+        let! addr =
+          match req.Address with
+          | Some a -> Task.FromResult a
+          | None ->
+            lnClient.GetDepositAddress()
+        let loopOut = {
+          LoopOut.Id = outResponse.Id |> SwapId
+          LoopOut.ClaimKey = claimKey
+          OutgoingChanIds = req.ChannelId
+          Preimage = preimage
+          RedeemScript = outResponse.RedeemScript
+          Invoice = outResponse.Invoice.ToString()
+          ClaimAddress = addr.ToString()
+          OnChainAmount = outResponse.OnchainAmount
+          TimeoutBlockHeight = outResponse.TimeoutBlockHeight
+          LockupTransactionHex = None
+          ClaimTransactionId = None
+          PairId = pairId
+          ChainName = opts.Value.ChainName.ToString()
+          Label = req.Label |> Option.defaultValue String.Empty
+          PrepayInvoice =
+            outResponse.MinerFeeInvoice
+            |> Option.map(fun s -> s.ToString())
+            |> Option.defaultValue String.Empty
+          MaxMinerFee = req.Limits.MaxMinerFee
+          SweepConfTarget =
+            req.SweepConfTarget
+            |> ValueOption.map(uint >> BlockHeightOffset32)
+            |> ValueOption.defaultValue pairId.DefaultLoopOutParameters.SweepConfTarget
+          IsClaimTxConfirmed = false
+          IsOffchainOfferResolved = false
+          Cost = SwapCost.Zero
+          LoopOut.SwapTxConfRequirement =
+            req.Limits.SwapTxConfRequirement
+          LockupTransactionHeight = None
+        }
+        match outResponse.Validate(preimageHash.Value,
+                                   claimKey.PubKey,
+                                   req.Amount,
+                                   req.Limits.MaxSwapFee,
+                                   req.Limits.MaxPrepay,
+                                   n) with
         | Error e ->
-          do! this.Execute(swapId, Swap.Command.MarkAsErrored(e))
-          return! Error(e)
-        | Ok _events ->
-          let loopIn = {
-            LoopIn.Id = swapId
-            RefundPrivateKey = refundKey
-            Preimage = None
-            RedeemScript = inResponse.RedeemScript
-            Invoice = invoice.ToString()
-            Address = inResponse.Address.ToString()
-            ExpectedAmount = inResponse.ExpectedAmount
-            TimeoutBlockHeight = inResponse.TimeoutBlockHeight
-            LockupTransactionHex = None
-            RefundTransactionId = None
-            PairId = pairId
-            ChainName = opts.Value.ChainName.ToString()
-            Label = loopIn.Label |> Option.defaultValue String.Empty
-            HTLCConfTarget =
-              loopIn.HtlcConfTarget
-              |> ValueOption.map(uint >> BlockHeightOffset32)
-              |> ValueOption.defaultValue (pairId.DefaultLoopInParameters.HTLCConfTarget)
-            Cost = SwapCost.Zero
-            MaxMinerFee =
-              loopIn.Limits.MaxMinerFee
-            MaxSwapFee =
-              loopIn.Limits.MaxSwapFee
-            LockupTransactionOutPoint = None
-            LastHop =
-              loopIn.LastHop
+          return! Error e
+        | Ok () ->
+          let loopOutParams = {
+            Swap.LoopOutParams.MaxPrepayFee = req.MaxPrepayRoutingFee |> ValueOption.defaultValue(Money.Coins 100000m)
+            Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
+            Swap.LoopOutParams.Height = height
           }
-          do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
-          let response = {
-            LoopInResponse.Id = inResponse.Id
-            Address = inResponse.Address
-          }
-          return response
-      with
-      | :? HttpRequestException as ex ->
-        return! Error($"Error requesting to boltz ({ex.Message})")
+          do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
+          return loopOut
     }
+
+
+    member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight) = taskResult {
+        let pairId =
+          loopIn.PairId
+          |> Option.defaultValue PairId.Default
+        let struct(baseCryptoCode, quoteCryptoCode) =
+          pairId.Value
+        let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
+
+        let refundKey = new Key()
+        let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
+
+        let mutable maybeSwapId = None
+        let! invoice =
+          let amt = loopIn.Amount.ToLNMoney()
+          let onPaymentFinished = fun (amt: Money) ->
+            match maybeSwapId with
+            | Some i ->
+              this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), nameof(invoiceProvider)) :> Task
+            | None ->
+              // This will never happen unless they pay us unconditionally.
+              Task.CompletedTask
+
+          let onPaymentCanceled = fun (msg: string) ->
+            match maybeSwapId with
+            | Some i ->
+              this.Execute(i, Swap.Command.MarkAsErrored(msg)) :> Task
+            | None ->
+              // This will never happen unless they pay us unconditionally.
+              Task.CompletedTask
+          invoiceProvider.GetAndListenToInvoice(
+            baseCryptoCode,
+            preimage,
+            amt,
+            loopIn.Label |> Option.defaultValue(String.Empty),
+            loopIn.LndClientRouteHints,
+            onPaymentFinished, onPaymentCanceled, None)
+        try
+          let! inResponse =
+            let req =
+              { SwapDTO.LoopInRequest.Invoice = invoice
+                SwapDTO.LoopInRequest.PairId = pairId
+                SwapDTO.LoopInRequest.RefundPublicKey = refundKey.PubKey }
+            swapServerClient.LoopIn req
+          let swapId = inResponse.Id |> SwapId
+          maybeSwapId <- swapId |> Some
+          match inResponse.Validate(invoice.PaymentHash.Value,
+                                    refundKey.PubKey,
+                                    loopIn.Amount,
+                                    loopIn.Limits.MaxSwapFee,
+                                    onChainNetwork) with
+          | Error e ->
+            do! this.Execute(swapId, Swap.Command.MarkAsErrored(e))
+            return! Error(e)
+          | Ok _events ->
+            let loopIn = {
+              LoopIn.Id = swapId
+              RefundPrivateKey = refundKey
+              Preimage = None
+              RedeemScript = inResponse.RedeemScript
+              Invoice = invoice.ToString()
+              Address = inResponse.Address.ToString()
+              ExpectedAmount = inResponse.ExpectedAmount
+              TimeoutBlockHeight = inResponse.TimeoutBlockHeight
+              LockupTransactionHex = None
+              RefundTransactionId = None
+              PairId = pairId
+              ChainName = opts.Value.ChainName.ToString()
+              Label = loopIn.Label |> Option.defaultValue String.Empty
+              HTLCConfTarget =
+                loopIn.HtlcConfTarget
+                |> ValueOption.map(uint >> BlockHeightOffset32)
+                |> ValueOption.defaultValue (pairId.DefaultLoopInParameters.HTLCConfTarget)
+              Cost = SwapCost.Zero
+              MaxMinerFee =
+                loopIn.Limits.MaxMinerFee
+              MaxSwapFee =
+                loopIn.Limits.MaxSwapFee
+              LockupTransactionOutPoint = None
+              LastHop =
+                loopIn.LastHop
+            }
+            do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
+            let response = {
+              LoopInResponse.Id = inResponse.Id
+              Address = inResponse.Address
+            }
+            return response
+        with
+        | :? HttpRequestException as ex ->
+          return! Error($"Error requesting to boltz ({ex.Message})")
+      }

@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open System
 open System.IO
 open System.Runtime.CompilerServices
 open System.Threading
@@ -11,6 +12,8 @@ open LndClient
 open NBitcoin
 open FSharp.Control.Tasks
 open NLoop.Domain
+open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server.DTOs
 
 type ISwapEventListener =
@@ -59,3 +62,13 @@ type ILightningInvoiceProvider =
     ct: CancellationToken option
      -> Task<PaymentRequest>
 
+type ISwapActor =
+  inherit IActor<Swap.State, Swap.Command,Swap. Event, Swap.Error, SwapId, uint16 * DateTime>
+  abstract member
+    ExecNewLoopOut:
+    req: LoopOutRequest *
+    currentHeight: BlockHeight -> Task<Result<LoopOut, string>>
+  abstract member
+    ExecNewLoopIn:
+    req: LoopInRequest *
+    currentHeight: BlockHeight -> Task<Result<LoopInResponse, string>>

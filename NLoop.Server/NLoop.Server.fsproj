@@ -7,6 +7,7 @@
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\BoltzClient\BoltzClient.fsproj" />
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
     <ProjectReference Include="..\LndClient\LndClient.fsproj" />
   </ItemGroup>
@@ -33,9 +34,7 @@
     <Compile Include="RPCDTOs\AutoLoop.fs" />
     <Compile Include="RPCDTOs\Query.fs" />
     <Compile Include="SwapServerClient\interfaces.fs" />
-    <Compile Include="SwapServerClient\BoltzRequestResponse.fs" />
-    <Compile Include="SwapServerClient\BoltzClient.fs" />
-    <Compile Include="SwapServerClient\BoltzClientExtensions.fs" />
+    <Compile Include="SwapServerClient\BoltzSwapServerClient.fs" />
     <Compile Include="EventAggregator.fs" />
     <Compile Include="Interfaces.fs" />
     <Compile Include="LightningClientProvider.fs" />

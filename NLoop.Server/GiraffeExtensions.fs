@@ -66,8 +66,8 @@ module CustomHandlers =
   let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) =
     fun (next: HttpFunc) ( ctx: HttpContext) -> task {
       let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
-      let boltzCli = ctx.GetService<BoltzClient>()
-      let nodesT = boltzCli.GetNodesAsync()
+      let boltzCli = ctx.GetService<ISwapServerClient>()
+      let nodesT = boltzCli.GetNodes()
       let! nodes = nodesT
       let mutable maybeResult = None
       let logger =
@@ -97,15 +97,15 @@ module CustomHandlers =
 
   let internal validateFeeLimitAgainstServerQuote(req: LoopOutRequest) =
     fun (next : HttpFunc) (ctx : HttpContext) -> task {
-      let boltzClient = ctx.GetService<BoltzClient>()
+      let swapServerClient = ctx.GetService<ISwapServerClient>()
       let! quote =
-        let r = { LoopOutQuoteRequest.Amount = req.Amount
-                  SweepConfTarget =
+        let r = { SwapDTO.LoopOutQuoteRequest.Amount = req.Amount
+                  SwapDTO.SweepConfTarget =
                     req.SweepConfTarget
                     |> ValueOption.map (uint32 >> BlockHeightOffset32)
                     |> ValueOption.defaultValue(req.PairIdValue.DefaultLoopOutParameters.SweepConfTarget)
-                  Pair = req.PairIdValue }
-        boltzClient.GetLoopOutQuote(r)
+                  SwapDTO.Pair = req.PairIdValue }
+        swapServerClient.GetLoopOutQuote(r)
       let r =
         quote.Validate(req.Limits)
         |> Result.mapError(fun e -> e.Message)
@@ -119,10 +119,13 @@ module CustomHandlers =
       let pairId =
         req.PairId
         |> Option.defaultValue PairId.Default
-      let boltzClient = ctx.GetService<BoltzClient>()
+      let swapServerClient = ctx.GetService<ISwapServerClient>()
       let! quote =
-        let r = { LoopInQuoteRequest.Amount = req.Amount; Pair = pairId }
-        boltzClient.GetLoopInQuote(r)
+        let r = {
+          SwapDTO.LoopInQuoteRequest.Amount = req.Amount
+          SwapDTO.LoopInQuoteRequest.Pair = pairId
+        }
+        swapServerClient.GetLoopInQuote(r)
       let r = quote.Validate(req.Limits) |> Result.mapError(fun e -> e.Message)
       match r with
       | Error e -> return! validationError400 [e] next ctx

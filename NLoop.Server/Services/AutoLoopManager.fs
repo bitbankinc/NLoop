@@ -106,10 +106,8 @@ type ThresholdRule = {
 type AutoLoopError =
   | NegativeBudget
   | ZeroInFlight
-  | MinimumExceedsMaximumAmt
   | NoRules
-  | MaxExceedsServer of clientMax: Money * serverMax: Money
-  | MinLessThenServer of clientMin: Money * serverMin: Money
+  | RestrictionError of RestrictionError
   | ExclusiveRules
   | FailedToDispatchLoop of msg: string
   with
@@ -117,12 +115,8 @@ type AutoLoopError =
     match this with
     | NegativeBudget -> "SwapBudget must be >= 0"
     | ZeroInFlight -> "max in flight swap must be >= 0"
-    | MinimumExceedsMaximumAmt -> "minimum swap amount exceeds maximum"
     | NoRules -> "No rules set for autoloop"
-    | MaxExceedsServer (c, s) ->
-      $"maximum swap amount ({c.Satoshi} sats) is more than the server maximum ({s.Satoshi} sats)"
-    | MinLessThenServer (c, s)  ->
-      $"minimum swap amount ({c.Satoshi} sats) is less than server minimum ({s.Satoshi} sats)"
+    | RestrictionError r -> r.Message
     | ExclusiveRules ->
       $"channel and peer rules must be exclusive"
     | FailedToDispatchLoop msg -> msg
@@ -257,34 +251,6 @@ type private ExistingAutoLoopSummary = {
       ) ExistingAutoLoopSummary.Default
     loopOutFees
 
-type Restrictions = {
-  Minimum: Money
-  Maximum: Money
-}
-  with
-  static member FromBoltzResponse(limit: ServerLimit) = {
-    Minimum = limit.Minimal |> Money.Satoshis
-    Maximum = limit.Maximal |> Money.Satoshis
-  }
-  static member Validate
-    ({Minimum = serverMin; Maximum =  serverMax}: Restrictions,
-     clientRest: Restrictions option) =
-    match clientRest with
-    | None -> Ok()
-    | Some {Minimum = clientMin; Maximum = clientMax } ->
-      let zeroMin = clientMin = Money.Zero
-      let zeroMax = clientMax = Money.Zero
-      if zeroMin && zeroMax then Ok() else
-      if not <| zeroMax && clientMin > clientMax then
-        Error(AutoLoopError.MinimumExceedsMaximumAmt)
-      elif not <| zeroMax && clientMax > serverMax then
-        Error(AutoLoopError.MaxExceedsServer(clientMax, serverMax))
-      elif zeroMin then
-        Ok()
-      elif clientMin < serverMin then
-        Error(AutoLoopError.MinLessThenServer(clientMin, serverMin))
-      else
-        Ok()
 
 [<AutoOpen>]
 module private Extensions =
@@ -346,9 +312,9 @@ module Fees =
     abstract member CheckWithEstimatedFee: feeRate: FeeRate -> Result<unit, SwapDisqualifiedReason>
 
     /// Checks whether the quote provided is within our fee limits for the swap amount.
-    abstract member CheckLoopOutLimits: swapAmount: Money * quote: LoopOutQuote -> Result<unit, SwapDisqualifiedReason>
-    abstract member LoopOutFees: amount: Money * quote: LoopOutQuote -> Money * Money * Money
-    abstract member CheckLoopInLimits: amount: Money * quote: LoopInQuote -> Result<unit, SwapDisqualifiedReason>
+    abstract member CheckLoopOutLimits: swapAmount: Money * quote: SwapDTO.LoopOutQuote -> Result<unit, SwapDisqualifiedReason>
+    abstract member LoopOutFees: amount: Money * quote: SwapDTO.LoopOutQuote -> Money * Money * Money
+    abstract member CheckLoopInLimits: amount: Money * quote: SwapDTO.LoopInQuote -> Result<unit, SwapDisqualifiedReason>
 
   /// FeePortion is a fee limitation which limits fees to a set portion of the swap amount.
   type FeePortion = {
@@ -468,7 +434,7 @@ type FeeCategoryLimit = {
       |> Result.requireTrue(SwapDisqualifiedReason.SweepFeesTooHigh(feeRate, this.SweepFeeRateLimit))
 
     /// Checks whether the quote provided is within our fee limits for the swap amount.
-    member this.CheckLoopOutLimits(amount: Money, quote: LoopOutQuote): Result<unit, SwapDisqualifiedReason> =
+    member this.CheckLoopOutLimits(amount: Money, quote: SwapDTO.LoopOutQuote): Result<unit, SwapDisqualifiedReason> =
       let maxFee = ppmToSat(amount, this.MaximumSwapFeePPM)
       if quote.SwapFee > maxFee then
         Error <| SwapDisqualifiedReason.SwapFeeTooHigh(quote.SwapFee, maxFee)
@@ -479,12 +445,12 @@ type FeeCategoryLimit = {
       else
         Ok ()
 
-    member this.LoopOutFees(amount: Money, quote: LoopOutQuote): Money * Money * Money =
+    member this.LoopOutFees(amount: Money, quote: SwapDTO.LoopOutQuote): Money * Money * Money =
       let prepayMaxFee = ppmToSat(quote.PrepayAmount, this.MaximumPrepayRoutingFeePPM)
       let routeMaxFee = ppmToSat(amount, this.MaximumRoutingFeePPM)
       prepayMaxFee, routeMaxFee, this.MaximumMinerFee
 
-    member this.CheckLoopInLimits(amount: Money, quote: LoopInQuote): Result<unit, SwapDisqualifiedReason> =
+    member this.CheckLoopInLimits(amount: Money, quote: SwapDTO.LoopInQuote): Result<unit, SwapDisqualifiedReason> =
       let maxFee = ppmToSat(amount, this.MaximumSwapFeePPM)
       if quote.SwapFee > maxFee then
         Error <| SwapDisqualifiedReason.SwapFeeTooHigh(quote.SwapFee, maxFee)
@@ -562,10 +528,10 @@ type Parameters = {
 
 type Config = {
   EstimateFee: IFeeEstimator
-  BoltzClient: BoltzClient
+  SwapServerClient: ISwapServerClient
   Restrictions: Swap.Category -> Task<Result<Restrictions, string>>
   Lnd: INLoopLightningClient
-  SwapActor: SwapActor
+  SwapActor: ISwapActor
 }
 
 type SuggestSwapError =
@@ -622,10 +588,10 @@ type SwapBuilder = {
       BuildSwap = fun { Peer = peer; Channels = channels } amount lnClient pairId autoloop parameters -> taskResult {
         let! quote =
           let req =
-            { LoopOutQuoteRequest.Pair = pairId
-              Amount = amount
-              SweepConfTarget = parameters.SweepConfTarget }
-          cfg.BoltzClient.GetLoopOutQuote(req)
+            { SwapDTO.LoopOutQuoteRequest.Pair = pairId
+              SwapDTO.Amount = amount
+              SwapDTO.SweepConfTarget = parameters.SweepConfTarget }
+          cfg.SwapServerClient.GetLoopOutQuote(req)
         do! parameters.FeeLimit.CheckLoopOutLimits(amount, quote)
         let prepayMaxFee, routeMaxFee, minerFee = parameters.FeeLimit.LoopOutFees(amount, quote)
         let! addr =
@@ -681,7 +647,7 @@ type SwapBuilder = {
       MaySwap = fun _ -> Task.FromResult(Ok())
       BuildSwap = fun { Channels = channels; Peer = peer } amount lnClient pairId autoloop parameters -> taskResult {
         let! quote =
-          cfg.BoltzClient.GetLoopInQuote({
+          cfg.SwapServerClient.GetLoopInQuote({
             Amount = amount
             Pair = pairId
           })
@@ -709,9 +675,9 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      opts: IOptions<NLoopOptions>,
                      swapStateProjection: SwapStateProjection,
                      recentSwapFailureProjection: RecentSwapFailureProjection,
-                     boltzClient: BoltzClient,
+                     swapServerClient: ISwapServerClient,
                      blockChainListener: IBlockChainListener,
-                     swapActor: SwapActor,
+                     swapActor: ISwapActor,
                      feeEstimator: IFeeEstimator,
                      _lightningClientProvider: ILightningClientProvider) =
 
@@ -732,7 +698,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         match category with
         | Swap.Category.Out ->
           try
-            let! terms = boltzClient.GetLoopOutTerms(g.PairId)
+            let! terms = swapServerClient.GetLoopOutTerms(g.PairId)
             return Ok { Restrictions.Maximum = terms.MaxSwapAmount
                         Minimum = terms.MinSwapAmount }
           with
@@ -740,7 +706,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
             return Error(ex.ToString())
         | Swap.Category.In ->
           try
-            let! terms = boltzClient.GetLoopInTerms(g.PairId)
+            let! terms = swapServerClient.GetLoopInTerms(g.PairId)
             return Ok { Restrictions.Maximum = terms.MaxSwapAmount
                         Minimum = terms.MinSwapAmount }
           with
@@ -748,7 +714,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
             return Error(ex.ToString())
       }
       EstimateFee = feeEstimator
-      BoltzClient = boltzClient
+      SwapServerClient = swapServerClient
       Lnd = _lightningClientProvider.GetClient g.OffChainAsset
       SwapActor = swapActor
     }
@@ -782,31 +748,31 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   /// Query the server for its latest swap size restrictions,
   /// validates client restrictions (if present) against these values and merges the client's custom
   /// requirements with the server's limits to produce a single set of limitations for our swap.
-  member private this.GetSwapRestrictions(swapType: Swap.Category, group: Swap.Group): Task<Result<_, AutoLoopError>> = taskResult {
-      let! p = boltzClient.GetPairsAsync()
-      let restrictions = p.Pairs.[PairId.toStringFromVal(group.PairId)].Limits
+  member private this.GetSwapRestrictions(group: Swap.Group): Task<Result<_, AutoLoopError>> = taskResult {
+      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group)
       let par = this.Parameters.[group]
       do!
           Restrictions.Validate(
-            Restrictions.FromBoltzResponse(restrictions),
+            restrictions,
             par.ClientRestrictions
           )
+          |> Result.mapError(AutoLoopError.RestrictionError)
       return
         match par.ClientRestrictions with
         | Some cr ->
           {
             Minimum =
-              Money.Max(cr.Minimum, restrictions.Minimal |> Money.Satoshis)
+              Money.Max(cr.Minimum, restrictions.Minimum)
             Maximum =
-              if cr.Maximum <> Money.Zero && cr.Maximum.Satoshi < restrictions.Maximal then
+              if cr.Maximum <> Money.Zero && cr.Maximum < restrictions.Maximum then
                 cr.Maximum
               else
-                restrictions.Maximal |> Money.Satoshis
+                restrictions.Maximum
           }
         | None ->
           {
-            Minimum = restrictions.Minimal |> Money.Satoshis
-            Maximum = restrictions.Maximal |> Money.Satoshis
+            Minimum = restrictions.Minimum
+            Maximum = restrictions.Maximum
           }
     }
 
@@ -847,7 +813,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     | Error e ->
       return this.SingleReasonSuggestion(group, e) |> Ok
     | Ok() ->
-      match! this.GetSwapRestrictions(group.Category, group) with
+      match! this.GetSwapRestrictions(group) with
       | Error e -> return Error e
       | Ok restrictions ->
       let onGoingLoopOuts: _ list = swapStateProjection.OngoingLoopOuts |> Seq.toList

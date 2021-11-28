@@ -18,7 +18,7 @@ open NLoop.Server.Actors
 type SwapStateProjection(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
                   checkpointDB: ICheckpointDB,
-                  actor: SwapActor,
+                  actor: ISwapActor,
                   eventAggregator: IEventAggregator) as this =
   inherit BackgroundService()
   let log = loggerFactory.CreateLogger<SwapStateProjection>()
