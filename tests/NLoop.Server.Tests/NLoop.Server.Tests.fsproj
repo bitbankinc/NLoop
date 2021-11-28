@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Utils.fs" />
     <Compile Include="Helpers.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="UnitTests.fs" />

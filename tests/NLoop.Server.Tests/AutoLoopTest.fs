@@ -56,7 +56,7 @@ type AutoLoopTests() =
 
       member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
         {
-          SwapDTO.LoopOutQuote.CltvDelta = ""
+          SwapDTO.LoopOutQuote.CltvDelta = failwith "todo"
           SwapDTO.LoopOutQuote.SwapFee = failwith "todo"
           SwapDTO.LoopOutQuote.SweepMinerFee = failwith "todo"
           SwapDTO.LoopOutQuote.SwapPaymentDest = failwith "todo"
@@ -83,8 +83,8 @@ type AutoLoopTests() =
   member this.TestParameters() = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       let loopOutTerms = {
-        SwapDTO.OutTermsResponse.MaxSwapAmount = failwith "todo"
-        SwapDTO.OutTermsResponse.MinSwapAmount = failwith "todo"
+        SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(1m)
+        SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1m)
       }
       services
         .AddSingleton<ISwapActor>(mockSwapActor)
@@ -98,27 +98,45 @@ type AutoLoopTests() =
        Swap.Group.Category = Swap.Category.Out
      }
 
-    let chanId = ShortChannelId.FromUInt64(1UL)
     match! man.SetParameters(group, Parameters.Default(group.PairId)) with
     | Error e -> failwith e
     | Ok() ->
+    let setChanRule chanId newRule p =
+      {
+        p with
+          Rules = {
+            p.Rules with
+              ChannelRules =
+                p.Rules.ChannelRules
+                |> Map.add(chanId) newRule
+          }
+      }
     let startParams = man.Parameters.[group]
-    let startParams = {
-      startParams with
-        Rules = {
-          startParams.Rules with
-            ChannelRules =
-              let newRule = { ThresholdRule.MinimumIncoming = 1s<percent>
-                              MinimumOutGoing = 1s<percent> }
-              startParams.Rules.ChannelRules
-              |> Map.add(chanId) newRule
-        }
-    }
-    let originalRule = {
-      ThresholdRule.MinimumIncoming = 10s<percent>
-      MinimumOutGoing = 10s<percent>
-    }
-    ()
+    let newParams =
+      let chanId = ShortChannelId.FromUInt64(1UL)
+      let newRule = { ThresholdRule.MinimumIncoming = 1s<percent>
+                      MinimumOutGoing = 1s<percent> }
+      setChanRule chanId newRule startParams
+
+    match! man.SetParameters(group, newParams) with
+    | Error e -> failwith e
+    | Ok () ->
+    let p = man.Parameters.[group]
+    Assert.NotEqual(startParams, p)
+    Assert.Equal(newParams, p)
+
+
+    let invalidParams =
+      let invalidChanId = ShortChannelId.FromUInt64(0UL)
+      let rule = {
+        ThresholdRule.MinimumIncoming = 1s<percent>
+        ThresholdRule.MinimumOutGoing = 1s<percent>
+      }
+      setChanRule invalidChanId rule p
+    match! man.SetParameters(group, invalidParams) with
+    | Ok () -> ()
+    | Error e ->
+      Assert.Equal("Channel has 0 channel id", e)
   }
 
   static member RestrictionsValidationTestData: obj[] seq =
