@@ -143,7 +143,7 @@ type SwapActor(broadcaster: IBroadcaster,
         let loopOut = {
           LoopOut.Id = outResponse.Id |> SwapId
           LoopOut.ClaimKey = claimKey
-          OutgoingChanIds = req.ChannelId
+          OutgoingChanIds = req.OutgoingChannelIds
           Preimage = preimage
           RedeemScript = outResponse.RedeemScript
           Invoice = outResponse.Invoice.ToString()

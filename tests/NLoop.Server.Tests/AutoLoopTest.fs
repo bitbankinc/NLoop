@@ -16,12 +16,79 @@ open NBitcoin
 open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server
+open NLoop.Server.DTOs
+open NLoop.Server.Projections
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
 open NLoop.Server.Tests.Extensions
+open NLoopClient
 open Xunit
 
+
+[<AutoOpen>]
+module private Constants =
+  let peer1 = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
+  let peer2 = PubKey("0324653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c")
+  let chanId1 = ShortChannelId.FromUInt64(1UL)
+  let chanId2 = ShortChannelId.FromUInt64(2UL)
+  let chanId3 = ShortChannelId.FromUInt64(3UL)
+  let channel1 = {
+    LndClient.ListChannelResponse.Id = chanId1
+    Cap = Money.Satoshis(10000L)
+    LocalBalance = Money.Satoshis(10000L)
+    NodeId = peer1
+  }
+  let channel2 = {
+    LndClient.ListChannelResponse.Id = chanId1
+    Cap = Money.Satoshis(10000L)
+    LocalBalance = Money.Satoshis(10000L)
+    NodeId = peer2
+  }
+  let chanRule = {
+    ThresholdRule.MinimumIncoming = 50s<percent>
+    MinimumOutGoing = 0s<percent>
+  }
+
+  let testQuote = {
+    SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(5L)
+    SwapDTO.LoopOutQuote.SweepMinerFee = Money.Satoshis(1L)
+    SwapDTO.LoopOutQuote.SwapPaymentDest = peer1
+    SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
+    SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(50L) }
+
+  let dummyAddr = BitcoinAddress.Create("bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m", Network.RegTest)
+
+  let testPPMFees(ppm: int64<ppm>, quote: SwapDTO.LoopOutQuote, swapAmount: Money): Money * Money =
+    let feeTotal = ppmToSat(swapAmount, ppm)
+    let feeAvailable = feeTotal - scaleMinerFee(quote.SweepMinerFee) - quote.SwapFee
+    AutoLoopHelpers.splitOffChain(feeAvailable, quote.PrepayAmount, swapAmount)
+
+  let swapAmount = Money.Satoshis(7500L)
+  let prepayFee, routingFee = testPPMFees(defaultFeePPM, testQuote, swapAmount)
+
+  // this is the suggested swap for channel 1 when se use chanRule.
+  let chan1Rec = {
+    LoopOutRequest.Amount = swapAmount
+    LoopOutRequest.OutgoingChannelIds = [| chanId1 |]
+    LoopOutRequest.Address = None
+    PairId = None
+    SwapTxConfRequirement = None
+    Label = None
+    MaxSwapRoutingFee = routingFee |> ValueSome
+    MaxPrepayRoutingFee = prepayFee |> ValueSome
+    MaxSwapFee = testQuote.SwapFee |> ValueSome
+    MaxPrepayAmount = testQuote.PrepayAmount |> ValueSome
+    MaxMinerFee = testQuote.SweepMinerFee |> AutoLoopHelpers.scaleMinerFee |> ValueSome
+    SweepConfTarget = ValueNone
+  }
+
+  let chan2Rec = {
+    chan1Rec
+      with
+      OutgoingChannelIds = [| chanId2 |]
+  }
 
 type AutoLoopTests() =
   let mockSwapActor = {
@@ -43,52 +110,12 @@ type AutoLoopTests() =
     Maximum = Money.Satoshis 10000L
   }
 
-  let getMockSwapServerClient
-    (loopOutTermResponse)
-    = {
-    new ISwapServerClient with
-      member this.LoopOut(request: SwapDTO.LoopOutRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutResponse> =
-        failwith "todo"
-      member this.LoopIn(request: SwapDTO.LoopInRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInResponse> =
-        failwith "todo"
-      member this.GetNodes(?ct: CancellationToken): Task<SwapDTO.GetNodesResponse> =
-        failwith "todo"
-
-      member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
-        {
-          SwapDTO.LoopOutQuote.CltvDelta = failwith "todo"
-          SwapDTO.LoopOutQuote.SwapFee = failwith "todo"
-          SwapDTO.LoopOutQuote.SweepMinerFee = failwith "todo"
-          SwapDTO.LoopOutQuote.SwapPaymentDest = failwith "todo"
-          SwapDTO.LoopOutQuote.PrepayAmount = failwith "todo"
-        }
-        |> Task.FromResult
-
-      member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
-        failwith "todo"
-
-      member this.GetLoopOutTerms(pairId: PairId, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
-        loopOutTermResponse
-        |> Task.FromResult
-      member this.GetLoopInTerms(pairId: PairId, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
-        failwith "todo"
-      member this.CheckConnection(?ct: CancellationToken): Task =
-        failwith "todo"
-
-      member this.ListenToSwapTx(swapId: SwapId, ?ct: CancellationToken): Task<Transaction> =
-        failwith "todo"
-  }
-
   [<Fact>]
   member this.TestParameters() = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
-      let loopOutTerms = {
-        SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(1m)
-        SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1m)
-      }
       services
         .AddSingleton<ISwapActor>(mockSwapActor)
-        .AddSingleton<ISwapServerClient>(getMockSwapServerClient loopOutTerms)
+        .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
         |> ignore
     ))
     let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
@@ -169,13 +196,97 @@ type AutoLoopTests() =
     | Error actualErr, Some expectedErr ->
       Assert.Equal(expectedErr, actualErr)
 
-  member private this.TestSuggestSwaps() =
-    ()
+  static member RestrictedSuggestionTestData =
+    seq {
+      let chanRules =
+        Map.empty
+        |> Map.add chanId1 chanRule
+        |> Map.add chanId2 chanRule
 
+      let e = {
+        SwapSuggestions.Zero
+          with
+            OutSwaps = [chan1Rec]
+      }
+      ("no existing swaps", channel1, Seq.empty, { Rules.Zero with ChannelRules = chanRules }, Map.empty, Map.empty, e)
+      let s = // seq {
+        // Swap.State.Out({ LoopOut })
+      //}
+        Seq.empty
+      let e = {
+        SwapSuggestions.Zero
+          with
+            OutSwaps = [chan1Rec]
+      }
+      ("unrestricted loop out", channel1, s, { Rules.Zero with ChannelRules = chanRules }, Map.empty, Map.empty, e)
+    }
+    |> Seq.map(fun (name: string, channels: ListChannelResponse, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTime>, recentFailureIn: Map<NodeId, DateTime>, expected) ->
+      [|
+        name |> box
+        channels |> box
+        state |> box
+        rules |> box
+        recentFailureOut |> box
+        recentFailureIn |> box
+        expected |> box
+      |])
 
-  [<Fact>]
-  member this.RestrictedSuggestions() =
-    ()
+  [<Theory>]
+  [<MemberData(nameof(AutoLoopTests.RestrictedSuggestionTestData))>]
+  member this.RestrictedSuggestions(name: string,
+                                    channels: ListChannelResponse,
+                                    swapStates: Swap.State seq,
+                                    rules: Rules,
+                                    recentFailureOut: Map<ShortChannelId, DateTime>,
+                                    recentFailureIn: Map<NodeId, DateTime>,
+                                    expected: SwapSuggestions) = unitTask {
+    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+      let stateView = {
+          new ISwapStateProjection with
+            member this.State =
+              swapStates
+              |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+      }
+      let failureView = {
+        new IRecentSwapFailureProjection with
+          member this.FailedLoopOuts = recentFailureOut
+          member this.FailedLoopIns = recentFailureIn
+      }
+      let dummyLightningClientProvider =
+        TestHelpers.GetDummyLightningClientProvider
+          {
+            DummyLnClientParameters.Default
+              with
+              ListChannels = [channels]
+          }
+      services
+        .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
+        .AddSingleton<ISwapStateProjection>(stateView)
+        .AddSingleton<IRecentSwapFailureProjection>(failureView)
+        .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
+        |> ignore
+    ))
+    let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
+    Assert.NotNull(man)
+    let group = {
+       Swap.Group.PairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+       Swap.Group.Category = Swap.Category.Out
+     }
+
+    let p = {
+      Parameters.Default(group.PairId)
+        with
+        Rules = rules
+    }
+    match! man.SetParameters(group, p) with
+    | Error e -> failwith $"{name}: Failed to set parameters {e}"
+    | Ok() ->
+      match! man.SuggestSwaps(false, group) with
+      | Ok r ->
+        Assert.Equal(expected, r)
+      | Error e -> failwith $"{name}: SuggestSwaps error {e}"
+  }
 
   [<Fact>]
   member this.TestSweepFeeLimit() =

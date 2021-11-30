@@ -135,7 +135,7 @@ type LoopOutLimits = {
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]
-  ChannelId: ShortChannelId array
+  OutgoingChannelIds: ShortChannelId array
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
   [<JsonPropertyName "address">]

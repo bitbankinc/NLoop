@@ -10,31 +10,31 @@ open NLoop.Server.DTOs
 [<RequireQualifiedAccess>]
 type SwapDisqualifiedReason =
   | BudgetNotStarted
-  | SweepFeesTooHigh of estimation: FeeRate * ourLimit: FeeRate
+  | SweepFeesTooHigh of {| Estimation: FeeRate; OurLimit: FeeRate |}
   | BudgetElapsed
   | InFlightLimitReached
-  | SwapFeeTooHigh of serverRequirement: Money * ourLimit: Money
-  | MinerFeeTooHigh of serverRequirement: Money * ourLimit: Money
-  | PrepayTooHigh of serverRequirement: Money * ourLimit: Money
+  | SwapFeeTooHigh of {| ServerRequirement: Money; OurLimit: Money |}
+  | MinerFeeTooHigh of {| ServerRequirement: Money; OurLimit: Money |}
+  | PrepayTooHigh of {| ServerRequirement: Money; OurLimit: Money |}
   | FailureBackoff
   | LoopOutAlreadyInTheChannel
   | LoopInAlreadyInTheChannel
   | LiquidityOk
   | BudgetInsufficient
-  | FeePPMInsufficient of required: Money * ourLimit: Money
+  | FeePPMInsufficient of {| Required: Money; OurLimit: Money |}
   with
   member this.Message =
     match this with
-    | SweepFeesTooHigh(estimation, ourLimit) ->
-      $"Current estimated FeeRate is {estimation.SatoshiPerByte |> int64} sat/vbyte. But our limit is {ourLimit.SatoshiPerByte |> int64} sats/vbyte"
-    | MinerFeeTooHigh (serverRequirement, ourLimit)  ->
-      $"miner fee: {serverRequirement} greater than our fee limit {ourLimit}"
-    | SwapFeeTooHigh(serverRequirement, ourLimit) ->
-      $"swap fee: {serverRequirement} greater than our fee limit {ourLimit}"
-    | PrepayTooHigh(serverRequirement, ourLimit) ->
-      $"prepay amount: {serverRequirement} greater than our fee limit {ourLimit}"
-    | FeePPMInsufficient(required, ourLimit) ->
-      $"Total required fees for the swap: ({required}) greater than our fee limit ({ourLimit})"
+    | SweepFeesTooHigh v ->
+      $"Current estimated FeeRate is {v.Estimation.SatoshiPerByte |> int64} sat/vbyte. But our limit is {v.OurLimit.SatoshiPerByte |> int64} sats/vbyte"
+    | MinerFeeTooHigh v  ->
+      $"miner fee: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+    | SwapFeeTooHigh v ->
+      $"swap fee: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+    | PrepayTooHigh v ->
+      $"prepay amount: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+    | FeePPMInsufficient v ->
+      $"Total required fees for the swap: ({v.Required}) greater than our fee limit ({v.OurLimit})"
     | x -> $"{x}"
 
 type LiquidityRuleType =

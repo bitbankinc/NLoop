@@ -1,6 +1,7 @@
 namespace NLoop.Server.Projections
 
 open System
+open System.Runtime.CompilerServices
 open System.Threading
 open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
@@ -8,10 +9,14 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 open NLoop.Server.Actors
+
+type ISwapStateProjection =
+  abstract member State: Map<StreamId, Swap.State>
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
@@ -70,22 +75,9 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
     and set v =
       lock lockObj <| fun () ->
         _state <- v
-  member this.OngoingLoopOuts =
-    this.State
-    |> Seq.choose(fun v ->
-                  match v.Value with
-                  | Swap.State.Out (_height, o) -> Some o
-                  | _ -> None
-                  )
 
-  member this.OngoingLoopIns =
-    this.State
-    |> Seq.choose(fun v ->
-                  match v.Value with
-                  | Swap.State.In (_height, o) -> Some o
-                  | _ -> None
-                  )
-
+  interface ISwapStateProjection with
+    member this.State = this.State
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let maybeCheckpoint = ValueNone
@@ -102,3 +94,23 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
     | ex ->
       log.LogError($"{ex}")
   }
+
+
+[<AutoOpen>]
+module ISwapStateProjectionExtensions =
+  type ISwapStateProjection with
+    member this.OngoingLoopIns =
+      this.State
+      |> Seq.choose(fun v ->
+                    match v.Value with
+                    | Swap.State.In (_height, o) -> Some o
+                    | _ -> None
+                    )
+
+    member this.OngoingLoopOuts =
+      this.State
+      |> Seq.choose(fun v ->
+                    match v.Value with
+                    | Swap.State.Out (_height, o) -> Some o
+                    | _ -> None
+                    )

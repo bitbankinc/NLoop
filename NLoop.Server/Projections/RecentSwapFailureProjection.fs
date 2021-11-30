@@ -11,6 +11,10 @@ open NLoop.Domain.Utils
 open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 
+type IRecentSwapFailureProjection =
+  abstract member FailedLoopOuts: Map<ShortChannelId, DateTime>
+  abstract member FailedLoopIns: Map<NodeId, DateTime>
+
 /// Cache recently failed swaps on memory
 /// Used in AutoLoop to backoff the failure
 type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFactory) as this =
@@ -100,24 +104,25 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: IL
     and private set v =
       lock _swapStateLockObjIn (fun () -> failedLoopInSwapState <- v)
 
-  member this.FailedLoopIns =
-    this.FailedLoopInSwapState
-    |> Map.toSeq
-    |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, d.Value) )
-    |> Map.ofSeq
-
-  member this.FailedLoopOuts =
-    let entries =
-      this.FailedLoopOutSwapState
+  interface IRecentSwapFailureProjection with
+    member this.FailedLoopIns =
+      this.FailedLoopInSwapState
       |> Map.toSeq
       |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, d.Value) )
-    // flatten the channel ids
-    seq [
-      for k, v in entries do
-        for chanId in k do
-          chanId, v
-    ]
-    |> Map.ofSeq
+      |> Map.ofSeq
+
+    member this.FailedLoopOuts =
+      let entries =
+        this.FailedLoopOutSwapState
+        |> Map.toSeq
+        |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, d.Value) )
+      // flatten the channel ids
+      seq [
+        for k, v in entries do
+          for chanId in k do
+            chanId, v
+      ]
+      |> Map.ofSeq
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let maybeCheckpoint = ValueNone
     //let! maybeCheckpoint =

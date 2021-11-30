@@ -264,7 +264,7 @@ type ISwapServerClientExtensions =
         Minimum = resp.MinSwapAmount
       }
     | Swap.Category.Out ->
-      let! resp = this.GetLoopInTerms(group.PairId)
+      let! resp = this.GetLoopOutTerms(group.PairId)
       return {
         Restrictions.Maximum = resp.MaxSwapAmount
         Minimum = resp.MinSwapAmount

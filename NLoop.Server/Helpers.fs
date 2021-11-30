@@ -13,6 +13,7 @@ module internal Helpers =
 
   [<Literal>]
   let private FeeBase = 100000L
+
   let ppmToSat (amount: Money, ppm: int64<ppm>): Money =
     Money.Satoshis(amount.Satoshi * (ppm |> int64) / FeeBase)
 

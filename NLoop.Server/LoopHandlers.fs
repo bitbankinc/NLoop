@@ -114,6 +114,7 @@ let private validateLoopIn (req: LoopInRequest) =
       validationError400 errorMsg next ctx
 
 let handleLoopIn (loopIn: LoopInRequest) =
-  (checkBlockchainIsSyncedAndSetTipHeight loopIn.PairIdValue
+  (validateLoopIn loopIn
+   >=> checkBlockchainIsSyncedAndSetTipHeight loopIn.PairIdValue
     >=> validateLoopInFeeLimitAgainstServerQuote loopIn
      >=> (handleLoopInCore loopIn))
