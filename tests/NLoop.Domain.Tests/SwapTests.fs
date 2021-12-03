@@ -149,8 +149,7 @@ type SwapDomainTests() =
 
   let getBlock (loopIn: LoopIn) =
     let block =
-      let struct(_, quoteAsset) = loopIn.PairId
-      match quoteAsset with
+      match loopIn.PairId.Quote with
       | SupportedCryptoCode.LTC ->
         Altcoins.Litecoin.LitecoinBlock.CreateBlock(loopIn.QuoteAssetNetwork)
       | SupportedCryptoCode.BTC ->
@@ -158,8 +157,7 @@ type SwapDomainTests() =
       | _ -> failwith "unreachable"
     block
   let getBlockOut (loopOut: LoopOut) =
-    let struct (baseAsset, _) = loopOut.PairId
-    match baseAsset with
+    match loopOut.PairId.Base with
     | SupportedCryptoCode.LTC ->
       Altcoins.Litecoin.LitecoinBlock.CreateBlock(loopOut.BaseAssetNetwork)
     | SupportedCryptoCode.BTC ->
@@ -249,7 +247,7 @@ type SwapDomainTests() =
         Id = SwapId(Guid.NewGuid().ToString())
         OnChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(10000m))
         ChainName = ChainName.Regtest.ToString()
-        PairId = (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
+        PairId = PairId(SupportedCryptoCode.LTC, SupportedCryptoCode.BTC)
         LockupTransactionHeight = None
     }
     let loopOut = {
@@ -272,7 +270,7 @@ type SwapDomainTests() =
   member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool, acceptZeroConf: bool) =
     let baseAsset =
        if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
-    let loopOut = { loopOut.Normalize() with PairId = (baseAsset, SupportedCryptoCode.BTC) }
+    let loopOut = { loopOut.Normalize() with PairId = PairId (baseAsset, SupportedCryptoCode.BTC) }
 
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
     let timeoutBlockHeight = BlockHeight(30u)
@@ -419,10 +417,9 @@ type SwapDomainTests() =
       let mutable i = 0
       [ for h in currentHeight.Value..loopOut.TimeoutBlockHeight.Value ->
           i <- i + 1
-          let struct(baseAsset, _) = loopOut.PairId
-          (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), getBlockOut(loopOut), baseAsset))
+          (DateTime(2001, 01, 30, 0, 3 + i, 0), Swap.Command.NewBlock(BlockHeight(h), getBlockOut(loopOut), loopOut.PairId.Base))
         ]
-    let loopOut = { loopOutBase.Normalize() with PairId = (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC) }
+    let loopOut = { loopOutBase.Normalize() with PairId = PairId (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC) }
 
     // case 1: nothing happens after creation.
     let _ =
@@ -465,7 +462,7 @@ type SwapDomainTests() =
        if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let loopOut =
       let quoteAsset = SupportedCryptoCode.BTC
-      { loopOut.Normalize() with PairId = (baseAsset, quoteAsset) }
+      { loopOut.Normalize() with PairId = PairId(baseAsset, quoteAsset) }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(30us)
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
@@ -578,7 +575,7 @@ type SwapDomainTests() =
     let baseAsset = SupportedCryptoCode.BTC
     let loopIn =
       { loopIn.Normalize() with
-          PairId = (baseAsset, quoteAsset)
+          PairId = PairId (baseAsset, quoteAsset)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)
@@ -684,7 +681,7 @@ type SwapDomainTests() =
     let baseAsset = SupportedCryptoCode.BTC
     let loopIn =
       { loopIn.Normalize() with
-          PairId = (baseAsset, quoteAsset)
+          PairId = PairId(baseAsset, quoteAsset)
         }
     let initialBlockHeight = BlockHeight.One
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(3us)

@@ -565,7 +565,7 @@ module Swap =
               }
             return events @ additionalEvents
 
-        | NewBlock (height, block, cc), In(oldHeight, loopIn) when let struct (_, quoteAsset) = loopIn.PairId.Value in quoteAsset = cc ->
+        | NewBlock (height, block, cc), In(oldHeight, loopIn) when loopIn.PairId.Quote = cc ->
           let! events = (height, oldHeight) ||> checkHeight
           let! maybeSwapTxConfirmedEvent = result {
             let maybeSwapTxInBlock =

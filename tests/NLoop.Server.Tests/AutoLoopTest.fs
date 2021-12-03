@@ -40,6 +40,7 @@ module private Constants =
     LocalBalance = Money.Satoshis(10000L)
     NodeId = peer1
   }
+  let pairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
   let channel2 = {
     LndClient.ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
@@ -71,17 +72,17 @@ module private Constants =
   // this is the suggested swap for channel 1 when se use chanRule.
   let chan1Rec = {
     LoopOutRequest.Amount = swapAmount
-    LoopOutRequest.OutgoingChannelIds = [| chanId1 |]
-    LoopOutRequest.Address = None
-    PairId = None
-    SwapTxConfRequirement = None
+    OutgoingChannelIds = [| chanId1 |]
+    Address = None
+    PairId = pairId |> Some
+    SwapTxConfRequirement = pairId.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
     Label = None
     MaxSwapRoutingFee = routingFee |> ValueSome
     MaxPrepayRoutingFee = prepayFee |> ValueSome
     MaxSwapFee = testQuote.SwapFee |> ValueSome
     MaxPrepayAmount = testQuote.PrepayAmount |> ValueSome
     MaxMinerFee = testQuote.SweepMinerFee |> AutoLoopHelpers.scaleMinerFee |> ValueSome
-    SweepConfTarget = ValueNone
+    SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget.Value |> int |> ValueSome
   }
 
   let chan2Rec = {
@@ -121,7 +122,7 @@ type AutoLoopTests() =
     let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
     Assert.NotNull(man)
     let group = {
-       Swap.Group.PairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+       Swap.Group.PairId = pairId
        Swap.Group.Category = Swap.Category.Out
      }
 
@@ -259,9 +260,16 @@ type AutoLoopTests() =
               with
               ListChannels = [channels]
           }
+      let dummySwapServerClient =
+        TestHelpers.GetDummySwapServerClient
+          {
+            DummySwapServerClientParameters.Default
+              with
+              LoopOutQuote = fun _ -> testQuote
+          }
       services
         .AddSingleton<ISwapActor>(mockSwapActor)
-        .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
+        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISwapStateProjection>(stateView)
         .AddSingleton<IRecentSwapFailureProjection>(failureView)
         .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
@@ -270,7 +278,7 @@ type AutoLoopTests() =
     let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
     Assert.NotNull(man)
     let group = {
-       Swap.Group.PairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+       Swap.Group.PairId = pairId
        Swap.Group.Category = Swap.Category.Out
      }
 

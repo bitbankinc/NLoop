@@ -283,8 +283,8 @@ module private Extensions =
         if channelBalances.OutGoingSat <= minimumOutGoing then Money.Zero else
         let targetPoint =
           let maximumIncoming = channelBalances.CapacitySat - minimumOutGoing
-          let midPoint = (minimumInComing + maximumIncoming) / 2L
-          (midPoint * int64 targetIncomingLiquidityRatio) / 100L
+          let possibleTargetRange = (minimumInComing + maximumIncoming)
+          (possibleTargetRange * int64 targetIncomingLiquidityRatio) / 100L
         // Calculate the amount of incoming balance we need to shift to reach this desired point.
         let required = targetPoint - channelBalances.IncomingSat
         // Since we can have pending htlcs on our channel, we check the amount of
@@ -343,7 +343,7 @@ module Fees =
       member this.CheckLoopOutLimits(swapAmount, quote) =
         // First, check whether any of the individual fee categories provided by the server are more than
         // our total limit. We do this so that we can provide more specific reasons for not executing swaps.
-        let feeLimit = ppmToSat(quote.SweepMinerFee, this.PartsPerMillion)
+        let feeLimit = ppmToSat(swapAmount, this.PartsPerMillion)
         let minerFee = scaleMinerFee(quote.SweepMinerFee)
         if minerFee > feeLimit then
           Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = minerFee; OurLimit = feeLimit |})
