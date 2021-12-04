@@ -313,7 +313,7 @@ type AutoLoopTests() =
             DisqualifiedChannels =
               [(chanId1, SwapDisqualifiedReason.FailureBackoff)] |> Map.ofSeq
       }
-      ("Swap failed recently", seq[ channel1 ], swapState, rules, recentFailure, Map.empty, 2,  expected)
+      ("Swap failed recently", seq[ channel1 ], Seq.empty, rules, recentFailure, Map.empty, 2,  expected)
       let notRecentFailure =
         Map.empty |> failureBeforeBackoff chanId1
       let expected = {
@@ -322,12 +322,40 @@ type AutoLoopTests() =
             OutSwaps = [chan1Rec]
       }
       ("Swap failed before cutoff", seq [ channel1 ], Seq.empty, rules, notRecentFailure, Map.empty, 2, expected)
+
+      // -- peer --
+
+      let channelForThePeer = {
+        ListChannelResponse.Id = chanId3
+        Cap = Money.Satoshis(10000L)
+        LocalBalance = Money.Satoshis(10000L)
+        NodeId = peer1
+      }
+      let existingSwapState = seq [ Swap.State.Out(BlockHeight.One, chan1Out) ]
+      let rules = {
+        Rules.Zero
+          with
+          PeerRules =
+            let rule = {
+              MinimumIncoming = 0s<percent>
+              MinimumOutGoing = 50s<percent>
+            }
+            [(peer1 |> NodeId, rule)] |> Map.ofSeq
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedPeers = [(peer1 |> NodeId, SwapDisqualifiedReason.LoopOutAlreadyInTheChannel)] |> Map.ofSeq
+      }
+      ("existing on peer's channel", seq [ channel1; channelForThePeer ], existingSwapState, rules, Map.empty, Map.empty, 2, expected)
+      // -- --
+      ()
     }
-    |> Seq.map(fun (name: string, channels: ListChannelResponse seq, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTimeOffset>, recentFailureIn: Map<NodeId, DateTimeOffset>, maxAutoInFlight, expected) ->
+    |> Seq.map(fun (name: string, channels: ListChannelResponse seq, onGoingSwaps: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTimeOffset>, recentFailureIn: Map<NodeId, DateTimeOffset>, maxAutoInFlight, expected) ->
       [|
         name |> box
         channels |> box
-        state |> box
+        onGoingSwaps |> box
         rules |> box
         recentFailureOut |> box
         recentFailureIn |> box
@@ -339,7 +367,7 @@ type AutoLoopTests() =
   [<MemberData(nameof(AutoLoopTests.RestrictedSuggestionTestData))>]
   member this.RestrictedSuggestions(name: string,
                                     channels: ListChannelResponse seq,
-                                    swapStates: Swap.State seq,
+                                    ongoingSwaps: Swap.State seq,
                                     rules: Rules,
                                     recentFailureOut: Map<ShortChannelId, DateTimeOffset>,
                                     recentFailureIn: Map<NodeId, DateTimeOffset>,
@@ -349,7 +377,7 @@ type AutoLoopTests() =
       let stateView = {
           new ISwapStateProjection with
             member this.State =
-              swapStates
+              ongoingSwaps
               |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
       }
       let failureView = {
