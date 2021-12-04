@@ -262,6 +262,33 @@ type AutoLoopTests() =
     | Error actualErr, Some expectedErr ->
       Assert.Equal(expectedErr, actualErr)
 
+  member private this.TestSuggestSwaps(name: string, injection: IServiceCollection -> unit, group, parameters: Parameters, expected) = task {
+    let i = fun (services: IServiceCollection) ->
+      let dummySwapServerClient =
+        TestHelpers.GetDummySwapServerClient
+          {
+            DummySwapServerClientParameters.Default
+              with
+              LoopOutQuote = fun _ -> testQuote
+          }
+      services
+        .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
+        .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
+        |> ignore
+      injection services
+    use server = new TestServer(TestHelpers.GetTestHost(i))
+    let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
+    Assert.NotNull(man)
+    match! man.SetParameters(group, parameters) with
+    | Error e -> failwith $"{name}: Failed to set parameters {e}"
+    | Ok() ->
+      match! man.SuggestSwaps(false, group) with
+      | Ok r ->
+        Assert.Equal(expected, r)
+      | Error e -> failwith $"{name}: SuggestSwaps error {e}"
+  }
+
   static member RestrictedSuggestionTestData =
     seq {
       let chanRules =
@@ -349,7 +376,6 @@ type AutoLoopTests() =
       }
       ("existing on peer's channel", seq [ channel1; channelForThePeer ], existingSwapState, rules, Map.empty, Map.empty, 2, expected)
       // -- --
-      ()
     }
     |> Seq.map(fun (name: string, channels: ListChannelResponse seq, onGoingSwaps: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTimeOffset>, recentFailureIn: Map<NodeId, DateTimeOffset>, maxAutoInFlight, expected) ->
       [|
@@ -372,8 +398,19 @@ type AutoLoopTests() =
                                     recentFailureOut: Map<ShortChannelId, DateTimeOffset>,
                                     recentFailureIn: Map<NodeId, DateTimeOffset>,
                                     maxAutoInFlight: int,
-                                    expected: SwapSuggestions) = unitTask {
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+                                    expected: SwapSuggestions) =
+    let group = {
+      Swap.Group.PairId = pairId
+      Swap.Group.Category = Swap.Category.Out
+    }
+    let parameters = {
+      Parameters.Default(group.PairId)
+        with
+        Rules = rules
+        AutoFeeStartDate = testBudgetStart
+        MaxAutoInFlight = maxAutoInFlight
+    }
+    let setup = fun (services: IServiceCollection) ->
       let stateView = {
           new ISwapStateProjection with
             member this.State =
@@ -400,38 +437,15 @@ type AutoLoopTests() =
               LoopOutQuote = fun _ -> testQuote
           }
       services
-        .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
-        .AddSingleton<ISwapActor>(mockSwapActor)
-        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISwapStateProjection>(stateView)
         .AddSingleton<IRecentSwapFailureProjection>(failureView)
         .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
         |> ignore
-    ))
-    let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
-    Assert.NotNull(man)
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
+    this.TestSuggestSwaps(name, setup, group, parameters, expected)
 
-    let p = {
-      Parameters.Default(group.PairId)
-        with
-        Rules = rules
-        AutoFeeStartDate = testBudgetStart
-        MaxAutoInFlight = maxAutoInFlight
-    }
-    match! man.SetParameters(group, p) with
-    | Error e -> failwith $"{name}: Failed to set parameters {e}"
-    | Ok() ->
-      match! man.SuggestSwaps(false, group) with
-      | Ok r ->
-        Assert.Equal(expected, r)
-      | Error e -> failwith $"{name}: SuggestSwaps error {e}"
-  }
+  static member TestSweepFeeLimitTestData =
+    seq []
 
-  [<Fact>]
   member this.TestSweepFeeLimit() =
     ()
 
