@@ -12,8 +12,8 @@ open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 
 type IRecentSwapFailureProjection =
-  abstract member FailedLoopOuts: Map<ShortChannelId, DateTime>
-  abstract member FailedLoopIns: Map<NodeId, DateTime>
+  abstract member FailedLoopOuts: Map<ShortChannelId, DateTimeOffset>
+  abstract member FailedLoopIns: Map<NodeId, DateTimeOffset>
 
 /// Cache recently failed swaps on memory
 /// Used in AutoLoop to backoff the failure
@@ -108,14 +108,14 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: IL
     member this.FailedLoopIns =
       this.FailedLoopInSwapState
       |> Map.toSeq
-      |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, d.Value) )
+      |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, DateTimeOffset(d.Value)) )
       |> Map.ofSeq
 
     member this.FailedLoopOuts =
       let entries =
         this.FailedLoopOutSwapState
         |> Map.toSeq
-        |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, d.Value) )
+        |> Seq.choose(fun (_, struct(cIds, date)) -> match date with | ValueNone -> None | ValueSome d -> Some (cIds, DateTimeOffset(d.Value)))
       // flatten the channel ids
       seq [
         for k, v in entries do

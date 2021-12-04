@@ -12,6 +12,7 @@ open FsToolkit.ErrorHandling
 open LndClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Options
 open NBitcoin
 open NBitcoin.DataEncoders
@@ -35,7 +36,7 @@ module private Constants =
   let peer1 = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
   let peer2 = PubKey("0324653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c")
 
-  let testTime = DateTime(2021, 12, 03, 23, 0, 0)
+  let testTime = DateTimeOffset(2021, 12, 03, 23, 0, 0, TimeSpan.Zero)
   let testBudgetStart = testTime - TimeSpan.FromHours(1.)
 
   let chanId1 = ShortChannelId.FromUInt64(1UL)
@@ -49,7 +50,7 @@ module private Constants =
   }
   let pairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
   let channel2 = {
-    LndClient.ListChannelResponse.Id = chanId1
+    LndClient.ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     NodeId = peer2
@@ -264,15 +265,17 @@ type AutoLoopTests() =
   static member RestrictedSuggestionTestData =
     seq {
       let chanRules =
-        Map.empty
-        |> Map.add chanId1 chanRule
-        |> Map.add chanId2 chanRule
+        [
+          (chanId1, chanRule)
+          (chanId2, chanRule)
+        ]
+        |> Map.ofSeq
       let rules = { Rules.Zero with ChannelRules = chanRules }
 
       let failureWithInTimeout chanId m =
-        m |> Map.add chanId testTime
+        m |> Map.add chanId (testTime - defaultFailureBackoff + TimeSpan.FromSeconds(1.))
       let failureBeforeBackoff chanId m =
-        m |> Map.add chanId (testTime - defaultFailureBackoff)
+        m |> Map.add chanId (testTime - defaultFailureBackoff - TimeSpan.FromSeconds(1.))
 
       let expected = {
         SwapSuggestions.Zero
@@ -287,7 +290,8 @@ type AutoLoopTests() =
       let expected = {
         SwapSuggestions.Zero
           with
-          DisqualifiedChannels = Map.empty |> Map.add chanId1 SwapDisqualifiedReason.InFlightLimitReached
+          DisqualifiedChannels =
+            [(chanId1, SwapDisqualifiedReason.InFlightLimitReached)] |> Map.ofSeq
       }
       ("Max auto inflight limit (should prevent swap)", seq [channel1], swapState, rules, Map.empty, Map.empty, 1, expected)
       let swapState = seq [
@@ -298,15 +302,28 @@ type AutoLoopTests() =
           with
             OutSwaps = [ chan2Rec ]
             DisqualifiedChannels =
-              Map.empty |> Map.add chanId1 SwapDisqualifiedReason.LoopOutAlreadyInTheChannel
+              [(chanId1, SwapDisqualifiedReason.LoopOutAlreadyInTheChannel)] |> Map.ofSeq
       }
-      //("restricted loop out", seq [channel1; channel2], swapState, rules, Map.empty, Map.empty, 2, expected)
+      ("restricted loop out", seq [channel1; channel2], swapState, rules, Map.empty, Map.empty, 2, expected)
       let recentFailure =
         Map.empty |> failureWithInTimeout chanId1
-      //("Swap failed recently", seq[ channel1; ], swapState, rules, recentFailure, Map.empty, 2,  expected)
-      ()
+      let expected = {
+        SwapSuggestions.Zero
+          with
+            DisqualifiedChannels =
+              [(chanId1, SwapDisqualifiedReason.FailureBackoff)] |> Map.ofSeq
+      }
+      ("Swap failed recently", seq[ channel1 ], swapState, rules, recentFailure, Map.empty, 2,  expected)
+      let notRecentFailure =
+        Map.empty |> failureBeforeBackoff chanId1
+      let expected = {
+        SwapSuggestions.Zero
+          with
+            OutSwaps = [chan1Rec]
+      }
+      ("Swap failed before cutoff", seq [ channel1 ], Seq.empty, rules, notRecentFailure, Map.empty, 2, expected)
     }
-    |> Seq.map(fun (name: string, channels: ListChannelResponse seq, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTime>, recentFailureIn: Map<NodeId, DateTime>, maxAutoInFlight, expected) ->
+    |> Seq.map(fun (name: string, channels: ListChannelResponse seq, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTimeOffset>, recentFailureIn: Map<NodeId, DateTimeOffset>, maxAutoInFlight, expected) ->
       [|
         name |> box
         channels |> box
@@ -324,8 +341,8 @@ type AutoLoopTests() =
                                     channels: ListChannelResponse seq,
                                     swapStates: Swap.State seq,
                                     rules: Rules,
-                                    recentFailureOut: Map<ShortChannelId, DateTime>,
-                                    recentFailureIn: Map<NodeId, DateTime>,
+                                    recentFailureOut: Map<ShortChannelId, DateTimeOffset>,
+                                    recentFailureIn: Map<NodeId, DateTimeOffset>,
                                     maxAutoInFlight: int,
                                     expected: SwapSuggestions) = unitTask {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
@@ -355,6 +372,7 @@ type AutoLoopTests() =
               LoopOutQuote = fun _ -> testQuote
           }
       services
+        .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
         .AddSingleton<ISwapActor>(mockSwapActor)
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISwapStateProjection>(stateView)
@@ -373,7 +391,7 @@ type AutoLoopTests() =
       Parameters.Default(group.PairId)
         with
         Rules = rules
-        AutoFeeStartDate = testTime
+        AutoFeeStartDate = testBudgetStart
         MaxAutoInFlight = maxAutoInFlight
     }
     match! man.SetParameters(group, p) with

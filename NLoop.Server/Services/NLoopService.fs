@@ -8,6 +8,7 @@ open System.Threading.Channels
 open BoltzClient
 open LndClient
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Domain
@@ -72,6 +73,7 @@ type NLoopExtensions() =
         |> ignore
 
       this
+        .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
         .AddSingleton<ISwapStateProjection, SwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()

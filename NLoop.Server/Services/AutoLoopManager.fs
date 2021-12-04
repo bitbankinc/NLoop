@@ -11,6 +11,7 @@ open FsToolkit.ErrorHandling
 open LndClient
 open Microsoft.Extensions.Hosting
 open FSharp.Control.Tasks
+open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.DependencyInjection
@@ -469,7 +470,7 @@ type FeeCategoryLimit = {
 /// run-time modifiable part of the auto loop parameters.
 type Parameters = {
   AutoFeeBudget: Money
-  AutoFeeStartDate: DateTime
+  AutoFeeStartDate: DateTimeOffset
   MaxAutoInFlight: int
   FailureBackoff: TimeSpan
   SweepConfTarget: BlockHeightOffset32
@@ -483,7 +484,7 @@ type Parameters = {
   with
   static member Default(pairId: PairId) = {
     AutoFeeBudget = defaultBudget
-    AutoFeeStartDate = DateTime.UtcNow
+    AutoFeeStartDate = DateTimeOffset.UtcNow
     MaxAutoInFlight = 1
     FailureBackoff = defaultFailureBackoff
     SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
@@ -548,8 +549,8 @@ type SuggestSwapError =
 type SwapTraffic = {
   OngoingLoopOut: list<ShortChannelId>
   OngoingLoopIn: list<NodeId>
-  FailedLoopOut: Map<ShortChannelId, DateTime>
-  FailedLoopIn: Map<NodeId, DateTime>
+  FailedLoopOut: Map<ShortChannelId, DateTimeOffset>
+  FailedLoopIn: Map<NodeId, DateTimeOffset>
 }
 
 type TargetPeerOrChannel = {
@@ -686,6 +687,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      blockChainListener: IBlockChainListener,
                      swapActor: ISwapActor,
                      feeEstimator: IFeeEstimator,
+                     systemClock: ISystemClock,
                      _lightningClientProvider: ILightningClientProvider) =
 
   inherit BackgroundService()
@@ -800,7 +802,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       else
         Ok()
     let checkDate() =
-      if par.AutoFeeStartDate > DateTime.UtcNow then
+      if par.AutoFeeStartDate > systemClock.UtcNow then
         Error <| this.SingleReasonSuggestion(pairId, SwapDisqualifiedReason.BudgetNotStarted)
       else
         Ok()
@@ -859,8 +861,12 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         let mutable resp = SwapSuggestions.Zero
         let mutable suggestions: ResizeArray<SwapSuggestion> = ResizeArray()
         let traffic = {
-          SwapTraffic.FailedLoopOut = recentSwapFailureProjection.FailedLoopOuts
-          FailedLoopIn = recentSwapFailureProjection.FailedLoopIns
+          SwapTraffic.FailedLoopOut =
+            recentSwapFailureProjection.FailedLoopOuts
+            |> Map.filter(fun _ v -> (systemClock.UtcNow - par.FailureBackoff) <= v)
+          FailedLoopIn =
+            recentSwapFailureProjection.FailedLoopIns
+            |> Map.filter(fun _ v -> (systemClock.UtcNow - par.FailureBackoff) <= v)
           OngoingLoopOut =
             onGoingLoopOuts
             |> List.map(fun o -> o.OutgoingChanIds |> Array.toList) |> List.concat
