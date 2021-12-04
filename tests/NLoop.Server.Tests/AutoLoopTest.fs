@@ -12,7 +12,9 @@ open FsToolkit.ErrorHandling
 open LndClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Options
 open NBitcoin
+open NBitcoin.DataEncoders
 open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -20,6 +22,7 @@ open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
 open NLoop.Server.Tests.Extensions
@@ -31,6 +34,10 @@ open Xunit
 module private Constants =
   let peer1 = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
   let peer2 = PubKey("0324653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c")
+
+  let testTime = DateTime(2021, 12, 03, 23, 0, 0)
+  let testBudgetStart = testTime - TimeSpan.FromHours(1.)
+
   let chanId1 = ShortChannelId.FromUInt64(1UL)
   let chanId2 = ShortChannelId.FromUInt64(2UL)
   let chanId3 = ShortChannelId.FromUInt64(3UL)
@@ -91,6 +98,63 @@ module private Constants =
       OutgoingChannelIds = [| chanId2 |]
   }
 
+  let getDummyTestInvoice(network: Network) =
+    assert(network <> null)
+    let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+    let paymentHash = paymentPreimage.Hash
+    let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
+    PaymentRequest.TryCreate(network, Some(LNMoney.Satoshis(100000L)), DateTimeOffset.UtcNow, fields, new Key())
+    |> ResultUtils.Result.deref
+    |> fun x -> x.ToString()
+
+  let hex = HexEncoder()
+  let loopOut1 =
+    let claimKey =
+      new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
+    let refundKey =
+      new Key(hex.DecodeData("0202020202020202020202020202020202020202020202020202020202020202"))
+    let paymentPreimage =
+      hex.DecodeData("0909090909090909090909090909090909090909090909090909090909090909")
+      |> PaymentPreimage.Create
+    let paymentHash = paymentPreimage.Hash
+    let timeoutBlockHeight = BlockHeight(32u)
+    let chainName = Network.RegTest.ChainName
+    let quoteN = pairId.Quote.ToNetworkSet().GetNetwork(chainName)
+    let baseN = pairId.Base.ToNetworkSet().GetNetwork(chainName)
+    {
+      LoopOut.Id = Guid.NewGuid().ToString() |> SwapId
+      OutgoingChanIds = [||]
+      SwapTxConfRequirement = BlockHeightOffset32(3u)
+      ClaimKey = claimKey
+      Preimage = paymentPreimage
+      RedeemScript =
+        Scripts.reverseSwapScriptV1(paymentHash) claimKey.PubKey refundKey.PubKey timeoutBlockHeight
+      Invoice =
+        let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
+        PaymentRequest.TryCreate(quoteN, Some(LNMoney.Satoshis(100000L)), DateTimeOffset.UtcNow, fields, new Key())
+        |> ResultUtils.Result.deref
+        |> fun p -> p.ToString()
+      ClaimAddress =
+        claimKey.PubKey.WitHash.GetAddress(baseN).ToString()
+      OnChainAmount = Money.Satoshis(10000L)
+      TimeoutBlockHeight = timeoutBlockHeight
+      LockupTransactionHex = None
+      LockupTransactionHeight = None
+      ClaimTransactionId = None
+      IsClaimTxConfirmed = false
+      IsOffchainOfferResolved = false
+      PairId = pairId
+      Label = String.Empty
+      PrepayInvoice = getDummyTestInvoice(quoteN)
+      SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
+      MaxMinerFee = pairId.DefaultLoopOutParameters.MaxMinerFee
+      ChainName = chainName.ToString()
+      Cost = SwapCost.Zero
+    }
+
+  let chan1Out =
+    { loopOut1 with OutgoingChanIds = [| chanId1 |] }
+
 type AutoLoopTests() =
   let mockSwapActor = {
     new ISwapActor with
@@ -129,7 +193,7 @@ type AutoLoopTests() =
     match! man.SetParameters(group, Parameters.Default(group.PairId)) with
     | Error e -> failwith e
     | Ok() ->
-    let setChanRule chanId newRule p =
+    let setChanRule chanId newRule (p: Parameters) =
       {
         p with
           Rules = {
@@ -203,25 +267,46 @@ type AutoLoopTests() =
         Map.empty
         |> Map.add chanId1 chanRule
         |> Map.add chanId2 chanRule
+      let rules = { Rules.Zero with ChannelRules = chanRules }
 
-      let e = {
+      let failureWithInTimeout chanId m =
+        m |> Map.add chanId testTime
+      let failureBeforeBackoff chanId m =
+        m |> Map.add chanId (testTime - defaultFailureBackoff)
+
+      let expected = {
         SwapSuggestions.Zero
           with
             OutSwaps = [chan1Rec]
       }
-      ("no existing swaps", channel1, Seq.empty, { Rules.Zero with ChannelRules = chanRules }, Map.empty, Map.empty, e)
-      let s = // seq {
-        // Swap.State.Out({ LoopOut })
-      //}
-        Seq.empty
-      let e = {
+      ("no existing swaps", seq [channel1], Seq.empty, rules, Map.empty, Map.empty, 2, expected)
+      let swapState = seq [
+        Swap.State.Out(BlockHeight.One, { loopOut1 with OutgoingChanIds = [||] })
+      ]
+      ("unrestricted loop out (should not affect the suggestion)", seq [channel1], swapState, rules, Map.empty, Map.empty, 2, expected)
+      let expected = {
         SwapSuggestions.Zero
           with
-            OutSwaps = [chan1Rec]
+          DisqualifiedChannels = Map.empty |> Map.add chanId1 SwapDisqualifiedReason.InFlightLimitReached
       }
-      ("unrestricted loop out", channel1, s, { Rules.Zero with ChannelRules = chanRules }, Map.empty, Map.empty, e)
+      ("Max auto inflight limit (should prevent swap)", seq [channel1], swapState, rules, Map.empty, Map.empty, 1, expected)
+      let swapState = seq [
+        Swap.State.Out(BlockHeight.One, chan1Out)
+      ]
+      let expected = {
+        SwapSuggestions.Zero
+          with
+            OutSwaps = [ chan2Rec ]
+            DisqualifiedChannels =
+              Map.empty |> Map.add chanId1 SwapDisqualifiedReason.LoopOutAlreadyInTheChannel
+      }
+      //("restricted loop out", seq [channel1; channel2], swapState, rules, Map.empty, Map.empty, 2, expected)
+      let recentFailure =
+        Map.empty |> failureWithInTimeout chanId1
+      //("Swap failed recently", seq[ channel1; ], swapState, rules, recentFailure, Map.empty, 2,  expected)
+      ()
     }
-    |> Seq.map(fun (name: string, channels: ListChannelResponse, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTime>, recentFailureIn: Map<NodeId, DateTime>, expected) ->
+    |> Seq.map(fun (name: string, channels: ListChannelResponse seq, state: Swap.State seq, rules: Rules, recentFailureOut: Map<ShortChannelId, DateTime>, recentFailureIn: Map<NodeId, DateTime>, maxAutoInFlight, expected) ->
       [|
         name |> box
         channels |> box
@@ -229,17 +314,19 @@ type AutoLoopTests() =
         rules |> box
         recentFailureOut |> box
         recentFailureIn |> box
+        maxAutoInFlight |> box
         expected |> box
       |])
 
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.RestrictedSuggestionTestData))>]
   member this.RestrictedSuggestions(name: string,
-                                    channels: ListChannelResponse,
+                                    channels: ListChannelResponse seq,
                                     swapStates: Swap.State seq,
                                     rules: Rules,
                                     recentFailureOut: Map<ShortChannelId, DateTime>,
                                     recentFailureIn: Map<NodeId, DateTime>,
+                                    maxAutoInFlight: int,
                                     expected: SwapSuggestions) = unitTask {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       let stateView = {
@@ -258,7 +345,7 @@ type AutoLoopTests() =
           {
             DummyLnClientParameters.Default
               with
-              ListChannels = [channels]
+              ListChannels = channels |> Seq.toList
           }
       let dummySwapServerClient =
         TestHelpers.GetDummySwapServerClient
@@ -286,6 +373,8 @@ type AutoLoopTests() =
       Parameters.Default(group.PairId)
         with
         Rules = rules
+        AutoFeeStartDate = testTime
+        MaxAutoInFlight = maxAutoInFlight
     }
     match! man.SetParameters(group, p) with
     | Error e -> failwith $"{name}: Failed to set parameters {e}"

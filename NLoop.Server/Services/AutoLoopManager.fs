@@ -469,7 +469,7 @@ type FeeCategoryLimit = {
 /// run-time modifiable part of the auto loop parameters.
 type Parameters = {
   AutoFeeBudget: Money
-  AutoFeeStartDate: DateTimeOffset
+  AutoFeeStartDate: DateTime
   MaxAutoInFlight: int
   FailureBackoff: TimeSpan
   SweepConfTarget: BlockHeightOffset32
@@ -483,7 +483,7 @@ type Parameters = {
   with
   static member Default(pairId: PairId) = {
     AutoFeeBudget = defaultBudget
-    AutoFeeStartDate = DateTimeOffset.UtcNow
+    AutoFeeStartDate = DateTime.UtcNow
     MaxAutoInFlight = 1
     FailureBackoff = defaultFailureBackoff
     SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
@@ -794,13 +794,13 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   member private this.CheckAutoLoopIsPossible(pairId, existingAutoLoopOuts: _ list, summary: ExistingAutoLoopSummary) =
     let par = this.Parameters.[pairId]
     let checkInFlightNumber () =
-      if opts.Value.MaxAutoInFlight < existingAutoLoopOuts.Length then
-        logger.LogDebug($"%d{opts.Value.MaxAutoInFlight} autoloops allowed, %d{existingAutoLoopOuts.Length} inflight")
+      if par.MaxAutoInFlight < existingAutoLoopOuts.Length then
+        logger.LogDebug($"%d{par.MaxAutoInFlight} autoloops allowed, %d{existingAutoLoopOuts.Length} inflight")
         Error (this.SingleReasonSuggestion(pairId, SwapDisqualifiedReason.InFlightLimitReached))
       else
         Ok()
     let checkDate() =
-      if par.AutoFeeStartDate > DateTimeOffset.UtcNow then
+      if par.AutoFeeStartDate > DateTime.UtcNow then
         Error <| this.SingleReasonSuggestion(pairId, SwapDisqualifiedReason.BudgetNotStarted)
       else
         Ok()

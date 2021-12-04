@@ -42,7 +42,7 @@ module Pipelines =
     | SingleReasonError of SwapDisqualifiedReason
 
   let private checkAutoLoopStarted(p: Parameters) =
-    if p.AutoFeeStartDate < DateTimeOffset.UtcNow then Ok() else
+    if p.AutoFeeStartDate < DateTime.UtcNow then Ok() else
     Error <| SingleReasonError(SwapDisqualifiedReason.BudgetNotStarted)
 
   let private checkAgainstFeeMarket
