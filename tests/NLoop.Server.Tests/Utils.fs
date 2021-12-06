@@ -1,6 +1,8 @@
 [<AutoOpen>]
 module internal TestUtils
 
+open Xunit
+
 [<RequireQualifiedAccess>]
 module Result =
   let deref =
@@ -27,3 +29,12 @@ module Assertion =
       let expectedT = typeof<'TError>
       if actualT = expectedT then () else
       failwith $"Assertion Failed! expected error type: {expectedT}. actual: {actualT}."
+
+  let inline isSame(expected: Result<'T, 'E>, actual: Result<'T, 'E>) =
+    match expected, actual with
+    | Ok e, Ok a ->
+      Assert.Equal<'T>(e, a)
+    | Error e, Error a ->
+      Assert.Equal<'E>(e, a)
+    | e, a ->
+      failwith $"expected: {e}\nactual: {a}"

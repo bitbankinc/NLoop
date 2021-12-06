@@ -17,8 +17,12 @@ type private CryptoCodeDefaultOnChainParams = {
   /// Used for Loop Out
   SweepConfTarget: BlockHeightOffset32
   MaxMinerFee: Money
+  /// If the sweep feerate is above this value, autolooper will not dispatch the swap.
+  SweepFeeRateLimit: FeeRate
 }
 
+/// for 99.9% case the offchain crypto is BTC. So specifying default for every crypto is provably overkill.
+/// But we will do it anyway for the sake of consistency.
 type private CryptoCodeDefaultOffChainParams = {
   MaxPrepay: Money
   MaxRoutingFee: Money
@@ -40,6 +44,9 @@ type PairIdDefaultLoopOutParameters = {
   MaxRoutingFee: Money
   MaxPrepayRoutingFee: Money
   MaxMinerFee: Money
+
+  /// If the sweep feerate is above this value, autolooper will not dispatch the swap.
+  SweepFeeRateLimit: FeeRate
 
   SwapTxConfRequirement: BlockHeightOffset32
   /// SweepConfTarget for estimating sweep tx (claim tx) fee rate.
@@ -67,6 +74,7 @@ module CryptoCodeExtensions =
             SwapTxConfRequirement = 1u |> BlockHeightOffset32
             HTLCConfTarget = 10u |> BlockHeightOffset32
             SweepConfTarget = 100u |> BlockHeightOffset32
+            SweepFeeRateLimit = FeeRate(feePerK=Money.Satoshis(1000L))
           }
           OffChain = {
             MaxPrepay = 1000L |> Money.Satoshis
@@ -81,6 +89,7 @@ module CryptoCodeExtensions =
             SwapTxConfRequirement = 3u |> BlockHeightOffset32
             HTLCConfTarget = 10u |> BlockHeightOffset32
             SweepConfTarget = 100u |> BlockHeightOffset32
+            SweepFeeRateLimit = FeeRate(feePerK=Money.Satoshis(200L))
           }
           OffChain = {
             MaxPrepay = 1000L |> Money.Satoshis
@@ -105,7 +114,8 @@ module CryptoCodeExtensions =
           SwapTxConfRequirement = baseP.SwapTxConfRequirement
           // in loop-out, base asset is an onchain.
           SweepConfTarget = baseP.SweepConfTarget
-      }
+          SweepFeeRateLimit = baseP.SweepFeeRateLimit
+        }
       match this with
       | PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC) ->
         {

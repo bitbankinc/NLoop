@@ -59,25 +59,30 @@ type BoltzClientExtensions =
   }
 
   [<Extension>]
-  static member GetLoopOutTerms(this: BoltzClient, pairId: PairId, ?ct: CancellationToken) = task {
+  static member GetLoopOutTerms(this: BoltzClient, pairId: PairId, zeroConf: bool, ?ct: CancellationToken) = task {
     let ct = defaultArg ct CancellationToken.None
     let! getPairsResponse = this.GetPairsAsync(ct)
     let ps = PairId.toString(&pairId)
     let p = getPairsResponse.Pairs.[ps]
     return {
-      SwapDTO.OutTermsResponse.MaxSwapAmount = p.Limits.Maximal |> Money.Satoshis
-      SwapDTO.MinSwapAmount = p.Limits.Minimal |> Money.Satoshis
+      SwapDTO.OutTermsResponse.MaxSwapAmount =
+        if zeroConf then p.Limits.MaximalZeroConf.BaseAsset else p.Limits.Maximal
+        |> Money.Satoshis
+      SwapDTO.MinSwapAmount =
+        p.Limits.Minimal |> Money.Satoshis
     }
   }
 
   [<Extension>]
-  static member GetLoopInTerms(this: BoltzClient, pairId: PairId, ?ct: CancellationToken) = task {
+  static member GetLoopInTerms(this: BoltzClient, pairId: PairId, zeroConf, ?ct: CancellationToken) = task {
     let ct = defaultArg ct CancellationToken.None
     let! getPairsResponse = this.GetPairsAsync(ct)
     let ps = PairId.toString(&pairId)
     let p = getPairsResponse.Pairs.[ps]
     return {
-      SwapDTO.InTermsResponse.MaxSwapAmount = p.Limits.Maximal |> Money.Satoshis
+      SwapDTO.InTermsResponse.MaxSwapAmount =
+        if zeroConf then p.Limits.MaximalZeroConf.BaseAsset else p.Limits.Maximal
+        |> Money.Satoshis
       SwapDTO.InTermsResponse.MinSwapAmount = p.Limits.Minimal |> Money.Satoshis
     }
   }
@@ -141,17 +146,17 @@ type BoltzSwapServerClient(b: BoltzClient) =
           })
       })
 
-    member this.GetLoopInTerms(pairId, ct) =
+    member this.GetLoopInTerms(pairId, zeroConf, ct) =
       let ct = defaultArg ct CancellationToken.None
-      b.GetLoopInTerms(pairId, ct)
+      b.GetLoopInTerms(pairId, zeroConf, ct)
       |> Task.map(fun resp -> {
         SwapDTO.InTermsResponse.MaxSwapAmount = resp.MaxSwapAmount
         SwapDTO.InTermsResponse.MinSwapAmount = resp.MinSwapAmount
       })
 
-    member this.GetLoopOutTerms(pairId, ct) =
+    member this.GetLoopOutTerms(pairId, zeroConf, ct) =
       let ct = defaultArg ct CancellationToken.None
-      b.GetLoopOutTerms(pairId, ct)
+      b.GetLoopOutTerms(pairId, zeroConf, ct)
       |> Task.map(fun resp -> {
         SwapDTO.OutTermsResponse.MaxSwapAmount = resp.MaxSwapAmount
         SwapDTO.OutTermsResponse.MinSwapAmount = resp.MinSwapAmount

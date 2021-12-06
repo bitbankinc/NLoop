@@ -203,8 +203,8 @@ type ISwapServerClient =
   abstract member GetLoopOutQuote: request: SwapDTO.LoopOutQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopOutQuote>
   abstract member GetLoopInQuote: request: SwapDTO.LoopInQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopInQuote>
 
-  abstract member GetLoopOutTerms: pairId: PairId * ?ct : CancellationToken -> Task<SwapDTO.OutTermsResponse>
-  abstract member GetLoopInTerms: pairId: PairId * ?ct : CancellationToken -> Task<SwapDTO.InTermsResponse>
+  abstract member GetLoopOutTerms: pairId: PairId * zeroConf: bool * ?ct : CancellationToken -> Task<SwapDTO.OutTermsResponse>
+  abstract member GetLoopInTerms: pairId: PairId * zeroConf: bool * ?ct : CancellationToken -> Task<SwapDTO.InTermsResponse>
 
   abstract member CheckConnection: ?ct: CancellationToken -> Task
 
@@ -255,16 +255,17 @@ type Restrictions = {
 [<Extension;AbstractClass;Sealed>]
 type ISwapServerClientExtensions =
   [<Extension>]
-  static member GetSwapAmountRestrictions(this: ISwapServerClient, group: Swap.Group) = task {
+  static member GetSwapAmountRestrictions(this: ISwapServerClient, group: Swap.Group, zeroConf: bool, ?ct: CancellationToken) = task {
+    let ct = defaultArg ct CancellationToken.None
     match group.Category with
     | Swap.Category.In ->
-      let! resp = this.GetLoopInTerms(group.PairId)
+      let! resp = this.GetLoopInTerms(group.PairId, zeroConf, ct)
       return {
         Restrictions.Maximum = resp.MaxSwapAmount
         Minimum = resp.MinSwapAmount
       }
     | Swap.Category.Out ->
-      let! resp = this.GetLoopOutTerms(group.PairId)
+      let! resp = this.GetLoopOutTerms(group.PairId, zeroConf, ct)
       return {
         Restrictions.Maximum = resp.MaxSwapAmount
         Minimum = resp.MinSwapAmount

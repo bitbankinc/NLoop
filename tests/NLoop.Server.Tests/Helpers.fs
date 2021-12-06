@@ -343,15 +343,14 @@ type TestHelpers =
         member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
           failwith "todo"
 
-        member this.GetLoopOutTerms(pairId: PairId, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
+        member this.GetLoopOutTerms(pairId: PairId, zeroConf: bool, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
           parameters.LoopOutTerms
           |> Task.FromResult
-        member this.GetLoopInTerms(pairId: PairId, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
+        member this.GetLoopInTerms(pairId: PairId, zeroConf: bool, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
           failwith "todo"
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"
 
         member this.ListenToSwapTx(swapId: SwapId, ?ct: CancellationToken): Task<Transaction> =
           failwith "todo"
-
     }

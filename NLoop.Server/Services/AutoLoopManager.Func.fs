@@ -2,6 +2,7 @@ namespace NLoop.Server.Services
 
 open System
 open System.Threading.Tasks
+open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
 open LndClient
@@ -55,7 +56,8 @@ module Pipelines =
   }
 
   let private getSwapRestrictions group (swapServerClient: ISwapServerClient) (par: Parameters) = taskResult {
-      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group)
+      let isZeroConf = par.SwapTxConfRequirement = BlockHeightOffset32.Zero
+      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, isZeroConf)
       do!
           Restrictions.Validate(
             restrictions,

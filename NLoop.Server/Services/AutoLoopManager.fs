@@ -41,6 +41,9 @@ module internal AutoLoopConstants =
 
   let defaultFailureBackoff = TimeSpan.FromHours(24.)
 
+  let [<Literal>] defaultMaxRoutingFeePPM = 10000L<ppm>
+  let [<Literal>] defaultMaxPrepayRoutingFeePPM = 5000L<ppm>
+
   let tick = TimeSpan.FromSeconds(20.)
 
 [<AutoOpen>]
@@ -418,6 +421,16 @@ type FeeCategoryLimit = {
   SweepFeeRateLimit: FeeRate
 }
   with
+  static member Default (pairId: PairId) =
+    let p  = pairId.DefaultLoopOutParameters
+    {
+      MaximumPrepay = p.MaxPrepay
+      MaximumSwapFeePPM = p.MaxSwapFeePPM
+      MaximumRoutingFeePPM = defaultMaxRoutingFeePPM
+      MaximumPrepayRoutingFeePPM = defaultMaxPrepayRoutingFeePPM
+      MaximumMinerFee = p.MaxMinerFee
+      SweepFeeRateLimit = p.SweepFeeRateLimit
+    }
   interface IFeeLimit with
     member this.Validate(): Result<unit, string> =
       if this.MaximumSwapFeePPM <= 0L<ppm> then
@@ -438,7 +451,7 @@ type FeeCategoryLimit = {
     /// Checks whether we may dispatch swap based on the current fee conditions.
     /// (Only for loop out sweep tx)
     member this.CheckWithEstimatedFee(feeRate: FeeRate): Result<unit, SwapDisqualifiedReason> =
-      feeRate.SatoshiPerByte > this.SweepFeeRateLimit.SatoshiPerByte
+      feeRate.SatoshiPerByte <= this.SweepFeeRateLimit.SatoshiPerByte
       |> Result.requireTrue(SwapDisqualifiedReason.SweepFeesTooHigh({| Estimation = feeRate; OurLimit = this.SweepFeeRateLimit |}))
 
     /// Checks whether the quote provided is within our fee limits for the swap amount.
@@ -495,6 +508,9 @@ type Parameters = {
     Rules = Rules.Zero
     AutoLoop = false
   }
+
+  member this.IsZeroConf =
+    this.SwapTxConfRequirement = BlockHeightOffset32.Zero
 
   /// Checks whether a set of parameters is valid.
   member this.Validate(openChannels: ListChannelResponse seq, server): Result<unit, _> =
@@ -701,13 +717,13 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     and private set (v: Map<Swap.Group, Parameters>) =
       lock _lockObj (fun () -> parametersDict <- v)
 
-  member this.Config (g: Swap.Group) =
+  member this.Config (g: Swap.Group) (isZeroConf: bool) =
     {
       Config.Restrictions = fun category -> task {
         match category with
         | Swap.Category.Out ->
           try
-            let! terms = swapServerClient.GetLoopOutTerms(g.PairId)
+            let! terms = swapServerClient.GetLoopOutTerms(g.PairId, isZeroConf)
             return Ok { Restrictions.Maximum = terms.MaxSwapAmount
                         Minimum = terms.MinSwapAmount }
           with
@@ -715,7 +731,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
             return Error(ex.ToString())
         | Swap.Category.In ->
           try
-            let! terms = swapServerClient.GetLoopInTerms(g.PairId)
+            let! terms = swapServerClient.GetLoopInTerms(g.PairId, isZeroConf)
             return Ok { Restrictions.Maximum = terms.MaxSwapAmount
                         Minimum = terms.MinSwapAmount }
           with
@@ -728,9 +744,9 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       SwapActor = swapActor
     }
 
-  member this.Builder g =
+  member this.Builder g isZeroConf =
     let c =
-      this.Config g
+      this.Config g isZeroConf
     match g.Category with
     | Swap.Category.Out ->
       SwapBuilder.NewLoopOut(c, g.PairId, logger)
@@ -746,7 +762,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       _lightningClientProvider
         .GetClient(g.OffChainAsset)
         .ListChannels()
-    let c = this.Config g
+    let c = this.Config g (v.IsZeroConf)
     let! r =
       c.Restrictions g.Category
     do! v.Validate(channels, r)
@@ -758,7 +774,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   /// validates client restrictions (if present) against these values and merges the client's custom
   /// requirements with the server's limits to produce a single set of limitations for our swap.
   member private this.GetSwapRestrictions(group: Swap.Group): Task<Result<_, AutoLoopError>> = taskResult {
-      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group)
+      let isZeroConf = this.Parameters.[group].IsZeroConf
+      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, isZeroConf)
       let par = this.Parameters.[group]
       do!
           Restrictions.Validate(
@@ -815,8 +832,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   member this.SuggestSwaps(autoloop: bool, group: Swap.Group, ?ct: CancellationToken): Task<Result<SwapSuggestions, AutoLoopError>> = task {
     let ct = defaultArg ct CancellationToken.None
-    let builder = this.Builder group
     let par = this.Parameters.[group]
+    let builder = this.Builder group (par.SwapTxConfRequirement = BlockHeightOffset32.Zero)
     if not <| par.HaveRules then return Error(AutoLoopError.NoRules) else
     match! builder.MaySwap(par) with
     | Error e ->
@@ -959,7 +976,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: Restrictions, group, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
     taskResult {
-      let builder = this.Builder group
+      let isZeroConf = this.Parameters.[group].IsZeroConf
+      let builder = this.Builder group (isZeroConf)
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
       do! builder.VerifyTargetIsNotInUse(traffic) (peerOrChannel)
 

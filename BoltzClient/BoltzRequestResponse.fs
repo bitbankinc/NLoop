@@ -132,8 +132,11 @@ and AssetFeeInfo = {
   Reverse: {| Claim: int64; Lockup: int64 |}
 }
 and ServerLimit = {
+  /// Maximum amount for the swap in case of it is not zero-conf (in sats in case of BTC.)
   Maximal: int64
+  /// Minimum amount for the swap (in sats in case of BTC.)
   Minimal: int64
+  /// Maximum amount for the swap in case of zero-conf
   MaximalZeroConf: BaseAndQuote<int64>
 }
 and BaseAndQuote<'T> = {
