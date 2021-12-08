@@ -12,7 +12,7 @@ module internal Helpers =
     $"--{chain.ToString().ToLowerInvariant()}.{optionSubSectionName.ToLowerInvariant()}"
 
   [<Literal>]
-  let private FeeBase = 100000L
+  let private FeeBase = 1_000_000L
 
   let ppmToSat (amount: Money, ppm: int64<ppm>): Money =
     Money.Satoshis(amount.Satoshi * (ppm |> int64) / FeeBase)

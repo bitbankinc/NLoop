@@ -185,6 +185,18 @@ module SwapDTO =
       else
         Ok ()
 
+  [<Struct>]
+  type OutTermsRequest = {
+    PairId: PairId
+    IsZeroConf: bool
+  }
+
+  [<Struct>]
+  type InTermsRequest = {
+    PairId: PairId
+    IsZeroConf: bool
+  }
+
   type OutTermsResponse = {
     MinSwapAmount: Money
     MaxSwapAmount: Money
@@ -203,8 +215,8 @@ type ISwapServerClient =
   abstract member GetLoopOutQuote: request: SwapDTO.LoopOutQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopOutQuote>
   abstract member GetLoopInQuote: request: SwapDTO.LoopInQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopInQuote>
 
-  abstract member GetLoopOutTerms: pairId: PairId * zeroConf: bool * ?ct : CancellationToken -> Task<SwapDTO.OutTermsResponse>
-  abstract member GetLoopInTerms: pairId: PairId * zeroConf: bool * ?ct : CancellationToken -> Task<SwapDTO.InTermsResponse>
+  abstract member GetLoopOutTerms: req: SwapDTO.OutTermsRequest * ?ct : CancellationToken -> Task<SwapDTO.OutTermsResponse>
+  abstract member GetLoopInTerms: req: SwapDTO.InTermsRequest * ?ct : CancellationToken -> Task<SwapDTO.InTermsResponse>
 
   abstract member CheckConnection: ?ct: CancellationToken -> Task
 
@@ -226,30 +238,33 @@ type RestrictionError =
     | MinLessThenServer (c, s)  ->
       $"minimum swap amount ({c.Satoshi} sats) is less than server minimum ({s.Satoshi} sats)"
 
-type Restrictions = {
+type ClientRestrictions = {
+  Minimum: Money option
+  Maximum: Money option
+}
+  with
+  static member Default = {
+    Minimum = None
+    Maximum = None
+  }
+
+type ServerRestrictions = {
   Minimum: Money
   Maximum: Money
 }
   with
   static member Validate
-    ({Minimum = serverMin; Maximum =  serverMax}: Restrictions,
-     clientRest: Restrictions option) =
-    match clientRest with
-    | None -> Ok()
-    | Some {Minimum = clientMin; Maximum = clientMax } ->
-      let zeroMin = clientMin = Money.Zero
-      let zeroMax = clientMax = Money.Zero
-      if zeroMin && zeroMax then Ok() else
-      if not <| zeroMax && clientMin > clientMax then
-        Error(RestrictionError.MinimumExceedsMaximumAmt)
-      elif not <| zeroMax && clientMax > serverMax then
+    ({Minimum = serverMin; Maximum =  serverMax}: ServerRestrictions,
+     { Minimum = maybeClientMin; Maximum = maybeClientMax }: ClientRestrictions) =
+    match maybeClientMin, maybeClientMax with
+    | Some clientMin, Some clientMax when clientMin > clientMax ->
+      Error(RestrictionError.MinimumExceedsMaximumAmt)
+    | Some clientMin, _  when clientMin < serverMin ->
+      Error(RestrictionError.MinLessThenServer(clientMin, serverMin))
+    | _, Some clientMax when clientMax > serverMax ->
         Error(RestrictionError.MaxExceedsServer(clientMax, serverMax))
-      elif zeroMin then
-        Ok()
-      elif clientMin < serverMin then
-        Error(RestrictionError.MinLessThenServer(clientMin, serverMin))
-      else
-        Ok()
+    | _ ->
+      Ok()
 
 
 [<Extension;AbstractClass;Sealed>]
@@ -259,15 +274,21 @@ type ISwapServerClientExtensions =
     let ct = defaultArg ct CancellationToken.None
     match group.Category with
     | Swap.Category.In ->
-      let! resp = this.GetLoopInTerms(group.PairId, zeroConf, ct)
+      let! resp = this.GetLoopInTerms({
+        SwapDTO.InTermsRequest.PairId = group.PairId
+        SwapDTO.InTermsRequest.IsZeroConf = zeroConf
+      }, ct )
       return {
-        Restrictions.Maximum = resp.MaxSwapAmount
+        ServerRestrictions.Maximum = resp.MaxSwapAmount
         Minimum = resp.MinSwapAmount
       }
     | Swap.Category.Out ->
-      let! resp = this.GetLoopOutTerms(group.PairId, zeroConf, ct)
+      let! resp = this.GetLoopOutTerms({
+          SwapDTO.OutTermsRequest.PairId = group.PairId
+          SwapDTO.OutTermsRequest.IsZeroConf = zeroConf
+        }, ct)
       return {
-        Restrictions.Maximum = resp.MaxSwapAmount
+        ServerRestrictions.Maximum = resp.MaxSwapAmount
         Minimum = resp.MinSwapAmount
       }
     }

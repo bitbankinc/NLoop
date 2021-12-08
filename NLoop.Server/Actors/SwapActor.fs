@@ -121,11 +121,9 @@ type SwapActor(broadcaster: IBroadcaster,
         let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
         let preimageHash = preimage.Hash
         let pairId =
-          req.PairId
-          |> Option.defaultValue PairId.Default
-        let struct(baseCryptoCode, quoteCryptoCode) = pairId.Value
+          req.PairIdValue
 
-        let n = opts.Value.GetNetwork(baseCryptoCode)
+        let n = opts.Value.GetNetwork(pairId.Base)
         let! outResponse =
           let req =
             { SwapDTO.LoopOutRequest.InvoiceAmount = req.Amount
@@ -133,7 +131,7 @@ type SwapActor(broadcaster: IBroadcaster,
               SwapDTO.LoopOutRequest.ClaimPublicKey = claimKey.PubKey
               SwapDTO.LoopOutRequest.PreimageHash = preimageHash.Value }
           swapServerClient.LoopOut req
-        let lnClient = lightningClientProvider.GetClient(quoteCryptoCode)
+        let lnClient = lightningClientProvider.GetClient(pairId.Quote)
 
         let! addr =
           match req.Address with
@@ -192,8 +190,7 @@ type SwapActor(broadcaster: IBroadcaster,
 
     member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight) = taskResult {
         let pairId =
-          loopIn.PairId
-          |> Option.defaultValue PairId.Default
+          loopIn.PairIdValue
         let struct(baseCryptoCode, quoteCryptoCode) =
           pairId.Value
         let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)

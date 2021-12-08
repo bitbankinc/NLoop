@@ -36,5 +36,7 @@ module Assertion =
       Assert.Equal<'T>(e, a)
     | Error e, Error a ->
       Assert.Equal<'E>(e, a)
-    | e, a ->
-      failwith $"expected: {e}\nactual: {a}"
+    | Ok e, Error a ->
+      failwith $"expected: Ok {e}\nactual: Error {a}"
+    | Error e, Ok a ->
+      failwith $"expected: Error {e}\nactual: Ok {a}"

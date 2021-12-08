@@ -120,6 +120,8 @@ type AutoLoopError =
   | RestrictionError of RestrictionError
   | ExclusiveRules
   | FailedToDispatchLoop of msg: string
+  | FailedToGetServerRestriction of exn
+  | InvalidParameters of string
   with
   member this.Message =
     match this with
@@ -130,6 +132,8 @@ type AutoLoopError =
     | ExclusiveRules ->
       $"channel and peer rules must be exclusive"
     | FailedToDispatchLoop msg -> msg
+    | InvalidParameters msg -> msg
+    | e -> e.ToString()
 
 [<RequireQualifiedAccess>]
 type SwapSuggestion =
@@ -268,7 +272,7 @@ module private Extensions =
   type ThresholdRule with
     /// SwapAmount suggests a swap based on the liquidity thresholds configured,
     /// returning zero if no swap is recommended.
-    member this.SwapAmount(channelBalances: Balances, outRestrictions: Restrictions, targetIncomingLiquidityRatio: int16<percent>): Money =
+    member this.SwapAmount(channelBalances: Balances, outRestrictions: ServerRestrictions, targetIncomingLiquidityRatio: int16<percent>): Money =
       /// The logic defined in here resembles that of the lightning loop.
       /// In lightning loop, it targets the midpoint of the the largest/smallest possible incoming liquidity.
       /// But with one difference, in lightning loop, it always targets the midpoint and there is no other choice.
@@ -489,7 +493,7 @@ type Parameters = {
   SweepConfTarget: BlockHeightOffset32
   HTLCConfTarget: BlockHeightOffset32
   FeeLimit: IFeeLimit
-  ClientRestrictions: Restrictions option
+  ClientRestrictions: ClientRestrictions
   SwapTxConfRequirement: BlockHeightOffset32
   Rules: Rules
   AutoLoop: bool
@@ -503,7 +507,7 @@ type Parameters = {
     SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
     HTLCConfTarget = pairId.DefaultLoopInParameters.HTLCConfTarget
     FeeLimit = FeePortion.Default
-    ClientRestrictions = None
+    ClientRestrictions = ClientRestrictions.Default
     SwapTxConfRequirement = pairId.DefaultLoopOutParameters.SwapTxConfRequirement
     Rules = Rules.Zero
     AutoLoop = false
@@ -513,7 +517,7 @@ type Parameters = {
     this.SwapTxConfRequirement = BlockHeightOffset32.Zero
 
   /// Checks whether a set of parameters is valid.
-  member this.Validate(openChannels: ListChannelResponse seq, server): Result<unit, _> =
+  member this.Validate(openChannels: ListChannelResponse seq, server): Result<unit, string> =
     result {
       // 1. validate rules for each peers and channels
       let channelsWithPeerRules =
@@ -542,7 +546,7 @@ type Parameters = {
         return! Error $"Zero In Flight {this}"
 
       do!
-        Restrictions.Validate(server, this.ClientRestrictions)
+        ServerRestrictions.Validate(server, this.ClientRestrictions)
         |> Result.mapError(fun e -> e.Message)
       return ()
     }
@@ -553,7 +557,7 @@ type Parameters = {
 type Config = {
   EstimateFee: IFeeEstimator
   SwapServerClient: ISwapServerClient
-  Restrictions: Swap.Category -> Task<Result<Restrictions, string>>
+  Restrictions: Swap.Category -> Task<Result<ServerRestrictions, exn>>
   Lnd: INLoopLightningClient
   SwapActor: ISwapActor
 }
@@ -720,23 +724,13 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   member this.Config (g: Swap.Group) (isZeroConf: bool) =
     {
       Config.Restrictions = fun category -> task {
-        match category with
-        | Swap.Category.Out ->
-          try
-            let! terms = swapServerClient.GetLoopOutTerms(g.PairId, isZeroConf)
-            return Ok { Restrictions.Maximum = terms.MaxSwapAmount
-                        Minimum = terms.MinSwapAmount }
-          with
-          | ex ->
-            return Error(ex.ToString())
-        | Swap.Category.In ->
-          try
-            let! terms = swapServerClient.GetLoopInTerms(g.PairId, isZeroConf)
-            return Ok { Restrictions.Maximum = terms.MaxSwapAmount
-                        Minimum = terms.MinSwapAmount }
-          with
-          | ex ->
-            return Error(ex.ToString())
+        try
+          return!
+            swapServerClient.GetSwapAmountRestrictions(g, isZeroConf)
+            |> Task.map(Ok)
+        with
+        | ex ->
+          return Error(ex)
       }
       EstimateFee = feeEstimator
       SwapServerClient = swapServerClient
@@ -757,15 +751,18 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     g.OffChainAsset
     |> _lightningClientProvider.GetClient
 
-  member this.SetParameters(g: Swap.Group, v: Parameters) = taskResult {
+  member this.SetParameters(g: Swap.Group, v: Parameters): Task<Result<_, AutoLoopError>> = taskResult {
     let! channels =
       _lightningClientProvider
         .GetClient(g.OffChainAsset)
         .ListChannels()
     let c = this.Config g (v.IsZeroConf)
-    let! r =
+    let! restriction =
       c.Restrictions g.Category
-    do! v.Validate(channels, r)
+      |> TaskResult.mapError(AutoLoopError.FailedToGetServerRestriction)
+    do!
+      v.Validate(channels, restriction)
+      |> Result.mapError(AutoLoopError.InvalidParameters)
     this.Parameters <-
       this.Parameters |> Map.add g v
   }
@@ -778,28 +775,24 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, isZeroConf)
       let par = this.Parameters.[group]
       do!
-          Restrictions.Validate(
+          ServerRestrictions.Validate(
             restrictions,
             par.ClientRestrictions
           )
           |> Result.mapError(AutoLoopError.RestrictionError)
       return
-        match par.ClientRestrictions with
-        | Some cr ->
-          {
-            Minimum =
-              Money.Max(cr.Minimum, restrictions.Minimum)
-            Maximum =
-              if cr.Maximum <> Money.Zero && cr.Maximum < restrictions.Maximum then
-                cr.Maximum
-              else
-                restrictions.Maximum
-          }
-        | None ->
-          {
-            Minimum = restrictions.Minimum
-            Maximum = restrictions.Maximum
-          }
+        {
+          Minimum =
+            match par.ClientRestrictions.Minimum with
+            | Some min when min > restrictions.Minimum ->
+              min
+            | _ -> restrictions.Minimum
+          Maximum =
+            match par.ClientRestrictions.Maximum with
+            | Some max when max < restrictions.Maximum ->
+              max
+            | _ -> restrictions.Maximum
+        }
     }
 
   member private this.SingleReasonSuggestion(group: Swap.Group, reason: SwapDisqualifiedReason): SwapSuggestions =
@@ -846,10 +839,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       let onGoingLoopIns: _ list = swapStateProjection.OngoingLoopIns |> Seq.toList
       let summary =
         ExistingAutoLoopSummary.FromLoopInOuts(onGoingLoopIns, onGoingLoopOuts)
-      let existingAutoLoopOuts =
-        onGoingLoopOuts
-        |> Seq.toList
-      match this.CheckAutoLoopIsPossible(group, existingAutoLoopOuts, summary) with
+      match this.CheckAutoLoopIsPossible(group, onGoingLoopOuts, summary) with
       | Error e ->
         return e |> Ok
       | Ok () ->
@@ -927,7 +917,10 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         if suggestions.Count = 0 then
           return Ok resp
         else
-          let suggestions = suggestions |> Seq.sortBy(fun s -> s.Amount)
+          // reorder the suggestions so that we prioritize the large swap.
+          let suggestions =
+            suggestions
+            |> Seq.sortByDescending(fun s -> (s.Amount, s.Channels))
 
           let setReason
             (reason: SwapDisqualifiedReason)
@@ -952,29 +945,26 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
           // Run through our suggested swaps  in descending order of amount and return all of the swaps which will
           // fit within our remaining budget.
-          let mutable available = par.AutoFeeBudget - summary.TotalFees
-          let allowedSwaps = par.MaxAutoInFlight - existingAutoLoopOuts.Count()
+          let availableBudget = par.AutoFeeBudget - summary.TotalFees
+          let allowedSwaps = par.MaxAutoInFlight - onGoingLoopOuts.Count()
           let resp, _ =
             suggestions
             |> Seq.fold(fun (acc, available) s ->
               let fees = s.Fees()
-              let subtractFee a =
-                if (fees <= a) then
-                  a - fees
-                else
-                  a
-              if available = Money.Zero then
+              if available <= Money.Zero then
                 (setReason SwapDisqualifiedReason.BudgetInsufficient s acc), available
-              elif resp.OutSwaps.Length = allowedSwaps || resp.InSwaps.Length = allowedSwaps then
+              elif acc.OutSwaps.Length >= allowedSwaps || acc.InSwaps.Length >= allowedSwaps then
                 (setReason SwapDisqualifiedReason.InFlightLimitReached s acc), available
+              elif fees <= available then
+                acc.AddSuggestion(s), (available - fees)
               else
-                acc.AddSuggestion(s), (subtractFee available)
-            ) (resp, available)
+                (setReason SwapDisqualifiedReason.BudgetInsufficient s acc), available
+            ) (resp, availableBudget)
 
           return Ok resp
   }
 
-  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: Restrictions, group, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
+  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, group, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
     taskResult {
       let isZeroConf = this.Parameters.[group].IsZeroConf
       let builder = this.Builder group (isZeroConf)

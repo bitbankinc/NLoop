@@ -68,7 +68,6 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator)
-  let mutable _finishedSwapSummary = Map.empty
 
   member this.State
     with get(): Map<_,_> = _state

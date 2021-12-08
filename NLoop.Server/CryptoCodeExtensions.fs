@@ -16,6 +16,9 @@ type private CryptoCodeDefaultOnChainParams = {
   /// SweepConfTarget for estimating sweep tx (claim tx) fee rate.
   /// Used for Loop Out
   SweepConfTarget: BlockHeightOffset32
+  /// default limit we place on miner fees per swap.
+  /// We apply a multiplier to this default fee to guard against the case where we have broadcast the preimage,
+  /// and then fees spike and we need to sweep the preimage.
   MaxMinerFee: Money
   /// If the sweep feerate is above this value, autolooper will not dispatch the swap.
   SweepFeeRateLimit: FeeRate
@@ -70,7 +73,7 @@ module CryptoCodeExtensions =
       | SupportedCryptoCode.BTC ->
         {
           CryptoCodeDefaultParams.OnChain = {
-            MaxMinerFee = 3000L |> Money.Satoshis
+            MaxMinerFee = 15000L * 100L |> Money.Satoshis
             SwapTxConfRequirement = 1u |> BlockHeightOffset32
             HTLCConfTarget = 10u |> BlockHeightOffset32
             SweepConfTarget = 100u |> BlockHeightOffset32
@@ -85,7 +88,7 @@ module CryptoCodeExtensions =
       | SupportedCryptoCode.LTC ->
         {
           CryptoCodeDefaultParams.OnChain = {
-            MaxMinerFee = 3000L |> Money.Satoshis
+            MaxMinerFee = 3000L * 100L |> Money.Satoshis
             SwapTxConfRequirement = 3u |> BlockHeightOffset32
             HTLCConfTarget = 10u |> BlockHeightOffset32
             SweepConfTarget = 100u |> BlockHeightOffset32
@@ -107,7 +110,7 @@ module CryptoCodeExtensions =
       // most default values can be derived from CryptoCode parameters.
       let p = {
           PairIdDefaultLoopOutParameters.MaxPrepay = quoteP.MaxPrepay
-          MaxSwapFeePPM = 10000L<ppm> // 1%
+          MaxSwapFeePPM = 5000L<ppm> // 0.5%
           MaxRoutingFee = quoteP.MaxRoutingFee
           MaxPrepayRoutingFee = quoteP.MaxPrepayRoutingFee
           MaxMinerFee = baseP.MaxMinerFee
@@ -121,7 +124,7 @@ module CryptoCodeExtensions =
         {
           p
             with
-            MaxSwapFeePPM = 10000L<ppm>
+            MaxSwapFeePPM = 20000L<ppm>
         }
 
       | PairId(SupportedCryptoCode.LTC, SupportedCryptoCode.BTC) ->

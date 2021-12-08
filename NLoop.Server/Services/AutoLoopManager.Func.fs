@@ -59,28 +59,24 @@ module Pipelines =
       let isZeroConf = par.SwapTxConfRequirement = BlockHeightOffset32.Zero
       let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, isZeroConf)
       do!
-          Restrictions.Validate(
+          ServerRestrictions.Validate(
             restrictions,
             par.ClientRestrictions
           )
           |> Result.mapError(AutoLoopError.RestrictionError)
       return
-        match par.ClientRestrictions with
-        | Some cr ->
-          {
-            Minimum =
-              Money.Max(cr.Minimum, restrictions.Minimum)
-            Maximum =
-              if cr.Maximum <> Money.Zero && cr.Maximum < restrictions.Maximum then
-                cr.Maximum
-              else
-                restrictions.Maximum
-          }
-        | None ->
-          {
-            Minimum = restrictions.Minimum
-            Maximum = restrictions.Maximum
-          }
+        {
+          Minimum =
+            match par.ClientRestrictions.Minimum with
+            | Some min when min > restrictions.Minimum ->
+              min
+            | _ -> restrictions.Minimum
+          Maximum =
+            match par.ClientRestrictions.Maximum with
+            | Some max when max < restrictions.Maximum ->
+              max
+            | _ -> restrictions.Maximum
+        }
   }
 
   let suggestSwaps { Deps.SwapServerClient = swapServerClient } (group: Swap.Group) (state: State): Task<Result<SwapSuggestions, Errors>> = taskResult {

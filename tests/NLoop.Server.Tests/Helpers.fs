@@ -194,7 +194,7 @@ type DummyLnClientParameters = {
 
 type DummySwapServerClientParameters = {
   LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> SwapDTO.LoopOutQuote
-  LoopOutTerms: SwapDTO.OutTermsResponse
+  LoopOutTerms: SwapDTO.OutTermsRequest -> SwapDTO.OutTermsResponse
 }
   with
   static member Default = {
@@ -206,7 +206,7 @@ type DummySwapServerClientParameters = {
         SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
         SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(10L)
       }
-    LoopOutTerms = {
+    LoopOutTerms = fun _ -> {
       SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
       SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
     }
@@ -343,10 +343,10 @@ type TestHelpers =
         member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
           failwith "todo"
 
-        member this.GetLoopOutTerms(pairId: PairId, zeroConf: bool, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
-          parameters.LoopOutTerms
+        member this.GetLoopOutTerms(req, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
+          parameters.LoopOutTerms req
           |> Task.FromResult
-        member this.GetLoopInTerms(pairId: PairId, zeroConf: bool, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
+        member this.GetLoopInTerms(req, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
           failwith "todo"
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"

@@ -146,7 +146,7 @@ type BoltzSwapServerClient(b: BoltzClient) =
           })
       })
 
-    member this.GetLoopInTerms(pairId, zeroConf, ct) =
+    member this.GetLoopInTerms({ SwapDTO.InTermsRequest.PairId = pairId; IsZeroConf = zeroConf }, ct) =
       let ct = defaultArg ct CancellationToken.None
       b.GetLoopInTerms(pairId, zeroConf, ct)
       |> Task.map(fun resp -> {
@@ -154,7 +154,7 @@ type BoltzSwapServerClient(b: BoltzClient) =
         SwapDTO.InTermsResponse.MinSwapAmount = resp.MinSwapAmount
       })
 
-    member this.GetLoopOutTerms(pairId, zeroConf, ct) =
+    member this.GetLoopOutTerms({ SwapDTO.OutTermsRequest.PairId = pairId; IsZeroConf = zeroConf }, ct) =
       let ct = defaultArg ct CancellationToken.None
       b.GetLoopOutTerms(pairId, zeroConf, ct)
       |> Task.map(fun resp -> {

@@ -26,7 +26,9 @@ open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
+open NLoop.Server.SwapServerClient
 open NLoop.Server.Tests.Extensions
+open Org.BouncyCastle.Asn1.IsisMtt.X509
 open Xunit
 
 
@@ -155,7 +157,9 @@ module private Constants =
   let chan1Out =
     { loopOut1 with OutgoingChanIds = [| chanId1 |] }
 
-  let applyFeeCategoryQuote(req: LoopOutRequest, minerFee: Money, prepayPPM: int64<ppm>, routingPPM: int64<ppm>, quote: SwapDTO.LoopOutQuote): LoopOutRequest =
+  let applyFeeCategoryQuote
+    (minerFee: Money, prepayPPM: int64<ppm>, routingPPM: int64<ppm>, quote: SwapDTO.LoopOutQuote)
+    (req: LoopOutRequest): LoopOutRequest =
     {
       req
         with
@@ -183,7 +187,7 @@ type AutoLoopTests() =
   }
 
   let defaultTestRestrictions = {
-    Restrictions.Minimum = Money.Satoshis 1L
+    ServerRestrictions.Minimum = Money.Satoshis 1L
     Maximum = Money.Satoshis 10000L
   }
   [<Fact>]
@@ -202,7 +206,7 @@ type AutoLoopTests() =
      }
 
     match! man.SetParameters(group, Parameters.Default(group.PairId)) with
-    | Error e -> failwith e
+    | Error e -> failwith $"{e}"
     | Ok() ->
     let setChanRule chanId newRule (p: Parameters) =
       {
@@ -222,7 +226,7 @@ type AutoLoopTests() =
       setChanRule chanId newRule startParams
 
     match! man.SetParameters(group, newParams) with
-    | Error e -> failwith e
+    | Error e -> failwith $"{e}"
     | Ok () ->
     let p = man.Parameters.[group]
     Assert.NotEqual(startParams, p)
@@ -239,19 +243,19 @@ type AutoLoopTests() =
     match! man.SetParameters(group, invalidParams) with
     | Ok () -> ()
     | Error e ->
-      Assert.Equal("Channel has 0 channel id", e)
+      Assert.Equal(AutoLoopError.InvalidParameters "Channel has 0 channel id", e)
   }
 
   static member RestrictionsValidationTestData: obj[] seq =
     seq {
-      ("Ok", 1, 10, 1, 10000, None)
-      ("Client invalid", 100, 1, 1, 10000, RestrictionError.MinimumExceedsMaximumAmt |> Some)
-      ("maximum exceeds server", 1, 2000, 1000, 1500, RestrictionError.MaxExceedsServer(2000L |> Money.Satoshis, 1500L |> Money.Satoshis) |> Some)
-      ("minimum less than server", 500, 1000, 1000, 1500, RestrictionError.MinLessThenServer(500L |> Money.Satoshis, 1000L |> Money.Satoshis) |> Some)
+      ("Ok", Some 1, Some 10, 1, 10000, None)
+      ("Client invalid", Some 100, Some 1, 1, 10000, RestrictionError.MinimumExceedsMaximumAmt |> Some)
+      ("maximum exceeds server", None, Some 2000, 1000, 1500, RestrictionError.MaxExceedsServer(2000L |> Money.Satoshis, 1500L |> Money.Satoshis) |> Some)
+      ("minimum less than server", Some 500, None, 1000, 1500, RestrictionError.MinLessThenServer(500L |> Money.Satoshis, 1000L |> Money.Satoshis) |> Some)
     }
     |> Seq.map(fun (name, cMin, cMax, sMin, sMax, maybeExpectedErr) ->
-      let cli = { Restrictions.Maximum = cMax |> int64 |> Money.Satoshis; Minimum = cMin |> int64 |> Money.Satoshis }
-      let server = { Restrictions.Maximum = sMax |> int64 |> Money.Satoshis; Minimum = sMin |> int64 |> Money.Satoshis }
+      let cli = { ClientRestrictions.Maximum = cMax |> Option.map(int64 >> Money.Satoshis); Minimum = cMin |> Option.map(int64 >> Money.Satoshis)}
+      let server = { ServerRestrictions.Maximum = sMax |> int64 |> Money.Satoshis; Minimum = sMin |> int64 |> Money.Satoshis }
       [|
          name |> box
          cli |> box
@@ -263,7 +267,7 @@ type AutoLoopTests() =
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.RestrictionsValidationTestData))>]
   member this.TestValidateRestrictions(name: string, client, server, maybeExpectedErr: RestrictionError option) =
-    match Restrictions.Validate(server, client), maybeExpectedErr with
+    match ServerRestrictions.Validate(server, client), maybeExpectedErr with
     | Ok (), None -> ()
     | Ok (), Some e ->
       failwith $"{name}: expected error ({e}), but there was none."
@@ -272,7 +276,7 @@ type AutoLoopTests() =
     | Error actualErr, Some expectedErr ->
       Assert.Equal(expectedErr, actualErr)
 
-  member private this.TestSuggestSwapsCore(name: string, injection: IServiceCollection -> unit, group, parameters: Parameters, expected: Result<SwapSuggestions, AutoLoopError>) = task {
+  member private this.TestSuggestSwapsCore(name: string, injection: IServiceCollection -> unit, group, parameters: Parameters, channels, expected: Result<SwapSuggestions, AutoLoopError>) = task {
     let i = fun (services: IServiceCollection) ->
       let dummySwapServerClient =
         TestHelpers.GetDummySwapServerClient
@@ -281,10 +285,24 @@ type AutoLoopTests() =
               with
               LoopOutQuote = fun _ -> testQuote
           }
+      let dummyLnClientProvider =
+        TestHelpers.GetDummyLightningClientProvider
+          {
+            DummyLnClientParameters.ListChannels = channels
+          }
+      let f = {
+        new IFeeEstimator
+          with
+          member this.Estimate _target _cc =
+            pairId.DefaultLoopOutParameters.SweepFeeRateLimit
+            |> Task.FromResult
+      }
       services
+        .AddSingleton<IFeeEstimator>(f)
+        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
         .AddSingleton<ISwapActor>(mockSwapActor)
-        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
+        .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
       injection services
     use server = new TestServer(TestHelpers.GetTestHost(i))
@@ -292,7 +310,12 @@ type AutoLoopTests() =
     Assert.NotNull(man)
     let parameters = { parameters with AutoFeeStartDate = testBudgetStart }
     match! man.SetParameters(group, parameters) with
-    | Error e -> failwith $"{name}: Failed to set parameters {e}"
+    | Error e ->
+      match expected with
+      | Error expectedErr ->
+        Assert.Equal(expectedErr, e)
+      | _  ->
+        failwith $"{name}: Failed to set parameters {e}"
     | Ok() ->
       let! actual = man.SuggestSwaps(false, group)
       Assertion.isSame(expected, actual)
@@ -430,19 +453,11 @@ type AutoLoopTests() =
           member this.FailedLoopOuts = recentFailureOut
           member this.FailedLoopIns = recentFailureIn
       }
-      let dummyLightningClientProvider =
-        TestHelpers.GetDummyLightningClientProvider
-          {
-            DummyLnClientParameters.Default
-              with
-              ListChannels = channels |> Seq.toList
-          }
       services
         .AddSingleton<ISwapStateProjection>(stateView)
         .AddSingleton<IRecentSwapFailureProjection>(failureView)
-        .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
         |> ignore
-    this.TestSuggestSwapsCore(name, setup, group, parameters, Ok expected)
+    this.TestSuggestSwapsCore(name, setup, group, parameters, channels |> Seq.toList, Ok expected)
 
   static member TestSweepFeeLimitTestData =
     let quote = {
@@ -457,7 +472,9 @@ type AutoLoopTests() =
         SwapSuggestions.Zero
           with
           OutSwaps = [
-            applyFeeCategoryQuote(chan1Rec, pairId.DefaultLoopOutParameters.MaxMinerFee, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quote)
+            applyFeeCategoryQuote
+              (pairId.DefaultLoopOutParameters.MaxMinerFee, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quote)
+              chan1Rec
           ]
       }
       ("fee estimate ok", pairId.DefaultLoopOutParameters.SweepFeeRateLimit, expected)
@@ -488,13 +505,6 @@ type AutoLoopTests() =
           member this.Estimate _target _cc =
             feeRate |> Task.FromResult
       }
-      let dummyLightningClientProvider =
-        TestHelpers.GetDummyLightningClientProvider
-          {
-            DummyLnClientParameters.Default
-              with
-              ListChannels = [channel1]
-          }
       let dummyLoopServerClient =
         TestHelpers.GetDummySwapServerClient
           {
@@ -504,7 +514,6 @@ type AutoLoopTests() =
           }
       services
         .AddSingleton<IFeeEstimator>(f)
-        .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
         .AddSingleton<ISwapServerClient>(dummyLoopServerClient)
         |> ignore
     let group = {
@@ -514,7 +523,6 @@ type AutoLoopTests() =
     let parameters = {
       Parameters.Default(pairId)
         with
-        AutoFeeStartDate = testBudgetStart
         FeeLimit = FeeCategoryLimit.Default pairId
         AutoFeeBudget =
           let d = pairId.DefaultLoopOutParameters
@@ -524,12 +532,10 @@ type AutoLoopTests() =
           ppmToSat(swapAmount, defaultMaxRoutingFeePPM)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, Ok expected)
+    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
 
   static member TestSuggestSwapsTestData =
     seq[
-      let expectedAmount = Money.Satoshis(10000L)
-      let prepay, routing = testPPMFees(defaultFeePPM, testQuote, expectedAmount)
       ("no rules", [channel1], Rules.Zero, Error(AutoLoopError.NoRules))
       let r = {
         Rules.Zero with
@@ -569,6 +575,8 @@ type AutoLoopTests() =
         SwapSuggestions.Zero
           with
           OutSwaps = [
+            let expectedAmount = Money.Satoshis(10000L)
+            let prepay, routing = testPPMFees(defaultFeePPM, testQuote, expectedAmount)
             { LoopOutRequest.Amount = expectedAmount
               OutgoingChannelIds = [|chanId1; chanId2|]
               Address = None
@@ -605,16 +613,7 @@ type AutoLoopTests() =
                                rules: Rules,
                                expected: Result<SwapSuggestions, AutoLoopError>) =
     let setup (services: IServiceCollection) =
-      let dummyLightningClientProvider =
-        TestHelpers.GetDummyLightningClientProvider
-          {
-            DummyLnClientParameters.Default
-              with
-              ListChannels = channels |> Seq.toList
-          }
-      services
-        .AddSingleton<ILightningClientProvider>(dummyLightningClientProvider)
-        |> ignore
+      ()
 
     let group = {
        Swap.Group.PairId = pairId
@@ -626,7 +625,7 @@ type AutoLoopTests() =
         with
         Rules = rules
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, expected)
+    this.TestSuggestSwapsCore(name, setup, group, parameters, channels, expected)
 
   static member TestFeeLimitsTestData =
     seq [
@@ -641,7 +640,9 @@ type AutoLoopTests() =
         SwapSuggestions.Zero
           with
           OutSwaps = [
-            applyFeeCategoryQuote(chan1Rec, pairId.DefaultLoopOutParameters.MaxMinerFee, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quoteBase)
+            applyFeeCategoryQuote
+              (pairId.DefaultLoopOutParameters.MaxMinerFee, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quoteBase)
+              chan1Rec
           ]
       }
       ("fees ok", quoteBase, expected)
@@ -697,13 +698,6 @@ type AutoLoopTests() =
   [<MemberData(nameof(AutoLoopTests.TestFeeLimitsTestData))>]
   member this.TestFeeLimits(name: string, quote, expected: SwapSuggestions) =
     let setup (services: IServiceCollection) =
-      let f = {
-        new IFeeEstimator
-          with
-          member this.Estimate _target _cc =
-            pairId.DefaultLoopOutParameters.SweepFeeRateLimit
-            |> Task.FromResult
-      }
       let swapServerClient =
         TestHelpers.GetDummySwapServerClient
           {
@@ -711,17 +705,8 @@ type AutoLoopTests() =
               with
               LoopOutQuote = fun _ -> quote
           }
-      let lnClient =
-        TestHelpers.GetDummyLightningClientProvider
-          {
-            DummyLnClientParameters.Default
-              with
-              ListChannels = [channel1]
-          }
       services
-        .AddSingleton<IFeeEstimator>(f)
         .AddSingleton<ISwapServerClient>(swapServerClient)
-        .AddSingleton<ILightningClientProvider>(lnClient)
         |> ignore
     let group = {
        Swap.Group.PairId = pairId
@@ -740,38 +725,400 @@ type AutoLoopTests() =
           ppmToSat(swapAmount, defaultMaxRoutingFeePPM)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, Ok expected)
+    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
 
-  (*
   static member TestFeeBudgetTestData =
+    let quote = {
+      SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(1L)
+      SwapDTO.SweepMinerFee = Money.Satoshis(50L)
+      SwapDTO.SwapPaymentDest = peer1
+      SwapDTO.CltvDelta = BlockHeightOffset32(5u)
+      SwapDTO.PrepayAmount = Money.Satoshis(500L)
+    }
     seq [
+      let a =
+        applyFeeCategoryQuote(5000L |> Money.Satoshis, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quote)
+      let chan1 =
+        a chan1Rec
+      let chan2 =
+        a chan2Rec
+      let expected = { SwapSuggestions.Zero with OutSwaps = [chan1; chan2] }
+      ("budget for 2 swaps, no existing swap", 10156L, 5000L, Seq.empty, expected)
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [chan2]
+          DisqualifiedChannels =
+            Map.ofSeq[(chanId1, SwapDisqualifiedReason.BudgetInsufficient)]
+      }
+      ("budget for 1 swaps, no exising", 10155L, 5000L, Seq.empty, expected)
+      let existing = seq {
+        Swap.State.Out(BlockHeight.One, loopOut1)
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [chan1; chan2]
+      }
+      ("existing swaps, before budget period", 10156L, 5000L, existing, expected)
+      ()
     ]
-    |> Seq.map(fun _ -> [||])
+    |> Seq.map(fun (name, budget, maxMinerFee, ongoingSwaps: Swap.State seq, expected) -> [|
+      name |> box
+      quote |> box
+      budget |> Money.Satoshis |> box
+      maxMinerFee |> Money.Satoshis |> box
+      ongoingSwaps |> box
+      expected |> box
+    |])
 
   /// Tests limiting of swap suggestions to a fee budget, with and without existing swaps.
   /// This test uses example channels and rules which need
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.TestFeeBudgetTestData))>]
-  member this.TestFeeBudget() =
-    ()
+  member this.TestFeeBudget(name: string, quote, budget: Money, maxMinerFee: Money, ongoingSwaps: Swap.State seq, expected: SwapSuggestions) =
+    let setup = fun (services: IServiceCollection) ->
+      let stateView = {
+          new ISwapStateProjection with
+            member this.State =
+              ongoingSwaps
+              |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+      }
+      let dummySwapServerClient =
+        TestHelpers.GetDummySwapServerClient
+          {
+            DummySwapServerClientParameters.Default
+              with
+              LoopOutQuote = fun _ -> quote
+          }
+      services
+        .AddSingleton<ISwapStateProjection>(stateView)
+        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
+        |> ignore
+
+    let group = {
+       Swap.Group.PairId = pairId
+       Swap.Group.Category = Swap.Category.Out
+     }
+    let parameters = {
+      Parameters.Default(pairId)
+        with
+        FeeLimit = {
+          FeeCategoryLimit.Default pairId
+            with
+            MaximumMinerFee = maxMinerFee
+        }
+        AutoFeeBudget = budget
+        MaxAutoInFlight = 3
+        Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule); (chanId2, chanRule)] }
+    }
+    let expected = { expected with OutSwaps = expected.OutSwaps |> List.map(fun o -> { o with MaxMinerFee = maxMinerFee |> ValueSome }) }
+    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1; channel2], Ok expected)
 
   static member TestInFlightLimitTestData =
     seq [
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [chan1Rec; chan2Rec]
+      }
+      ("none in flight, extra space", 3, Seq.empty, Rules.Zero, expected)
+      ("none in flight, exact match", 2, Seq.empty, Rules.Zero, expected)
+      let o = {
+        loopOut1
+          with
+          Label = Labels.autoLoopLabel(Swap.Category.Out)
+      }
+      let existing = seq {
+        Swap.State.Out(BlockHeight.One, o)
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedChannels =
+            Map.ofSeq [
+              (chanId1, SwapDisqualifiedReason.InFlightLimitReached)
+              (chanId2, SwapDisqualifiedReason.InFlightLimitReached)
+            ]
+      }
+      ("max in flight", 1, existing, Rules.Zero, expected)
+      let existing = seq {
+        Swap.State.Out(BlockHeight.One, o)
+        Swap.State.Out(BlockHeight.One, o)
+      }
+      ("max swaps exceeded", 1, existing, Rules.Zero, expected)
+      let existing = seq {
+        Swap.State.Out(BlockHeight.One, o)
+      }
+      let rules = {
+        Rules.Zero
+          with
+          // create two peer-level rules, both in need of a swap,
+          // but peer 1 needs a larger swap so will be prioritized.
+          PeerRules = Map.ofSeq[
+            (peer1 |> NodeId, { ThresholdRule.MinimumIncoming = 50s<percent>; MinimumOutGoing = 0s<percent> })
+            (peer2 |> NodeId, { ThresholdRule.MinimumIncoming = 40s<percent>; MinimumOutGoing = 0s<percent> })
+          ]
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [chan1Rec]
+          DisqualifiedPeers = Map.ofSeq[
+            (peer2 |> NodeId, SwapDisqualifiedReason.InFlightLimitReached)
+          ]
+      }
+      ("peer rules max swaps exceeded", 2, existing, rules, expected)
     ]
-    |> Seq.map(fun _ -> [||])
+    |> Seq.map(fun (name, maxInFlight, existingSwaps: Swap.State seq, rules, expected) -> [|
+      name |> box
+      maxInFlight |> box
+      existingSwaps |> box
+      rules |> box
+      expected |> box
+    |])
 
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.TestInFlightLimitTestData))>]
-  member this.TestInFlightLimit() =
-    ()
+  member this.TestInFlightLimit(name, maxInFlight, existingSwaps, rules: Rules, expected) =
+    let setup (services: IServiceCollection) =
+      let swapState = {
+        new ISwapStateProjection with
+          member this.State =
+            existingSwaps
+            |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+      }
+      services
+        .AddSingleton<ISwapStateProjection>(swapState)
+        |> ignore
+    let group = {
+       Swap.Group.PairId = pairId
+       Swap.Group.Category = Swap.Category.Out
+     }
+    let parameters = {
+      Parameters.Default(pairId)
+        with
+        MaxAutoInFlight = maxInFlight
+        Rules =
+          if rules = Rules.Zero then
+            {
+              rules
+                with
+                ChannelRules = Map.ofSeq[(chanId1, chanRule); (chanId2, chanRule)]
+            }
+          else
+            rules
+        AutoFeeBudget = defaultBudget * 2
+    }
+    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1; channel2], Ok expected)
 
   static member TestSizeRestrictionsTestData =
     seq [
+      let serverTerms = {
+        SwapDTO.OutTermsResponse.MinSwapAmount = 6000L |> Money.Satoshis
+        SwapDTO.MaxSwapAmount = 10000L |> Money.Satoshis
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [chan1Rec]
+      }
+      ("minimum more than server, swap happens", Some 7000L, None, [|serverTerms; serverTerms|], Ok expected)
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedChannels = Map.ofSeq [(chanId1, SwapDisqualifiedReason.LiquidityOk)]
+      }
+      ("minimum more than server, no swap", Some(8000L), None, [|serverTerms; serverTerms|], Ok expected)
+
+      let clientMax = 7000L
+      let prepay, routing = testPPMFees(pairId.DefaultLoopOutParameters.MaxSwapFeePPM, testQuote, 7000L |> Money.Satoshis)
+      let outSwap = {
+        chan1Rec
+          with
+          Amount = Money.Satoshis clientMax
+          MaxPrepayRoutingFee = prepay |> ValueSome
+          MaxSwapRoutingFee = routing |> ValueSome
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          OutSwaps = [outSwap]
+      }
+      ("maximum less than server, swap happens", None, Some clientMax, [|serverTerms; serverTerms|], Ok expected)
+      let serverMax = 6000L
+      let clientMax = 9000L
+      let serverT = {
+        SwapDTO.OutTermsResponse.MinSwapAmount = 5000L |> Money.Satoshis
+        SwapDTO.MaxSwapAmount = serverMax |> Money.Satoshis
+      }
+      let e =
+        AutoLoopError.InvalidParameters
+          "maximum swap amount (9000 sats) is more than the server maximum (6000 sats)"
+      ("client params stale over time", Some(6500L), Some(clientMax), [| serverT |], Error e)
+
+      //("zero conf")
     ]
-    |> Seq.map(fun _ -> [||])
+    |> Seq.map(fun (name: string, clientMin: int64 option, clientMax: int64 option, serverR: SwapDTO.OutTermsResponse[], expected: Result<_, AutoLoopError>) -> [|
+      name |> box
+      { ClientRestrictions.Minimum = clientMin |> Option.map Money.Satoshis;
+        Maximum = clientMax |> Option.map Money.Satoshis } |> box
+      serverR |> box
+      expected |> box
+    |])
 
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.TestSizeRestrictionsTestData))>]
-  member this.TestSizeRestrictions() =
-    ()
-  *)
+  member this.TestSizeRestrictions(name: string,
+                                   clientR: ClientRestrictions,
+                                   outTerms: SwapDTO.OutTermsResponse[],
+                                   expected: Result<_, _>) =
+    let mutable callCount = 0
+    let setup (services: IServiceCollection) =
+      let swapClient =
+        TestHelpers.GetDummySwapServerClient
+          {
+            DummySwapServerClientParameters.Default
+              with
+                LoopOutQuote = fun _ -> testQuote
+                LoopOutTerms = fun _ ->
+                  let r = outTerms.[callCount]
+                  callCount <- callCount + 1
+                  r
+          }
+      services
+        .AddSingleton<ISwapServerClient>(swapClient)
+        |> ignore
+    let group = {
+       Swap.Group.PairId = pairId
+       Swap.Group.Category = Swap.Category.Out
+     }
+    let parameters = {
+      Parameters.Default(pairId)
+        with
+        ClientRestrictions = clientR
+        Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
+    }
+    task {
+      do! this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], expected)
+      Assert.Equal(outTerms.Length, callCount)
+    }
+
+  static member TestFeePercentageTestData =
+    seq [
+      let okPPM = 30000L<ppm>
+      let okQuote = {
+        SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(15L)
+        SwapDTO.SweepMinerFee = Money.Satoshis(1L)
+        SwapDTO.SwapPaymentDest = peer1
+        SwapDTO.CltvDelta = BlockHeightOffset32(5u)
+        SwapDTO.PrepayAmount = Money.Satoshis(30L)
+      }
+      let maxPrepayRoutingFee, maxSwapRoutingFee = testPPMFees(okPPM, okQuote, 7500L |> Money.Satoshis)
+      let req = {
+        LoopOutRequest.Amount = 7500L |> Money.Satoshis
+        OutgoingChannelIds = [|chanId1|]
+        Address = None
+        PairId = pairId |> Some
+        SwapTxConfRequirement =
+          pairId.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
+        Label = None
+        MaxSwapRoutingFee = maxSwapRoutingFee |> ValueSome
+        MaxPrepayRoutingFee = maxPrepayRoutingFee |> ValueSome
+        MaxSwapFee = okQuote.SwapFee |> ValueSome
+        MaxPrepayAmount = okQuote.PrepayAmount |> ValueSome
+        MaxMinerFee = okQuote.SweepMinerFee |> AutoLoopHelpers.scaleMinerFee |> ValueSome
+        SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget.Value |> int |> ValueSome
+      }
+
+      ("fees ok", okPPM, okQuote, { SwapSuggestions.Zero with OutSwaps = [req] })
+      let quote = {
+        okQuote
+          with
+          SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(300L)
+          SwapDTO.PrepayAmount = Money.Satoshis(30L)
+          SwapDTO.SweepMinerFee = Money.Satoshis(1L)
+      }
+      let feePPM = 20000L<ppm>
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedChannels =
+            Map.ofSeq[
+              (chanId1, SwapDisqualifiedReason.SwapFeeTooHigh({|ServerRequirement = quote.SwapFee
+                                                                OurLimit = ppmToSat(swapAmount, feePPM) |}))
+            ]
+      }
+      ("swap fee too high", feePPM, quote, expected)
+      let quote = {
+        okQuote
+          with
+          SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(80L)
+          SwapDTO.PrepayAmount = Money.Satoshis(30L)
+          SwapDTO.SweepMinerFee = Money.Satoshis(300L)
+      }
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedChannels =
+            Map.ofSeq[
+              (chanId1, SwapDisqualifiedReason.MinerFeeTooHigh({|ServerRequirement = scaleMinerFee quote.SweepMinerFee
+                                                                 OurLimit = ppmToSat(swapAmount, feePPM) |}))
+            ]
+      }
+      ("miner fee too high", feePPM, quote, expected)
+      let quote = {
+        okQuote
+          with
+          SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(75L)
+          SwapDTO.PrepayAmount = Money.Satoshis(300L)
+          SwapDTO.SweepMinerFee = Money.Satoshis(1L)
+      }
+      let feePPM = 30000L<ppm>
+      let expected = {
+        SwapSuggestions.Zero
+          with
+          DisqualifiedChannels =
+            Map.ofSeq[
+              (chanId1, SwapDisqualifiedReason.PrepayTooHigh({|ServerRequirement = quote.PrepayAmount
+                                                               OurLimit = ppmToSat(swapAmount, feePPM) |}))
+            ]
+      }
+      ("prepay too high", feePPM, quote, expected)
+    ]
+    |> Seq.map(fun (name: string, feePPM: int64<ppm>, quote: SwapDTO.LoopOutQuote, expected) -> [|
+      name |> box
+      feePPM |> box
+      quote |> box
+      expected |> box
+    |])
+
+  /// Tests use of a flat fee percentage to limit the fees we pay for swaps.
+  /// Our test is setup to require a 7500 sat swap, and we test this amount against
+  /// various fee percentages and server quotes.
+  [<Theory>]
+  [<MemberData(nameof(AutoLoopTests.TestFeePercentageTestData))>]
+  member this.TestFeePercentage(name: string, feePPM: int64<ppm>, quote: SwapDTO.LoopOutQuote, expected) =
+    let setup (services: IServiceCollection) =
+      let swapClient =
+        TestHelpers.GetDummySwapServerClient
+          {
+            DummySwapServerClientParameters.Default
+              with
+                LoopOutQuote = fun _ ->
+                  quote
+          }
+      services
+        .AddSingleton<ISwapServerClient>(swapClient)
+        |> ignore
+    let group = {
+       Swap.Group.PairId = pairId
+       Swap.Group.Category = Swap.Category.Out
+     }
+    let parameters = {
+      Parameters.Default(pairId)
+        with
+        Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
+        FeeLimit = { FeePortion.PartsPerMillion = feePPM }
+    }
+    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
