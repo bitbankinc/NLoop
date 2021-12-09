@@ -787,19 +787,7 @@
             "$ref": "#/components/schemas/PubKey"
           },
           "reason": {
-            "enum": [
-              "Unknown",
-              "SweepFeesTooHigh",
-              "InFlightLimitReached",
-              "SwapFeeTooHigh",
-              "MinerFeeTooHigh",
-              "PrepayTooHigh",
-              "FailureBackoff",
-              "LoopOutAlreadyInTheChannel",
-              "LoopInAlreadyInTheChannel",
-              "LiquidityOk",
-              "FeePPMInsufficient"
-            ]
+            "type": "string"
           }
         }
       },

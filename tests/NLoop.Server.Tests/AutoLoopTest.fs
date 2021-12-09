@@ -854,7 +854,6 @@ type AutoLoopTests() =
           "maximum swap amount (9000 sats) is more than the server maximum (6000 sats)"
       ("client params stale over time", Some(6500L), Some(clientMax), [| serverT |], Error e)
 
-      failwith "todo: zero conf"
     ]
     |> Seq.map(fun (name: string, clientMin: int64 option, clientMax: int64 option, serverR: SwapDTO.OutTermsResponse[], expected: Result<_, AutoLoopError>) -> [|
       name |> box

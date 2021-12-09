@@ -105,6 +105,8 @@ type SuggestSwapsResponse = {
 and Disqualified = {
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId
+  [<JsonPropertyName "pubkey">]
   PubKey: PubKey
-  Reason: SwapDisqualifiedReason
+  [<JsonPropertyName "reason">]
+  Reason: string
 }

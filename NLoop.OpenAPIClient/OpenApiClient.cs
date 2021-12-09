@@ -1568,7 +1568,7 @@ namespace NLoopClient
         public string Pubkey { get; set; }
     
         [Newtonsoft.Json.JsonProperty("reason", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public DisqualifiedReason Reason { get; set; }
+        public string Reason { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -1755,44 +1755,6 @@ namespace NLoopClient
     
         [System.Runtime.Serialization.EnumMember(Value = @"OnGoing")]
         OnGoing = 3,
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public enum DisqualifiedReason
-    {
-        [System.Runtime.Serialization.EnumMember(Value = @"Unknown")]
-        Unknown = 0,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"SweepFeesTooHigh")]
-        SweepFeesTooHigh = 1,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"InFlightLimitReached")]
-        InFlightLimitReached = 2,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"SwapFeeTooHigh")]
-        SwapFeeTooHigh = 3,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"MinerFeeTooHigh")]
-        MinerFeeTooHigh = 4,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"PrepayTooHigh")]
-        PrepayTooHigh = 5,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"FailureBackoff")]
-        FailureBackoff = 6,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"LoopOutAlreadyInTheChannel")]
-        LoopOutAlreadyInTheChannel = 7,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"LoopInAlreadyInTheChannel")]
-        LoopInAlreadyInTheChannel = 8,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"LiquidityOk")]
-        LiquidityOk = 9,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"FeePPMInsufficient")]
-        FeePPMInsufficient = 10,
     
     }
 
