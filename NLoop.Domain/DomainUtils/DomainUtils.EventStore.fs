@@ -19,11 +19,11 @@ module EventStore =
       let! eventNumber =
         resolvedEvent.Event.EventNumber
         |> EventNumber.Create
-        |> Result.mapError (StoreError)
+        |> Result.mapError StoreError
       let! createdDate =
         resolvedEvent.Event.Created
         |> UnixDateTime.Create
-        |> Result.mapError (StoreError)
+        |> Result.mapError StoreError
       return
         {
           SerializedRecordedEvent.Id =
@@ -75,6 +75,8 @@ module EventStore =
       let mutable nextSliceStart = StreamPosition.Start |> int64
       let arr = ResizeArray<_>()
       try
+        // it is unlikely that specific entity has more than 200 events, so looping in this may be overkill.
+        // but we do it anyway for the sake of safety.
         while (currentSlice |> isNull || currentSlice.IsEndOfStream |> not) do
           let! r = conn.ReadStreamEventsForwardAsync(streamId.Value, nextSliceStart, 200, false)
           currentSlice <- r

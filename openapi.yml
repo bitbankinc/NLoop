@@ -605,16 +605,6 @@ components:
           type: boolean
           description: >
             Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
-            and total expenditure will be limited to the autoloop budget.
-        autoloop_budget_sat:
-          type: integer
-          format: int64
-        autoloop_budget_start_sec:
-          type: integer
-          description: >
-            The start time for autoloop budget, expressed as a unix timestamp in seconds.
-            If this value is 0, the budget will be applied for all automatically dispatched swaps.
-            Swaps that were completed before this date will not be included in budget calculations.
         auto_max_in_flight:
           type: integer
           description: The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.
@@ -648,9 +638,7 @@ components:
         reason:
           enum:
             - Unknown
-            - BudgetNotStarted
             - SweepFeesTooHigh
-            - BudgetElapsed
             - InFlightLimitReached
             - SwapFeeTooHigh
             - MinerFeeTooHigh
@@ -659,7 +647,6 @@ components:
             - LoopOutAlreadyInTheChannel
             - LoopInAlreadyInTheChannel
             - LiquidityOk
-            - BudgetInsufficient
             - FeePPMInsufficient
 
     SuggestSwapsResponse:

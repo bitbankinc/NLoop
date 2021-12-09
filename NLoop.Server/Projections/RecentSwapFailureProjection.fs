@@ -19,7 +19,10 @@ type IRecentSwapFailureProjection =
 /// Used in AutoLoop to backoff the failure
 type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFactory) as this =
   inherit BackgroundService()
+
   /// We have no big reason to choose this number.
+  /// This is big enough for `AutoLoopManager` to backoff the swap suggestion.
+  /// and small enough to not pressure the memory usage.
   let [<Literal>] InMemoryHistorySize = 255
   let log = loggerFactory.CreateLogger<RecentSwapFailureProjection>()
 

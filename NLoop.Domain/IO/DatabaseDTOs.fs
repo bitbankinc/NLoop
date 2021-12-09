@@ -29,8 +29,18 @@ type SwapCost = {
   OffChain: Money
 }
   with
-  member this.Total =
-    this.ServerOnChain + this.ServerOffChain + this.OnChain + this.OffChain
+  member this.OnChainTotal =
+    this.ServerOnChain +  this.OnChain
+
+  member this.OffChainTotal =
+    this.ServerOffChain + this.OffChain
+
+  static member (+) (a: SwapCost, b: SwapCost) = {
+    OffChain = a.OffChain + b.OffChain
+    ServerOnChain = a.ServerOnChain + b.ServerOnChain
+    ServerOffChain = a.ServerOffChain + b.ServerOffChain
+    OnChain = a.OnChain + b.OnChain
+  }
 
   static member Zero = {
     ServerOnChain = Money.Zero

@@ -38,7 +38,6 @@ module private Constants =
   let peer2 = PubKey("0324653eac434488002cc06bbfb7f10fe18991e35f9fe4302dbea6d2353dc0ab1c")
 
   let testTime = DateTimeOffset(2021, 12, 03, 23, 0, 0, TimeSpan.Zero)
-  let testBudgetStart = testTime - TimeSpan.FromHours(1.)
 
   let chanId1 = ShortChannelId.FromUInt64(1UL)
   let chanId2 = ShortChannelId.FromUInt64(2UL)
@@ -308,7 +307,6 @@ type AutoLoopTests() =
     use server = new TestServer(TestHelpers.GetTestHost(i))
     let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
     Assert.NotNull(man)
-    let parameters = { parameters with AutoFeeStartDate = testBudgetStart }
     match! man.SetParameters(group, parameters) with
     | Error e ->
       match expected with
@@ -524,12 +522,6 @@ type AutoLoopTests() =
       Parameters.Default(pairId)
         with
         FeeLimit = FeeCategoryLimit.Default pairId
-        AutoFeeBudget =
-          let d = pairId.DefaultLoopOutParameters
-          d.MaxMinerFee +
-          ppmToSat(swapAmount, d.MaxSwapFeePPM) +
-          ppmToSat(swapAmount, defaultMaxPrepayRoutingFeePPM) +
-          ppmToSat(swapAmount, defaultMaxRoutingFeePPM)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
     this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
@@ -717,103 +709,9 @@ type AutoLoopTests() =
       Parameters.Default(pairId)
         with
         FeeLimit = FeeCategoryLimit.Default pairId
-        AutoFeeBudget =
-          let d = pairId.DefaultLoopOutParameters
-          d.MaxMinerFee +
-          ppmToSat(swapAmount, d.MaxSwapFeePPM) +
-          ppmToSat(swapAmount, defaultMaxPrepayRoutingFeePPM) +
-          ppmToSat(swapAmount, defaultMaxRoutingFeePPM)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
     this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
-
-  static member TestFeeBudgetTestData =
-    let quote = {
-      SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(1L)
-      SwapDTO.SweepMinerFee = Money.Satoshis(50L)
-      SwapDTO.SwapPaymentDest = peer1
-      SwapDTO.CltvDelta = BlockHeightOffset32(5u)
-      SwapDTO.PrepayAmount = Money.Satoshis(500L)
-    }
-    seq [
-      let a =
-        applyFeeCategoryQuote(5000L |> Money.Satoshis, defaultMaxPrepayRoutingFeePPM, defaultMaxRoutingFeePPM, quote)
-      let chan1 =
-        a chan1Rec
-      let chan2 =
-        a chan2Rec
-      let expected = { SwapSuggestions.Zero with OutSwaps = [chan1; chan2] }
-      ("budget for 2 swaps, no existing swap", 10156L, 5000L, Seq.empty, expected)
-      let expected = {
-        SwapSuggestions.Zero
-          with
-          OutSwaps = [chan2]
-          DisqualifiedChannels =
-            Map.ofSeq[(chanId1, SwapDisqualifiedReason.BudgetInsufficient)]
-      }
-      ("budget for 1 swaps, no exising", 10155L, 5000L, Seq.empty, expected)
-      let existing = seq {
-        Swap.State.Out(BlockHeight.One, loopOut1)
-      }
-      let expected = {
-        SwapSuggestions.Zero
-          with
-          OutSwaps = [chan1; chan2]
-      }
-      ("existing swaps, before budget period", 10156L, 5000L, existing, expected)
-      ()
-    ]
-    |> Seq.map(fun (name, budget, maxMinerFee, ongoingSwaps: Swap.State seq, expected) -> [|
-      name |> box
-      quote |> box
-      budget |> Money.Satoshis |> box
-      maxMinerFee |> Money.Satoshis |> box
-      ongoingSwaps |> box
-      expected |> box
-    |])
-
-  /// Tests limiting of swap suggestions to a fee budget, with and without existing swaps.
-  /// This test uses example channels and rules which need
-  [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestFeeBudgetTestData))>]
-  member this.TestFeeBudget(name: string, quote, budget: Money, maxMinerFee: Money, ongoingSwaps: Swap.State seq, expected: SwapSuggestions) =
-    let setup = fun (services: IServiceCollection) ->
-      let stateView = {
-          new ISwapStateProjection with
-            member this.State =
-              ongoingSwaps
-              |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
-      }
-      let dummySwapServerClient =
-        TestHelpers.GetDummySwapServerClient
-          {
-            DummySwapServerClientParameters.Default
-              with
-              LoopOutQuote = fun _ -> quote
-          }
-      services
-        .AddSingleton<ISwapStateProjection>(stateView)
-        .AddSingleton<ISwapServerClient>(dummySwapServerClient)
-        |> ignore
-
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
-    let parameters = {
-      Parameters.Default(pairId)
-        with
-        FeeLimit = {
-          FeeCategoryLimit.Default pairId
-            with
-            MaximumMinerFee = maxMinerFee
-        }
-        AutoFeeBudget = budget
-        MaxAutoInFlight = 3
-        Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule); (chanId2, chanRule)] }
-    }
-    let expected = { expected with OutSwaps = expected.OutSwaps |> List.map(fun o -> { o with MaxMinerFee = maxMinerFee |> ValueSome }) }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1; channel2], Ok expected)
 
   static member TestInFlightLimitTestData =
     seq [
@@ -908,7 +806,6 @@ type AutoLoopTests() =
             }
           else
             rules
-        AutoFeeBudget = defaultBudget * 2
     }
     this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1; channel2], Ok expected)
 
@@ -957,7 +854,7 @@ type AutoLoopTests() =
           "maximum swap amount (9000 sats) is more than the server maximum (6000 sats)"
       ("client params stale over time", Some(6500L), Some(clientMax), [| serverT |], Error e)
 
-      //("zero conf")
+      failwith "todo: zero conf"
     ]
     |> Seq.map(fun (name: string, clientMin: int64 option, clientMax: int64 option, serverR: SwapDTO.OutTermsResponse[], expected: Result<_, AutoLoopError>) -> [|
       name |> box

@@ -49,7 +49,6 @@
     <Compile Include="Services\BoltzListener.fs" />
     <Compile Include="Services\BlockchainListener.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
-    <Compile Include="Services\AutoLoopManager.Func.fs" />
     <Compile Include="Services\SwapEventListeners.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />

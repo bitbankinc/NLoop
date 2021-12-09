@@ -1486,18 +1486,10 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("failure_backoff_sec", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int Failure_backoff_sec { get; set; }
     
-        /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters, and total expenditure will be limited to the autoloop budget.
+        /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
         /// </summary>
         [Newtonsoft.Json.JsonProperty("autoloop", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public bool Autoloop { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("autoloop_budget_sat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Autoloop_budget_sat { get; set; }
-    
-        /// <summary>The start time for autoloop budget, expressed as a unix timestamp in seconds. If this value is 0, the budget will be applied for all automatically dispatched swaps. Swaps that were completed before this date will not be included in budget calculations.
-        /// </summary>
-        [Newtonsoft.Json.JsonProperty("autoloop_budget_start_sec", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Autoloop_budget_start_sec { get; set; }
     
         /// <summary>The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.</summary>
         [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
@@ -1772,44 +1764,35 @@ namespace NLoopClient
         [System.Runtime.Serialization.EnumMember(Value = @"Unknown")]
         Unknown = 0,
     
-        [System.Runtime.Serialization.EnumMember(Value = @"BudgetNotStarted")]
-        BudgetNotStarted = 1,
-    
         [System.Runtime.Serialization.EnumMember(Value = @"SweepFeesTooHigh")]
-        SweepFeesTooHigh = 2,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BudgetElapsed")]
-        BudgetElapsed = 3,
+        SweepFeesTooHigh = 1,
     
         [System.Runtime.Serialization.EnumMember(Value = @"InFlightLimitReached")]
-        InFlightLimitReached = 4,
+        InFlightLimitReached = 2,
     
         [System.Runtime.Serialization.EnumMember(Value = @"SwapFeeTooHigh")]
-        SwapFeeTooHigh = 5,
+        SwapFeeTooHigh = 3,
     
         [System.Runtime.Serialization.EnumMember(Value = @"MinerFeeTooHigh")]
-        MinerFeeTooHigh = 6,
+        MinerFeeTooHigh = 4,
     
         [System.Runtime.Serialization.EnumMember(Value = @"PrepayTooHigh")]
-        PrepayTooHigh = 7,
+        PrepayTooHigh = 5,
     
         [System.Runtime.Serialization.EnumMember(Value = @"FailureBackoff")]
-        FailureBackoff = 8,
+        FailureBackoff = 6,
     
         [System.Runtime.Serialization.EnumMember(Value = @"LoopOutAlreadyInTheChannel")]
-        LoopOutAlreadyInTheChannel = 9,
+        LoopOutAlreadyInTheChannel = 7,
     
         [System.Runtime.Serialization.EnumMember(Value = @"LoopInAlreadyInTheChannel")]
-        LoopInAlreadyInTheChannel = 10,
+        LoopInAlreadyInTheChannel = 8,
     
         [System.Runtime.Serialization.EnumMember(Value = @"LiquidityOk")]
-        LiquidityOk = 11,
-    
-        [System.Runtime.Serialization.EnumMember(Value = @"BudgetInsufficient")]
-        BudgetInsufficient = 12,
+        LiquidityOk = 9,
     
         [System.Runtime.Serialization.EnumMember(Value = @"FeePPMInsufficient")]
-        FeePPMInsufficient = 13,
+        FeePPMInsufficient = 10,
     
     }
 

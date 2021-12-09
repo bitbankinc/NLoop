@@ -132,6 +132,14 @@ type LoopOutLimits = {
   MaxMinerFee: Money
   SwapTxConfRequirement: BlockHeightOffset32
 }
+  with
+  /// Calculates the largest possible fees for a loop out swap,
+  /// comparing the fees for a successful swap to the cost when the client pays
+  /// the prepay because they failed to sweep the on chain htlc. This is unlikely,
+  member this.WorstCaseFee: Money =
+    let successFees = this.MaxPrepayRoutingFee + this.MaxMinerFee + this.MaxSwapFee + this.MaxRoutingFee
+    let noShowFees = this.MaxPrepayRoutingFee + this.MaxPrepay
+    if noShowFees > successFees then noShowFees else successFees
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]

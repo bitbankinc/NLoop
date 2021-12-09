@@ -9,9 +9,7 @@ open NLoop.Server.DTOs
 
 [<RequireQualifiedAccess>]
 type SwapDisqualifiedReason =
-  | BudgetNotStarted
   | SweepFeesTooHigh of {| Estimation: FeeRate; OurLimit: FeeRate |}
-  | BudgetElapsed
   | InFlightLimitReached
   | SwapFeeTooHigh of {| ServerRequirement: Money; OurLimit: Money |}
   | MinerFeeTooHigh of {| ServerRequirement: Money; OurLimit: Money |}
@@ -20,7 +18,6 @@ type SwapDisqualifiedReason =
   | LoopOutAlreadyInTheChannel
   | LoopInAlreadyInTheChannel
   | LiquidityOk
-  | BudgetInsufficient
   | FeePPMInsufficient of {| Required: Money; OurLimit: Money |}
   with
   member this.Message =
@@ -82,10 +79,7 @@ type LiquidityParameters = {
   FailureBackoffSecond: int
   [<JsonPropertyName "autoloop">]
   AutoLoop: bool
-  [<JsonPropertyName "autoloop_budget_sat">]
-  AutoLoopBudget: Money
-  [<JsonPropertyName "autoloop_budget_start_sec">]
-  AutoLoopBudgetStartSecond: int
+
   [<JsonPropertyName "auto_max_in_flight">]
   AutoMaxInFlight: int
   [<JsonPropertyName "min_swap_amount">]

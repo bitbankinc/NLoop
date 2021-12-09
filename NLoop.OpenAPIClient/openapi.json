@@ -748,15 +748,7 @@
           },
           "autoloop": {
             "type": "boolean",
-            "description": "Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters, and total expenditure will be limited to the autoloop budget.\n"
-          },
-          "autoloop_budget_sat": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "autoloop_budget_start_sec": {
-            "type": "integer",
-            "description": "The start time for autoloop budget, expressed as a unix timestamp in seconds. If this value is 0, the budget will be applied for all automatically dispatched swaps. Swaps that were completed before this date will not be included in budget calculations.\n"
+            "description": "Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,\n"
           },
           "auto_max_in_flight": {
             "type": "integer",
@@ -797,9 +789,7 @@
           "reason": {
             "enum": [
               "Unknown",
-              "BudgetNotStarted",
               "SweepFeesTooHigh",
-              "BudgetElapsed",
               "InFlightLimitReached",
               "SwapFeeTooHigh",
               "MinerFeeTooHigh",
@@ -808,7 +798,6 @@
               "LoopOutAlreadyInTheChannel",
               "LoopInAlreadyInTheChannel",
               "LiquidityOk",
-              "BudgetInsufficient",
               "FeePPMInsufficient"
             ]
           }

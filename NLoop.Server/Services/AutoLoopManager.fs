@@ -32,8 +32,6 @@ module internal AutoLoopConstants =
   /// high estimate so that we can account for worst-case fees, (1250 * 4 / 1000) = 50 sat/byte
   let defaultLoopInSweepFee = FeeRate(1250m)
 
-  let defaultBudget =
-    DotNetLightning.Channel.ChannelConstants.MAX_FUNDING_SATOSHIS
   let [<Literal>] defaultFeePPM =
     20000L<ppm>
   /// default number of the upper limit of the on-going swap number.
@@ -74,19 +72,6 @@ module internal AutoLoopHelpers =
   let scaleMinerFee (fee: Money) =
     100 * fee
 
-  /// Calculates the largest possible fees for a loop out swap,
-  /// comparing the fees for a successful swap to the cost when the client pays
-  /// the prepay because they failed to sweep the on chain htlc. This is unlikely,
-  let worstCaseOutFees
-    ({ LoopOutLimits.MaxPrepayRoutingFee = maxPrepayRoutingFee
-       MaxSwapFee = maxSwapFee
-       MaxRoutingFee = maxSwapRoutingFee
-       MaxMinerFee = maxMinerFee
-       MaxPrepay = maxPrepayAmount
-        }) : Money =
-    let successFees = maxPrepayRoutingFee + maxMinerFee + maxSwapFee + maxSwapRoutingFee
-    let noShowFees = maxPrepayRoutingFee + maxPrepayAmount
-    if noShowFees > successFees then noShowFees else successFees
 
   let worstCaseInFees
     ({ LoopInLimits.MaxMinerFee = maxMinerFee
@@ -114,7 +99,6 @@ type ThresholdRule = {
 
 [<RequireQualifiedAccess>]
 type AutoLoopError =
-  | NegativeBudget
   | ZeroInFlight
   | NoRules
   | RestrictionError of RestrictionError
@@ -125,7 +109,6 @@ type AutoLoopError =
   with
   member this.Message =
     match this with
-    | NegativeBudget -> "SwapBudget must be >= 0"
     | ZeroInFlight -> "max in flight swap must be >= 0"
     | NoRules -> "No rules set for autoloop"
     | RestrictionError r -> r.Message
@@ -143,8 +126,7 @@ type SwapSuggestion =
   member this.Fees(): Money =
     match this with
     | Out req ->
-      req.Limits
-      |> worstCaseOutFees
+      req.Limits.WorstCaseFee
     | In req ->
       worstCaseInFees
         req.Limits
@@ -231,39 +213,6 @@ type Balances = {
       PubKey = resp.NodeId |> NodeId
     }
 
-type private ExistingAutoLoopSummary = {
-  SpentFees: Money
-  PendingFees: Money
-}
-  with
-  member summary.ValidateAgainstBudget(budget: Money, logger: ILogger) =
-    if summary.TotalFees >= budget then
-      logger.LogDebug($"autoloop fee budget: %d{budget.Satoshi} sats exhausted, "+
-                      $"%d{summary.SpentFees.Satoshi} sats spent on completed swaps, %d{summary.PendingFees.Satoshi} sats reserved for ongoing swaps " +
-                      "(upper limit)")
-      Error (SwapDisqualifiedReason.BudgetElapsed)
-    else
-      Ok()
-  member this.TotalFees =
-    this.SpentFees + this.PendingFees
-
-  static member Default = {
-    SpentFees = Money.Zero
-    PendingFees = Money.Zero
-  }
-  static member FromLoopInOuts(loopIns: LoopIn seq, loopOuts: LoopOut seq): ExistingAutoLoopSummary =
-    let loopIns =
-      loopIns
-      |> Seq.filter(fun i -> i.Label = Labels.autoLoopLabel(Swap.Category.In))
-
-    let loopOutFees =
-      loopOuts
-      |> Seq.filter(fun o -> o.Label = Labels.autoLoopLabel(Swap.Category.Out))
-      |> Seq.map(fun s -> s.Cost.Total)
-      |> Seq.fold(fun acc s ->
-        { acc with SpentFees = acc.SpentFees + s }
-      ) ExistingAutoLoopSummary.Default
-    loopOutFees
 
 
 [<AutoOpen>]
@@ -366,14 +315,16 @@ module Fees =
         else
           let prepay, route, miner = (this :> IFeeLimit).LoopOutFees(swapAmount, quote)
 
-          let fees = worstCaseOutFees({
+          let fees =
+            let limits = {
               LoopOutLimits.MaxPrepayRoutingFee = prepay
               MaxPrepay = prepay
               MaxSwapFee = quote.SwapFee
               MaxRoutingFee = route
               MaxMinerFee = miner
               SwapTxConfRequirement = BlockHeightOffset32.Zero // unused dummy
-            })
+            }
+            limits.WorstCaseFee
           if fees > feeLimit then
             Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = fees; OurLimit = feeLimit |})
           else
@@ -486,8 +437,6 @@ type FeeCategoryLimit = {
 
 /// run-time modifiable part of the auto loop parameters.
 type Parameters = {
-  AutoFeeBudget: Money
-  AutoFeeStartDate: DateTimeOffset
   MaxAutoInFlight: int
   FailureBackoff: TimeSpan
   SweepConfTarget: BlockHeightOffset32
@@ -500,8 +449,6 @@ type Parameters = {
 }
   with
   static member Default(pairId: PairId) = {
-    AutoFeeBudget = defaultBudget
-    AutoFeeStartDate = DateTimeOffset.UtcNow
     MaxAutoInFlight = 1
     FailureBackoff = defaultFailureBackoff
     SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
@@ -539,8 +486,6 @@ type Parameters = {
         return! Error $"confirmation target must be at least: %d{Constants.MinConfTarget}"
 
       do! this.FeeLimit.Validate()
-      if this.AutoFeeBudget < Money.Zero then
-        return! Error $"Negative Budget {this}"
 
       if this.MaxAutoInFlight <= 0 then
         return! Error $"Zero In Flight {this}"
@@ -708,6 +653,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      swapActor: ISwapActor,
                      feeEstimator: IFeeEstimator,
                      systemClock: ISystemClock,
+                     serviceProvider: IServiceProvider,
                      _lightningClientProvider: ILightningClientProvider) =
 
   inherit BackgroundService()
@@ -803,7 +749,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         DisqualifiedPeers = r.PeerRules |> Map.map(fun _ _ -> reason)
     }
 
-  member private this.CheckAutoLoopIsPossible(pairId, existingAutoLoopOuts: _ list, summary: ExistingAutoLoopSummary) =
+  member private this.CheckAutoLoopIsPossible(pairId, existingAutoLoopOuts: _ list) =
     let par = this.Parameters.[pairId]
     let checkInFlightNumber () =
       if par.MaxAutoInFlight < existingAutoLoopOuts.Length then
@@ -811,16 +757,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         Error (this.SingleReasonSuggestion(pairId, SwapDisqualifiedReason.InFlightLimitReached))
       else
         Ok()
-    let checkDate() =
-      if par.AutoFeeStartDate > systemClock.UtcNow then
-        Error <| this.SingleReasonSuggestion(pairId, SwapDisqualifiedReason.BudgetNotStarted)
-      else
-        Ok()
     result {
-      do! checkDate()
       do! checkInFlightNumber()
-      do! summary.ValidateAgainstBudget(par.AutoFeeBudget, logger)
-          |> Result.mapError(fun r -> this.SingleReasonSuggestion(pairId, r))
     }
 
   member this.SuggestSwaps(autoloop: bool, group: Swap.Group, ?ct: CancellationToken): Task<Result<SwapSuggestions, AutoLoopError>> = task {
@@ -835,11 +773,11 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       match! this.GetSwapRestrictions(group) with
       | Error e -> return Error e
       | Ok restrictions ->
-      let onGoingLoopOuts: _ list = swapStateProjection.OngoingLoopOuts |> Seq.toList
-      let onGoingLoopIns: _ list = swapStateProjection.OngoingLoopIns |> Seq.toList
-      let summary =
-        ExistingAutoLoopSummary.FromLoopInOuts(onGoingLoopIns, onGoingLoopOuts)
-      match this.CheckAutoLoopIsPossible(group, onGoingLoopOuts, summary) with
+      let onGoingLoopOuts =
+        swapStateProjection.OngoingLoopOuts |> Seq.toList
+      let onGoingLoopIns =
+        swapStateProjection.OngoingLoopIns |> Seq.toList
+      match this.CheckAutoLoopIsPossible(group, onGoingLoopOuts) with
       | Error e ->
         return e |> Ok
       | Ok () ->
@@ -943,23 +881,15 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                   ) response.DisqualifiedChannels
             }
 
-          // Run through our suggested swaps  in descending order of amount and return all of the swaps which will
-          // fit within our remaining budget.
-          let availableBudget = par.AutoFeeBudget - summary.TotalFees
           let allowedSwaps = par.MaxAutoInFlight - onGoingLoopOuts.Count()
-          let resp, _ =
+          let resp =
             suggestions
-            |> Seq.fold(fun (acc, available) s ->
-              let fees = s.Fees()
-              if available <= Money.Zero then
-                (setReason SwapDisqualifiedReason.BudgetInsufficient s acc), available
-              elif acc.OutSwaps.Length >= allowedSwaps || acc.InSwaps.Length >= allowedSwaps then
-                (setReason SwapDisqualifiedReason.InFlightLimitReached s acc), available
-              elif fees <= available then
-                acc.AddSuggestion(s), (available - fees)
+            |> Seq.fold(fun (acc: SwapSuggestions) (s: SwapSuggestion) ->
+              if acc.OutSwaps.Length >= allowedSwaps || acc.InSwaps.Length >= allowedSwaps then
+                (setReason SwapDisqualifiedReason.InFlightLimitReached s acc)
               else
-                (setReason SwapDisqualifiedReason.BudgetInsufficient s acc), available
-            ) (resp, availableBudget)
+                acc.AddSuggestion(s)
+            ) resp
 
           return Ok resp
   }
