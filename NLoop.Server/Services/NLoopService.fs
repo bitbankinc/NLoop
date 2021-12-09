@@ -64,7 +64,7 @@ type NLoopExtensions() =
             p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<RecentSwapFailureProjection>() :> IHostedService
+            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManager>() :> IHostedService
@@ -74,8 +74,9 @@ type NLoopExtensions() =
       this
         .AddSingleton<IEventStoreConnection>(fun sp ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          let connSettings = ConnectionSettings.Create().DisableTls().Build()
-          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl)
+          let connSettings =
+            ConnectionSettings.Create().DisableTls().Build()
+          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
           do conn.ConnectAsync().GetAwaiter().GetResult()
           conn
         )
