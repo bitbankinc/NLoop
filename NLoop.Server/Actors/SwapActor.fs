@@ -1,11 +1,14 @@
 namespace NLoop.Server.Actors
 
 open System
+open FSharp.Control
 open System.Net.Http
 open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
+open EventStore.ClientAPI
+open FSharp.Control
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open FsToolkit.ErrorHandling
@@ -41,7 +44,8 @@ type SwapActor(broadcaster: IBroadcaster,
                opts: IOptions<NLoopOptions>,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator,
-               swapServerClient: ISwapServerClient
+               swapServerClient: ISwapServerClient,
+               conn: IEventStoreConnection
   )  =
 
   let aggr =
@@ -278,3 +282,16 @@ type SwapActor(broadcaster: IBroadcaster,
         | :? HttpRequestException as ex ->
           return! Error($"Error requesting to boltz ({ex.Message})")
       }
+
+    member this.GetAllEntities() = task {
+      let! events =
+        conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer)
+      let listToMap (l: RecordedEvent<_> list) =
+        l
+        |> List.groupBy(fun re -> re.StreamId)
+        |> List.map(fun (streamId, reList) -> streamId, reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute)
+        |> Map.ofList
+      return
+        events
+        |> Result.map(listToMap)
+    }

@@ -87,6 +87,7 @@ type ThresholdRule = {
   MinimumOutGoing: int16<percent>
 }
   with
+
   member this.Validate() =
     if this.MinimumIncoming < 0s<percent> || this.MinimumIncoming > 100s<percent> then
       Error $"Invalid liquidity threshold {this}"
@@ -260,112 +261,123 @@ type Rules = {
   PeerRules: Map<NodeId, ThresholdRule>
 }
   with
+  static member FromDTOs(dtos: LiquidityRule[]) = {
+    ChannelRules =
+      dtos
+      |> Array.map(fun dto -> (dto.ChannelId, { ThresholdRule.MinimumIncoming = dto.IncomingThreshold
+                                                MinimumOutGoing = dto.OutgoingThreshold }))
+      |> Map.ofArray
+    PeerRules =
+      dtos
+      |> Array.map(fun dto -> (dto.PubKey |> NodeId, { ThresholdRule.MinimumIncoming = dto.IncomingThreshold
+                                                       MinimumOutGoing = dto.OutgoingThreshold }))
+      |> Map.ofArray
+  }
+
   static member Zero = {
     ChannelRules = Map.empty
     PeerRules = Map.empty
   }
 
 
-[<AutoOpen>]
-module Fees =
-  type IFeeLimit =
-    abstract member Validate: unit -> Result<unit, string>
-    /// Checks whether we may dispatch swap based on the current fee conditions.
-    /// (Only for loop out sweep tx)
-    abstract member CheckWithEstimatedFee: feeRate: FeeRate -> Result<unit, SwapDisqualifiedReason>
+type IFeeLimit =
+  abstract member Validate: unit -> Result<unit, string>
+  /// Checks whether we may dispatch swap based on the current fee conditions.
+  /// (Only for loop out sweep tx)
+  abstract member CheckWithEstimatedFee: feeRate: FeeRate -> Result<unit, SwapDisqualifiedReason>
 
-    /// Checks whether the quote provided is within our fee limits for the swap amount.
-    abstract member CheckLoopOutLimits: swapAmount: Money * quote: SwapDTO.LoopOutQuote -> Result<unit, SwapDisqualifiedReason>
+  /// Checks whether the quote provided is within our fee limits for the swap amount.
+  abstract member CheckLoopOutLimits: swapAmount: Money * quote: SwapDTO.LoopOutQuote -> Result<unit, SwapDisqualifiedReason>
 
-    /// Returns the maximum amount of the loop-out specific fees,
-    /// i.e. 1. prepay fee, 2. invoice routing fee for swap amount 3. miner fee for the sweep tx.
-    abstract member LoopOutFees: amount: Money * quote: SwapDTO.LoopOutQuote -> Money * Money * Money
-    abstract member CheckLoopInLimits: amount: Money * quote: SwapDTO.LoopInQuote -> Result<unit, SwapDisqualifiedReason>
+  /// Returns the maximum amount of the loop-out specific fees,
+  /// i.e. 1. prepay fee, 2. invoice routing fee for swap amount 3. miner fee for the sweep tx.
+  abstract member LoopOutFees: amount: Money * quote: SwapDTO.LoopOutQuote -> Money * Money * Money
+  abstract member CheckLoopInLimits: amount: Money * quote: SwapDTO.LoopInQuote -> Result<unit, SwapDisqualifiedReason>
 
-  /// FeePortion is a fee limitation which limits fees to a set portion of the swap amount.
-  type FeePortion = {
-    PartsPerMillion: int64<ppm>
+/// FeePortion is a fee limitation which limits fees to a set portion of the swap amount.
+type FeePortion = {
+  PartsPerMillion: int64<ppm>
+}
+  with
+  static member Default = {
+    // default percentage of swap amount that we allocate to fees, 2%.
+    PartsPerMillion = defaultFeePPM
   }
-    with
-    static member Default = {
-      // default percentage of swap amount that we allocate to fees, 2%.
-      PartsPerMillion = defaultFeePPM
-    }
-    interface IFeeLimit with
-      member this.Validate() =
-        if this.PartsPerMillion |> int64 <= 0L then
-          Error "Invalid Parts per million"
+  interface IFeeLimit with
+    member this.Validate() =
+      if this.PartsPerMillion |> int64 <= 0L then
+        Error "Invalid Parts per million"
+      else
+        Ok()
+    member this.CheckLoopOutLimits(swapAmount, quote) =
+      // First, check whether any of the individual fee categories provided by the server are more than
+      // our total limit. We do this so that we can provide more specific reasons for not executing swaps.
+      let feeLimit = ppmToSat(swapAmount, this.PartsPerMillion)
+      let minerFee = scaleMinerFee(quote.SweepMinerFee)
+      if minerFee > feeLimit then
+        Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = minerFee; OurLimit = feeLimit |})
+      elif quote.SwapFee > feeLimit then
+        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = feeLimit |})
+      elif quote.PrepayAmount > feeLimit then
+        Error <| SwapDisqualifiedReason.PrepayTooHigh({| ServerRequirement = quote.PrepayAmount; OurLimit = feeLimit |})
+      elif minerFee + quote.SwapFee >= feeLimit then
+        // if our miner and swap fee equal our limit, we will have nothing left for off-chain fees,
+        // so we fail out early.
+        Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = minerFee + quote.SwapFee; OurLimit = feeLimit |})
+      else
+        let prepay, route, miner = (this :> IFeeLimit).LoopOutFees(swapAmount, quote)
+
+        let fees =
+          let limits = {
+            LoopOutLimits.MaxPrepayRoutingFee = prepay
+            MaxPrepay = prepay
+            MaxSwapFee = quote.SwapFee
+            MaxRoutingFee = route
+            MaxMinerFee = miner
+            SwapTxConfRequirement = BlockHeightOffset32.Zero // unused dummy
+          }
+          limits.WorstCaseFee
+        if fees > feeLimit then
+          Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = fees; OurLimit = feeLimit |})
         else
           Ok()
-      member this.CheckLoopOutLimits(swapAmount, quote) =
-        // First, check whether any of the individual fee categories provided by the server are more than
-        // our total limit. We do this so that we can provide more specific reasons for not executing swaps.
-        let feeLimit = ppmToSat(swapAmount, this.PartsPerMillion)
-        let minerFee = scaleMinerFee(quote.SweepMinerFee)
-        if minerFee > feeLimit then
-          Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = minerFee; OurLimit = feeLimit |})
-        elif quote.SwapFee > feeLimit then
-          Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = feeLimit |})
-        elif quote.PrepayAmount > feeLimit then
-          Error <| SwapDisqualifiedReason.PrepayTooHigh({| ServerRequirement = quote.PrepayAmount; OurLimit = feeLimit |})
-        elif minerFee + quote.SwapFee >= feeLimit then
-          // if our miner and swap fee equal our limit, we will have nothing left for off-chain fees,
-          // so we fail out early.
-          Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = minerFee + quote.SwapFee; OurLimit = feeLimit |})
-        else
-          let prepay, route, miner = (this :> IFeeLimit).LoopOutFees(swapAmount, quote)
 
-          let fees =
-            let limits = {
-              LoopOutLimits.MaxPrepayRoutingFee = prepay
-              MaxPrepay = prepay
+    /// returns the maximum prepay and invoice routing fees for a swap amount and quote.
+    /// Note that the fee portion implementation just returns the quote's miner fee, assuming
+    /// that the quote's minerfee + swapfee < fee limit, so that we have some fees left for off-chain routing.
+    member this.LoopOutFees(amount, quote) =
+      let feeLimit = ppmToSat(amount, this.PartsPerMillion)
+      let minerFee = scaleMinerFee(quote.SweepMinerFee)
+      /// Takes
+      /// 1. available total of the offchain fee,
+      /// 2.
+      let available = feeLimit - minerFee - quote.SwapFee
+      let prepayMaxFee, routeMaxFee = splitOffChain(available, quote.PrepayAmount, amount)
+      prepayMaxFee, routeMaxFee, minerFee
+
+    member this.CheckLoopInLimits(amount, quote) =
+      let feeLimit = ppmToSat(amount, this.PartsPerMillion)
+      if quote.MinerFee >= feeLimit then
+        Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = quote.MinerFee; OurLimit = feeLimit |})
+      elif quote.SwapFee > feeLimit then
+        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = feeLimit |})
+      else
+        let fees =
+          worstCaseInFees
+            {
+              LoopInLimits.MaxMinerFee = quote.MinerFee
               MaxSwapFee = quote.SwapFee
-              MaxRoutingFee = route
-              MaxMinerFee = miner
-              SwapTxConfRequirement = BlockHeightOffset32.Zero // unused dummy
             }
-            limits.WorstCaseFee
-          if fees > feeLimit then
-            Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = fees; OurLimit = feeLimit |})
-          else
-            Ok()
-
-      /// returns the maximum prepay and invoice routing fees for a swap amount and quote.
-      /// Note that the fee portion implementation just returns the quote's miner fee, assuming
-      /// that the quote's minerfee + swapfee < fee limit, so that we have some fees left for off-chain routing.
-      member this.LoopOutFees(amount, quote) =
-        let feeLimit = ppmToSat(amount, this.PartsPerMillion)
-        let minerFee = scaleMinerFee(quote.SweepMinerFee)
-        /// Takes
-        /// 1. available total of the offchain fee,
-        /// 2.
-        let available = feeLimit - minerFee - quote.SwapFee
-        let prepayMaxFee, routeMaxFee = splitOffChain(available, quote.PrepayAmount, amount)
-        prepayMaxFee, routeMaxFee, minerFee
-
-      member this.CheckLoopInLimits(amount, quote) =
-        let feeLimit = ppmToSat(amount, this.PartsPerMillion)
-        if quote.MinerFee >= feeLimit then
-          Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = quote.MinerFee; OurLimit = feeLimit |})
-        elif quote.SwapFee > feeLimit then
-          Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = feeLimit |})
+            defaultLoopInSweepFee
+        if fees > feeLimit then
+          Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = fees; OurLimit = feeLimit |})
         else
-          let fees =
-            worstCaseInFees
-              {
-                LoopInLimits.MaxMinerFee = quote.MinerFee
-                MaxSwapFee = quote.SwapFee
-              }
-              defaultLoopInSweepFee
-          if fees > feeLimit then
-            Error <| SwapDisqualifiedReason.FeePPMInsufficient({| Required = fees; OurLimit = feeLimit |})
-          else
-            Ok()
+          Ok()
 
-      /// We do not do any checks for fee percentage, since we need full quote
-      /// to determine whether we can perform a swap.
-      member this.CheckWithEstimatedFee(_feeRate) =
-        Ok()
+    /// We do not do any checks for fee percentage, since we need full quote
+    /// to determine whether we can perform a swap.
+    member this.CheckWithEstimatedFee(_feeRate) =
+      Ok()
 
 type FeeCategoryLimit = {
   MaximumPrepay: Money
@@ -440,10 +452,8 @@ type Parameters = {
   MaxAutoInFlight: int
   FailureBackoff: TimeSpan
   SweepConfTarget: BlockHeightOffset32
-  HTLCConfTarget: BlockHeightOffset32
   FeeLimit: IFeeLimit
   ClientRestrictions: ClientRestrictions
-  SwapTxConfRequirement: BlockHeightOffset32
   Rules: Rules
   AutoLoop: bool
 }
@@ -452,16 +462,11 @@ type Parameters = {
     MaxAutoInFlight = 1
     FailureBackoff = defaultFailureBackoff
     SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
-    HTLCConfTarget = pairId.DefaultLoopInParameters.HTLCConfTarget
     FeeLimit = FeePortion.Default
     ClientRestrictions = ClientRestrictions.Default
-    SwapTxConfRequirement = pairId.DefaultLoopOutParameters.SwapTxConfRequirement
     Rules = Rules.Zero
     AutoLoop = false
   }
-
-  member this.IsZeroConf =
-    this.SwapTxConfRequirement = BlockHeightOffset32.Zero
 
   /// Checks whether a set of parameters is valid.
   member this.Validate(openChannels: ListChannelResponse seq, server): Result<unit, string> =
@@ -579,7 +584,7 @@ type SwapBuilder = {
           PairId = pairId |> Some
           Amount = amount
           SwapTxConfRequirement =
-            parameters.SwapTxConfRequirement.Value
+            pairId.DefaultLoopOutParameters.SwapTxConfRequirement.Value
             |> int |> Some
           Label =
             if autoloop then
@@ -636,7 +641,7 @@ type SwapBuilder = {
           PairId = Some pairId
           MaxMinerFee = quote.MinerFee |> ValueSome
           MaxSwapFee = quote.SwapFee |> ValueSome
-          HtlcConfTarget = parameters.HTLCConfTarget.Value |> int |> ValueSome
+          HtlcConfTarget = ValueNone
           RouteHints = routeHints
         }
         return
@@ -646,7 +651,7 @@ type SwapBuilder = {
 
 type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      opts: IOptions<NLoopOptions>,
-                     swapStateProjection: ISwapStateProjection,
+                     swapStateProjection: IOnGoingSwapStateProjection,
                      recentSwapFailureProjection: IRecentSwapFailureProjection,
                      swapServerClient: ISwapServerClient,
                      blockChainListener: IBlockChainListener,
@@ -667,12 +672,12 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     and private set (v: Map<Swap.Group, Parameters>) =
       lock _lockObj (fun () -> parametersDict <- v)
 
-  member this.Config (g: Swap.Group) (isZeroConf: bool) =
+  member this.Config (g: Swap.Group) =
     {
       Config.Restrictions = fun category -> task {
         try
           return!
-            swapServerClient.GetSwapAmountRestrictions(g, isZeroConf)
+            swapServerClient.GetSwapAmountRestrictions(g, zeroConf=false)
             |> Task.map(Ok)
         with
         | ex ->
@@ -684,9 +689,9 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       SwapActor = swapActor
     }
 
-  member this.Builder g isZeroConf =
+  member this.Builder g =
     let c =
-      this.Config g isZeroConf
+      this.Config g
     match g.Category with
     | Swap.Category.Out ->
       SwapBuilder.NewLoopOut(c, g.PairId, logger)
@@ -702,7 +707,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       _lightningClientProvider
         .GetClient(g.OffChainAsset)
         .ListChannels()
-    let c = this.Config g (v.IsZeroConf)
+    let c = this.Config g
     let! restriction =
       c.Restrictions g.Category
       |> TaskResult.mapError(AutoLoopError.FailedToGetServerRestriction)
@@ -717,8 +722,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   /// validates client restrictions (if present) against these values and merges the client's custom
   /// requirements with the server's limits to produce a single set of limitations for our swap.
   member private this.GetSwapRestrictions(group: Swap.Group): Task<Result<_, AutoLoopError>> = taskResult {
-      let isZeroConf = this.Parameters.[group].IsZeroConf
-      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, isZeroConf)
+      let! restrictions = swapServerClient.GetSwapAmountRestrictions(group, zeroConf=false)
       let par = this.Parameters.[group]
       do!
           ServerRestrictions.Validate(
@@ -764,7 +768,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   member this.SuggestSwaps(autoloop: bool, group: Swap.Group, ?ct: CancellationToken): Task<Result<SwapSuggestions, AutoLoopError>> = task {
     let ct = defaultArg ct CancellationToken.None
     let par = this.Parameters.[group]
-    let builder = this.Builder group (par.SwapTxConfRequirement = BlockHeightOffset32.Zero)
+    let builder = this.Builder group
     if not <| par.HaveRules then return Error(AutoLoopError.NoRules) else
     match! builder.MaySwap(par) with
     | Error e ->
@@ -896,8 +900,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, group, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
     taskResult {
-      let isZeroConf = this.Parameters.[group].IsZeroConf
-      let builder = this.Builder group (isZeroConf)
+      let builder = this.Builder group
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
       do! builder.VerifyTargetIsNotInUse(traffic) (peerOrChannel)
 

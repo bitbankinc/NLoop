@@ -2,6 +2,7 @@ namespace NLoop.Server.Projections
 
 open System
 open DotNetLightning.Utils
+open EventStore.ClientAPI
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -17,7 +18,9 @@ type IRecentSwapFailureProjection =
 
 /// Cache recently failed swaps on memory
 /// Used in AutoLoop to backoff the failure
-type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFactory) as this =
+type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
+                                 loggerFactory: ILoggerFactory,
+                                 conn: IEventStoreConnection) as this =
   inherit BackgroundService()
 
   /// We have no big reason to choose this number.
@@ -90,7 +93,8 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>, loggerFactory: IL
       nameof(RecentSwapFailureProjection),
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
-      handleEvent
+      handleEvent,
+      conn
     )
 
   let mutable failedLoopOutSwapState = Map.empty<_, struct(ShortChannelId[] *  UnixDateTime voption)>

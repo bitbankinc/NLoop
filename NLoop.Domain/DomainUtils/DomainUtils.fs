@@ -4,6 +4,7 @@ open System.IO
 open DotNetLightning.Serialization
 open DotNetLightning.Utils
 open System
+open FSharp.Control
 open NLoop.Domain
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
@@ -372,4 +373,7 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
     swapId: 'TEntityId *
     msg: 'TCommand *
     ?source: string -> Task
+
+  // todo: use asyncSeq
+  abstract member GetAllEntities: unit -> Task<Result<Map<StreamId, 'TState>, StoreError>>
 

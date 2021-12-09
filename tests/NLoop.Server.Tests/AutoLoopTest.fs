@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open EventStore.ClientAPI
 open FSharp.Control
 open System.Threading
 open DotNetLightning.Payment
@@ -183,6 +184,18 @@ type AutoLoopTests() =
         failwith "todo"
       member this.Execute(swapId, msg, source) =
         failwith "todo"
+      member this.GetAllEntities() =
+        failwith "todo"
+  }
+  let mockRecentSwapFailureProjection = {
+    new IRecentSwapFailureProjection with
+      member this.FailedLoopIns = Map.empty
+      member this.FailedLoopOuts = Map.empty
+  }
+
+  let mockOnGoingSwapProjection = {
+    new IOnGoingSwapStateProjection with
+      member this.State = Map.empty
   }
 
   let defaultTestRestrictions = {
@@ -194,6 +207,8 @@ type AutoLoopTests() =
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       services
         .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
+        .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
         |> ignore
     ))
@@ -301,6 +316,8 @@ type AutoLoopTests() =
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
         .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
+        .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
       injection services
@@ -441,7 +458,7 @@ type AutoLoopTests() =
     }
     let setup = fun (services: IServiceCollection) ->
       let stateView = {
-          new ISwapStateProjection with
+          new IOnGoingSwapStateProjection with
             member this.State =
               ongoingSwaps
               |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
@@ -452,7 +469,7 @@ type AutoLoopTests() =
           member this.FailedLoopIns = recentFailureIn
       }
       services
-        .AddSingleton<ISwapStateProjection>(stateView)
+        .AddSingleton<IOnGoingSwapStateProjection>(stateView)
         .AddSingleton<IRecentSwapFailureProjection>(failureView)
         |> ignore
     this.TestSuggestSwapsCore(name, setup, group, parameters, channels |> Seq.toList, Ok expected)
@@ -781,13 +798,13 @@ type AutoLoopTests() =
   member this.TestInFlightLimit(name, maxInFlight, existingSwaps, rules: Rules, expected) =
     let setup (services: IServiceCollection) =
       let swapState = {
-        new ISwapStateProjection with
+        new IOnGoingSwapStateProjection with
           member this.State =
             existingSwaps
             |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
       }
       services
-        .AddSingleton<ISwapStateProjection>(swapState)
+        .AddSingleton<IOnGoingSwapStateProjection>(swapState)
         |> ignore
     let group = {
        Swap.Group.PairId = pairId

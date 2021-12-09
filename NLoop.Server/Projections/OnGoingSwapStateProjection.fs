@@ -3,6 +3,7 @@ namespace NLoop.Server.Projections
 open System
 open System.Runtime.CompilerServices
 open System.Threading
+open EventStore.ClientAPI
 open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
 open Microsoft.Extensions.Hosting
@@ -15,18 +16,19 @@ open NLoop.Domain.Utils.EventStore
 open NLoop.Server
 open NLoop.Server.Actors
 
-type ISwapStateProjection =
+type IOnGoingSwapStateProjection =
   abstract member State: Map<StreamId, Swap.State>
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
-type SwapStateProjection(loggerFactory: ILoggerFactory,
+type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
                   checkpointDB: ICheckpointDB,
                   actor: ISwapActor,
-                  eventAggregator: IEventAggregator) as this =
+                  eventAggregator: IEventAggregator,
+                  conn: IEventStoreConnection) as this =
   inherit BackgroundService()
-  let log = loggerFactory.CreateLogger<SwapStateProjection>()
+  let log = loggerFactory.CreateLogger<OnGoingSwapStateProjection>()
 
   let mutable _state: Map<StreamId, Swap.State> = Map.empty
   let lockObj = obj()
@@ -64,10 +66,11 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
   let subscription =
     EventStoreDBSubscription(
       { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-      nameof(SwapStateProjection),
+      nameof(OnGoingSwapStateProjection),
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
-      handleEvent eventAggregator)
+      handleEvent eventAggregator,
+      conn)
 
   member this.State
     with get(): Map<_,_> = _state
@@ -75,7 +78,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
       lock lockObj <| fun () ->
         _state <- v
 
-  interface ISwapStateProjection with
+  interface IOnGoingSwapStateProjection with
     member this.State = this.State
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
@@ -97,7 +100,7 @@ type SwapStateProjection(loggerFactory: ILoggerFactory,
 
 [<AutoOpen>]
 module ISwapStateProjectionExtensions =
-  type ISwapStateProjection with
+  type IOnGoingSwapStateProjection with
     member this.OngoingLoopIns =
       this.State
       |> Seq.choose(fun v ->

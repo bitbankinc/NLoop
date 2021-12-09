@@ -59,9 +59,11 @@ namespace NLoopClient
         System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
@@ -678,12 +680,22 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            if (@base == null)
+                throw new System.ArgumentNullException("@base");
+    
+            if (quote == null)
+                throw new System.ArgumentNullException("quote");
+    
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params");
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
+            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -753,7 +765,7 @@ namespace NLoopClient
                 throw new System.ArgumentNullException("body");
     
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params");
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -1406,11 +1418,15 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LiquidityRule 
     {
-        [Newtonsoft.Json.JsonProperty("incoming_threshold", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Incoming_threshold { get; set; }
+        /// <summary>if the incoming liquidity (i.e. other party's share of the channel cap) has become less than this, we will dispatch the loop-out swap
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("incoming_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int Incoming_threshold_percent { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("outgoing_threshold", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Outgoing_threshold { get; set; }
+        /// <summary>if the outgoing liquidity (i. our share in the channel cap) has become less than this, we will dispatch the loop-in swap
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("outgoing_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int Outgoing_threshold_percent { get; set; }
     
         [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
@@ -1447,66 +1463,63 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LiquidityParameters 
     {
-        [Newtonsoft.Json.JsonProperty("rules", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public System.Collections.Generic.ICollection<LiquidityRule> Rules { get; set; }
+        [Newtonsoft.Json.JsonProperty("rules", Required = Newtonsoft.Json.Required.Always)]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.ICollection<LiquidityRule> Rules { get; set; } = new System.Collections.ObjectModel.Collection<LiquidityRule>();
     
         /// <summary>The parts per million of swap amount that is allowed to be allocated to swap fees. This valie is applied across swap categories and may not be set in conjunction with sweep fee rate, swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("fee_ppm", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Fee_ppm { get; set; }
+        [Newtonsoft.Json.JsonProperty("fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Fee_ppm { get; set; }
     
-        /// <summary>The limit we place on our estimated sweep cost for a swap in sat/vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
+        /// <summary>The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_vbyte", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Sweep_fee_rate_sat_per_vbyte { get; set; }
+        [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_kvbyte", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Sweep_fee_rate_sat_per_kvbyte { get; set; }
     
         /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts per million of the swap volume.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Max_swap_fee_ppm { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_swap_fee_ppm { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("max_routing_fee_ppm", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Max_routing_fee_ppm { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_routing_fee_ppm { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee_ppm", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int Max_prepay_routing_fee_ppm { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_prepay_routing_fee_ppm { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("max_prepay_sat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Max_prepay_sat { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_prepay_sat", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_sat { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("max_miner_fee_sat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Max_miner_fee_sat { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_miner_fee_sat", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee_sat { get; set; }
     
         /// <summary>The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within.</summary>
-        [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Always)]
         public int Sweep_conf_target { get; set; }
     
         /// <summary>The amount of time we require to pass since a channel was part of a failed swap due to off chain payment failure until it will be considered for swap suggestions again, expressed in seconds.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("failure_backoff_sec", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [Newtonsoft.Json.JsonProperty("failure_backoff_sec", Required = Newtonsoft.Json.Required.Always)]
         public int Failure_backoff_sec { get; set; }
     
         /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("autoloop", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [Newtonsoft.Json.JsonProperty("autoloop", Required = Newtonsoft.Json.Required.Always)]
         public bool Autoloop { get; set; }
     
         /// <summary>The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.</summary>
-        [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.Always)]
         public int Auto_max_in_flight { get; set; }
     
         /// <summary>The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("min_swap_amount", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Min_swap_amount { get; set; }
+        [Newtonsoft.Json.JsonProperty("min_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Min_swap_amount { get; set; }
     
         /// <summary>The maximum swap amount, expressed in satoshis.</summary>
-        [Newtonsoft.Json.JsonProperty("max_swap_amount", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Max_swap_amount { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Always)]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
-        public string Pair_id { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_amount { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     

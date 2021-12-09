@@ -6,10 +6,13 @@ open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
 open BoltzClient
+open EventStore.ClientAPI
+open EventStore.ClientAPI
 open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -58,7 +61,7 @@ type NLoopExtensions() =
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ISwapStateProjection>() :?> SwapStateProjection :> IHostedService
+            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<RecentSwapFailureProjection>() :> IHostedService
@@ -69,13 +72,23 @@ type NLoopExtensions() =
           |> ignore
 
       this
+        .AddSingleton<IEventStoreConnection>(fun sp ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          let connSettings = ConnectionSettings.Create().DisableTls().Build()
+          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl)
+          do conn.ConnectAsync().GetAwaiter().GetResult()
+          conn
+        )
+        |> ignore
+
+      this
         .AddSingleton<AutoLoopManager>()
         |> ignore
 
       this
         .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
-        .AddSingleton<ISwapStateProjection, SwapStateProjection>()
+        .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
         .AddSingleton<ISwapEventListener, BlockchainListener>()

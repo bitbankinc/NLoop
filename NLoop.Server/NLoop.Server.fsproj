@@ -41,7 +41,7 @@
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />
-    <Compile Include="Projections\SwapStateProjection.fs" />
+    <Compile Include="Projections\OnGoingSwapStateProjection.fs" />
     <Compile Include="Projections\RecentSwapFailureProjection.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
     <Compile Include="Services\LightningInvoiceProvider.fs" />

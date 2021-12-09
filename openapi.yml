@@ -163,13 +163,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/SuggestSwapsResponse'
 
-  /v1/liquidity/params:
+  /v1/liquidity/params/{base}/{quote}:
     get:
       description: >
         Get the parameters that the daemon's liquidity manager is currently configured with.
         This may be nil if nothing is configured.
       tags:
         - autoloop
+      parameters:
+        - in: path
+          name: base
+          schema:
+            $ref:  "#/components/schemas/cryptoCode"
+          required: true
+          description: base currency
+        - in: path
+          name: quote
+          schema:
+            $ref:  "#/components/schemas/cryptoCode"
+          required: true
+          description: quote currency
+
       responses:
         '200':
           description: OK
@@ -547,12 +561,18 @@ components:
     LiquidityRule:
       type: object
       properties:
-        incoming_threshold:
+        incoming_threshold_percent:
           type: integer
-          format: int64
-        outgoing_threshold:
+          format: int16
+          description: >
+            if the incoming liquidity (i.e. other party's share of the channel cap) has become
+            less than this, we will dispatch the loop-out swap
+        outgoing_threshold_percent:
           type: integer
-          format: int64
+          format: int16
+          description: >
+            if the outgoing liquidity (i. our share in the channel cap) has become
+            less than this, we will dispatch the loop-in swap
         pubkey:
           $ref: '#/components/schemas/PubKey'
         channel_id:
@@ -573,26 +593,33 @@ components:
             The parts per million of swap amount that is allowed to be allocated to swap fees.
             This valie is applied across swap categories and may not be set in conjunction with sweep fee rate,
             swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
-        sweep_fee_rate_sat_per_vbyte:
+          nullable: true
+        sweep_fee_rate_sat_per_kvbyte:
           type: integer
           description: >
-            The limit we place on our estimated sweep cost for a swap in sat/vByte. If the estimated fee for our
+            The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our
             sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
+          nullable: true
         max_swap_fee_ppm:
           type: integer
           description: >
             The maximum fee paid to the server for facilitating the swap, expressed
             as parts per million of the swap volume.
+          nullable: true
         max_routing_fee_ppm:
           type: integer
+          nullable: true
         max_prepay_routing_fee_ppm:
           type: integer
+          nullable: true
         max_prepay_sat:
           type: integer
           format: int64
+          nullable: true
         max_miner_fee_sat:
           type: integer
           format: int64
+          nullable: true
         sweep_conf_target:
           type: integer
           description: The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within.
@@ -613,14 +640,18 @@ components:
           format: int64
           description: >
             The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
+          nullable: true
         max_swap_amount:
           type: integer
           format: int64
           description: The maximum swap amount, expressed in satoshis.
-        pair_id:
-          $ref: '#/components/schemas/pairId'
+          nullable: true
       required:
-        - "pair_id"
+        - "rules"
+        - "sweep_conf_target"
+        - "failure_backoff_sec"
+        - "autoloop"
+        - "auto_max_in_flight"
 
     SetLiquidityParametersRequest:
       type: object

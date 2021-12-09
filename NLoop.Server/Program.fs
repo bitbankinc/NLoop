@@ -70,12 +70,23 @@ module App =
           GET >=>
             route "/suggest" >=> AutoLoopHandlers.suggestSwaps
         ])
-        subRoute "/liquidity" (
+        subRoute "/liquidity" (choose [
           route "/params" >=> choose [
-            GET >=> AutoLoopHandlers.getLiquidityParams
-            POST >=> bindJson<SetLiquidityParametersRequest> AutoLoopHandlers.setLiquidityParams
+            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
+            GET >=> AutoLoopHandlers.getLiquidityParams None
           ]
-        )
+          GET >=> routef "/params/%s/%s" (fun (b, q) ->
+            let b = SupportedCryptoCode.Parse(b)
+            let q = SupportedCryptoCode.Parse(q)
+            AutoLoopHandlers.getLiquidityParams(Some(PairId(b, q)))
+          )
+          POST >=> routef "/params/%s/%s" (fun (b, q) ->
+             let b = SupportedCryptoCode.Parse(b)
+             let q = SupportedCryptoCode.Parse(q)
+             bindJson<SetLiquidityParametersRequest>
+               (AutoLoopHandlers.setLiquidityParams(Some(PairId(b, q))))
+           )
+        ])
       ])
       setStatusCode 404 >=> text "Not Found"
     ]

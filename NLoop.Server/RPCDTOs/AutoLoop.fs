@@ -5,6 +5,7 @@ open System.Text.Json.Serialization
 open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NLoop.Domain.IO
+open NLoop.Server
 open NLoop.Server.DTOs
 
 [<RequireQualifiedAccess>]
@@ -48,31 +49,31 @@ type LiquidityRule = {
   Type: LiquidityRuleType
 
   // ----- For `LiquidityRuleType.Threshold` -----
-  [<JsonPropertyName "incoming_threshold">]
-  IncomingThreshold: Money
+  [<JsonPropertyName "incoming_threshold_percent">]
+  IncomingThreshold: int16<percent>
 
-  [<JsonPropertyName "outgoing_threshold">]
-  OutgoingThreshold: Money
+  [<JsonPropertyName "outgoing_threshold_percent">]
+  OutgoingThreshold: int16<percent>
   // -----  -----
 }
 type LiquidityParameters = {
   Rules: LiquidityRule[]
 
   [<JsonPropertyName "fee_ppm">]
-  FeePPM: uint64
+  FeePPM: int64<ppm> voption
 
-  [<JsonPropertyName "sweep_fee_rate_sat_per_vbyte">]
-  SweepFeeRateSatPerVByte: Money
+  [<JsonPropertyName "sweep_fee_rate_sat_per_kvbyte">]
+  SweepFeeRateSatPerKVByte: Money voption
   [<JsonPropertyName "max_swap_fee_ppm">]
-  MaxSwapFeePpm: uint64
+  MaxSwapFeePpm: int64<ppm> voption
   [<JsonPropertyName "max_routing_fee_ppm">]
-  MaxRoutingFeePpm: uint64
+  MaxRoutingFeePpm: int64<ppm> voption
   [<JsonPropertyName "max_prepay_routing_fee_ppm">]
-  MaxPrepayRoutingFeePpm : uint64
+  MaxPrepayRoutingFeePpm : int64<ppm> voption
   [<JsonPropertyName "max_prepay_sat">]
-  MaxPrepay: Money
+  MaxPrepay: Money voption
   [<JsonPropertyName "max_miner_fee_sat">]
-  MaxMinerFee: Money
+  MaxMinerFee: Money voption
   [<JsonPropertyName "sweep_conf_target">]
   SweepConfTarget: int
   [<JsonPropertyName "failure_backoff_sec">]
@@ -83,12 +84,9 @@ type LiquidityParameters = {
   [<JsonPropertyName "auto_max_in_flight">]
   AutoMaxInFlight: int
   [<JsonPropertyName "min_swap_amount">]
-  MinSwapAmount: Money
+  MinSwapAmount: Money option
   [<JsonPropertyName "max_swap_amount">]
-  MaxSwapAmount: Money
-
-  [<JsonPropertyName "pair_id">]
-  PairId: PairId
+  MaxSwapAmount: Money option
 }
 
 type SetLiquidityParametersRequest = {
