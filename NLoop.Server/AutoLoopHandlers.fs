@@ -155,12 +155,43 @@ let setLiquidityParams (maybePairId: PairId option) ({ SetLiquidityParametersReq
           validationError400 [e.Message] next ctx
   }
 
-let suggestSwaps: HttpHandler =
+let suggestSwaps (maybePairId: PairId option): HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    let resp = {
-      SuggestSwapsResponse.Disqualified = [||]
-      LoopOut = failwith "todo"
-      LoopIn = failwith "todo"
+    let man = ctx.GetService<AutoLoopManager>()
+    let pairId =
+      maybePairId
+      |> Option.defaultValue PairId.Default
+    // todo: consider loopin
+    let  group = {
+      Swap.Group.Category = Swap.Category.Out
+      Swap.Group.PairId = pairId
     }
-    return! json resp next ctx
+    match! man.SuggestSwaps(false, group) with
+    | Error e ->
+      return! error503 e next ctx
+    | Ok suggestion ->
+      let d =
+        let channelD =
+          suggestion.DisqualifiedChannels
+          |> Seq.map(fun kv -> {
+            Disqualified.Reason = kv.Value.Message
+            ChannelId = kv.Key |> ValueSome
+            PubKey = ValueNone })
+        let peerD =
+          suggestion.DisqualifiedPeers
+          |> Seq.map(fun kv -> {
+            Disqualified.Reason = kv.Value.Message
+            ChannelId = ValueNone
+            PubKey = kv.Key.Value |> ValueSome })
+        seq [ channelD; peerD ]
+        |> Seq.concat
+        |> Seq.toArray
+      let resp = {
+        SuggestSwapsResponse.Disqualified = d
+        LoopOut =
+          suggestion.OutSwaps |> List.toArray
+        LoopIn =
+          suggestion.InSwaps |> List.toArray
+      }
+      return! json resp next ctx
   }

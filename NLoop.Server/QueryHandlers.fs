@@ -46,6 +46,7 @@ module QueryHandlers =
   let handleGetSwapHistory =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
       let actor = ctx.GetService<ISwapActor>()
+      // todo: consider about cancellation
       match! actor.GetAllEntities() with
       | Error e ->
         return! error503 $"Failed to read events from DB\n {e}" next ctx
@@ -77,7 +78,7 @@ module QueryHandlers =
   let handleGetOngoingSwap =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
       let resp: GetOngoingSwapResponse =
-        ctx.GetService<OnGoingSwapStateProjection>().State
+        ctx.GetService<IOnGoingSwapStateProjection>().State
         |> Map.toList
         |> List.choose(fun (_, v) ->
           match v with

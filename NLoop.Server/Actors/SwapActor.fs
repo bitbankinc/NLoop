@@ -283,15 +283,16 @@ type SwapActor(broadcaster: IBroadcaster,
           return! Error($"Error requesting to boltz ({ex.Message})")
       }
 
-    member this.GetAllEntities() = task {
+    member this.GetAllEntities(?ct: CancellationToken) = task {
+      let ct = defaultArg ct CancellationToken.None
       let! events =
-        conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer)
-      let listToMap (l: RecordedEvent<_> list) =
+        conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+      let eventListToStateMap (l: RecordedEvent<_> list) =
         l
         |> List.groupBy(fun re -> re.StreamId)
         |> List.map(fun (streamId, reList) -> streamId, reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute)
         |> Map.ofList
       return
         events
-        |> Result.map(listToMap)
+        |> Result.map eventListToStateMap
     }

@@ -70,12 +70,13 @@ type IEventStoreConnectionExtensions =
 
   // todo: use asyncSeq (or grpc client)
   [<Extension>]
-  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType: string, serializer) = taskResult {
+  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType: string, serializer, ?ct: CancellationToken) = taskResult {
+      let ct = defaultArg ct CancellationToken.None
       let mutable currentSlice: AllEventsSlice = null
       let mutable nextSliceStart = Position.Start
       let arr = ResizeArray<_>()
       try
-        while (currentSlice |> isNull || currentSlice.IsEndOfStream |> not) do
+        while ((currentSlice |> isNull || currentSlice.IsEndOfStream |> not) && not <| ct.IsCancellationRequested) do
           let! r =
             conn.ReadAllEventsForwardAsync(nextSliceStart, 200, false)
           currentSlice <- r

@@ -642,7 +642,7 @@ type SwapBuilder = {
           MaxMinerFee = quote.MinerFee |> ValueSome
           MaxSwapFee = quote.SwapFee |> ValueSome
           HtlcConfTarget = ValueNone
-          RouteHints = routeHints
+          RouteHints = routeHints |> ValueSome
         }
         return
           SwapSuggestion.In(req)
@@ -840,7 +840,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
               |> Seq.map(fun r -> r.Id |> chanIdToRouteHint (this.LightningClient group))
               |> Task.WhenAll
             let s =
-              { s with RouteHints = routeHints }
+              { s with RouteHints = ValueSome routeHints }
             suggestions.Add (SwapSuggestion.In s)
           | Ok s ->
             suggestions.Add(s)

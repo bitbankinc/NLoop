@@ -37,16 +37,22 @@ type BoltzListener(swapServerClient: ISwapServerClient,
         while not <| ct.IsCancellationRequested do
           ct.ThrowIfCancellationRequested()
           let ts = statuses.Values |> Seq.cast<_> |> Array.ofSeq
-          let index = ts |> Task.WaitAny
-          let! tx = ts.[index] :?> Task<Transaction>
-          let swapId = statuses.Keys |> Seq.item index
-          do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()))
+          let index = Task.WaitAny(ts, -1, ct)
+          if index <> -1 then
+            let! tx = ts.[index] :?> Task<Transaction>
+            logger.LogInformation $"boltz notified about their swap tx {tx.ToHex()}"
+            let swapId = statuses.Keys |> Seq.item index
+            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()))
+            match statuses.TryRemove(swapId) with
+            | true, _ -> ()
+            | false, _ ->
+              logger.LogWarning($"Failed to remove swap {swapId} this should never happen.")
       with
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
       | ex ->
         logger.LogCritical($"Connection to Boltz server {opts.Value.BoltzUrl} failed!")
-        logger.LogError($"{ex.Message}")
+        logger.LogError($"{ex}")
         raise <| ex
     }
 
@@ -57,9 +63,6 @@ type BoltzListener(swapServerClient: ISwapServerClient,
       |> ignore
 
     member this.RemoveSwap(swapId) =
-      match statuses.TryRemove(swapId) with
-      | true, _ ->
-        ()
-      | _ ->
-        logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
+      statuses.TryRemove(swapId)
+      |> ignore
 

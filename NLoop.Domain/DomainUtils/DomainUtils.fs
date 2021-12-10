@@ -366,6 +366,7 @@ type Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId> = {
       Execute = execute
     }
 
+open System.Threading
 type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : comparison> =
   abstract member Handler: Handler<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId>
   abstract member Aggregate: Aggregate<'TState, 'TCommand, 'TEvent, 'TError, 'T>
@@ -375,5 +376,5 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
     ?source: string -> Task
 
   // todo: use asyncSeq
-  abstract member GetAllEntities: unit -> Task<Result<Map<StreamId, 'TState>, StoreError>>
+  abstract member GetAllEntities: ?ct: CancellationToken -> Task<Result<Map<StreamId, 'TState>, StoreError>>
 

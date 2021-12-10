@@ -55,7 +55,7 @@ paths:
   /v1/swaps/history:
     get:
       description: >
-        Get the full history of swaps.
+        Get the full history of swas. This might take long if you have a lots of entries in a database.
       tags:
         - swap
       parameters:
@@ -148,10 +148,23 @@ paths:
                     items:
                       type: string
 
-  /v1/auto/suggest:
+  /v1/auto/suggest/{base}/{quote}:
     get:
       description: >
         Get suggestion for the swaps.
+      parameters:
+        - in: path
+          name: base
+          schema:
+            $ref:  "#/components/schemas/cryptoCode"
+          required: true
+          description: base currency
+        - in: path
+          name: quote
+          schema:
+            $ref:  "#/components/schemas/cryptoCode"
+          required: true
+          description: quote currency
       tags:
         - loop
         - autoloop

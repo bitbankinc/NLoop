@@ -52,11 +52,12 @@ type LoopInRequest = {
   HtlcConfTarget: int voption
 
   [<JsonPropertyName "route_hints">]
-  RouteHints: RouteHint array
+  RouteHints: RouteHint array voption
 }
   with
   member this.LastHop =
-    let lastHops = this.RouteHints |> Array.map(fun rh -> rh.Hops.[0].NodeId)
+    let lastHops =
+      this.RouteHints |> ValueOption.defaultValue [||] |> Array.map(fun rh -> rh.Hops.[0].NodeId)
     if lastHops |> Seq.distinct |> Seq.length = 1 then
       lastHops.[0] |> Some
     else
@@ -86,6 +87,7 @@ type LoopInRequest = {
 
   member this.LndClientRouteHints =
     this.RouteHints
+    |> ValueOption.defaultValue [||]
     |> Array.map(fun h ->
       {
         LndClient.RouteHint.Hops = h.Hops |> Array.map(fun r -> r.LndClientHopHint)
