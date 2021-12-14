@@ -87,7 +87,7 @@
         "tags": [
           "swap"
         ],
-        "description": "Get the full history of swaps.\n",
+        "description": "Get the full history of swas. This might take long if you have a lots of entries in a database.\n",
         "operationId": "history",
         "parameters": [
           {
@@ -237,7 +237,7 @@
         }
       }
     },
-    "/v1/auto/suggest": {
+    "/v1/auto/suggest/{base}/{quote}": {
       "get": {
         "tags": [
           "loop",
@@ -245,6 +245,26 @@
         ],
         "description": "Get suggestion for the swaps.\n",
         "operationId": "suggest",
+        "parameters": [
+          {
+            "name": "base",
+            "in": "path",
+            "required": true,
+            "description": "base currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          },
+          {
+            "name": "quote",
+            "in": "path",
+            "required": true,
+            "description": "quote currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",

@@ -69,9 +69,10 @@ module App =
         subRoute "/auto" (choose [
           GET >=>
             routef "/suggest/%s/%s" (fun (b, q) ->
-            let b = SupportedCryptoCode.Parse(b)
-            let q = SupportedCryptoCode.Parse(q)
-            AutoLoopHandlers.suggestSwaps)
+              let b = SupportedCryptoCode.Parse(b)
+              let q = SupportedCryptoCode.Parse(q)
+              AutoLoopHandlers.suggestSwaps(Some (PairId(b, q)))
+            )
         ])
         subRoute "/liquidity" (choose [
           route "/params" >=> choose [

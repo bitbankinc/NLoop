@@ -924,7 +924,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         logger.LogDebug($"recommended autoloop out: {swap.Amount.Satoshi} sats over {chanSet}")
       else
         let! loopOut =
-          swapActor.ExecNewLoopOut(swap, blockChainListener.CurrentHeight)
+          swapActor.ExecNewLoopOut(swap, blockChainListener.CurrentHeight(group.OnChainAsset))
           |> TaskResult.mapError(AutoLoopError.FailedToDispatchLoop)
         logger.LogInformation($"loop out automatically dispatched.: (id {loopOut.Id}, onchain address: {loopOut.ClaimAddress}. amount: {loopOut.OnChainAmount.Satoshi} sats)")
 
@@ -934,7 +934,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         logger.LogDebug($"recommended autoloop in: %d{inSwap.Amount.Satoshi} sats over {inSwap.ChannelId} ({inSwap.ChannelId |> Option.map(fun c -> c.ToUInt64())})")
       else
         let! loopIn =
-          swapActor.ExecNewLoopIn(inSwap, blockChainListener.CurrentHeight)
+          swapActor.ExecNewLoopIn(inSwap, blockChainListener.CurrentHeight(group.OnChainAsset))
           |> TaskResult.mapError(AutoLoopError.FailedToDispatchLoop)
         logger.LogInformation($"loop in automatically dispatched: (id: {loopIn.Id})")
 

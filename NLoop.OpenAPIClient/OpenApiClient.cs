@@ -54,9 +54,11 @@ namespace NLoopClient
         System.Threading.Tasks.Task<LoopInResponse> InAsync(LoopInRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <param name="@base">base currency</param>
@@ -613,12 +615,22 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
+            if (@base == null)
+                throw new System.ArgumentNullException("@base");
+    
+            if (quote == null)
+                throw new System.ArgumentNullException("quote");
+    
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest");
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest/{base}/{quote}");
+            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
     
             var client_ = _httpClient;
             var disposeClient_ = false;

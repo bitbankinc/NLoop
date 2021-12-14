@@ -184,7 +184,7 @@ type AutoLoopTests() =
         failwith "todo"
       member this.Execute(swapId, msg, source) =
         failwith "todo"
-      member this.GetAllEntities() =
+      member this.GetAllEntities ct =
         failwith "todo"
   }
   let mockRecentSwapFailureProjection = {

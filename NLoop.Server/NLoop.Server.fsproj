@@ -47,7 +47,7 @@
     <Compile Include="Services\LightningInvoiceProvider.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\BoltzListener.fs" />
-    <Compile Include="Services\BlockchainListener.fs" />
+    <Compile Include="Services\RPCBlockchainListener.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
     <Compile Include="Services\SwapEventListeners.fs" />
     <Compile Include="Services\NLoopService.fs" />
