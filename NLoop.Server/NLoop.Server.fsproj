@@ -16,6 +16,7 @@
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="2.0.0" />
+    <PackageReference Include="NetMQ" Version="4.0.1.6" />
     <PackageReference Include="Ply" Version="0.3.*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
     <PackageReference Include="DBTrie" Version="1.0.38" />
@@ -37,7 +38,10 @@
     <Compile Include="SwapServerClient\interfaces.fs" />
     <Compile Include="SwapServerClient\BoltzSwapServerClient.fs" />
     <Compile Include="EventAggregator.fs" />
+    <Compile Include="BlockTypes.fs" />
     <Compile Include="Interfaces.fs" />
+    <Compile Include="NLoopCoindRPCClient.fs" />
+    <Compile Include="ZeroMQClient.fs" />
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />

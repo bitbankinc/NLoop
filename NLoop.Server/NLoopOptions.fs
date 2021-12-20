@@ -21,6 +21,12 @@ type ChainOptions() =
   member val RPCCookieFile = String.Empty with get, set
   // --- ---
 
+  // --- zeromq ---
+  member val ZmqHost = "localhost" with get, set
+  member val ZmqPort = "28332" with get, set
+  member this.ZmqAddress = $"tcp://{this.ZmqHost}:{this.ZmqPort}"
+  // --- ---
+
   // --- swap params ---
 
   /// Confirmation target for the sweep in on-chain swap

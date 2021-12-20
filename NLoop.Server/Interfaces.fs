@@ -72,3 +72,29 @@ type ISwapActor =
     ExecNewLoopIn:
     req: LoopInRequest *
     currentHeight: BlockHeight -> Task<Result<LoopInResponse, string>>
+
+type BlockChainInfo = {
+  Progress: float32
+  Height: BlockHeight
+  BestBlockHash: uint256
+}
+
+type IBlockChainClient =
+  abstract member GetBlock: blockHash: uint256 * ?ct: CancellationToken -> Task<BlockWithHeight>
+  abstract member GetBlockChainInfo: ?ct: CancellationToken -> Task<BlockChainInfo>
+  abstract member GetBlockHash: height: BlockHeight * ?ct: CancellationToken -> Task<uint256>
+  abstract member GetRawTransaction: id: TxId * ?ct: CancellationToken -> Task<Transaction>
+  abstract member GetBestBlockHash: ?ct: CancellationToken -> Task<uint256>
+
+
+[<AbstractClass;Sealed;Extension>]
+type IBlockChainClientExtensions =
+  [<Extension>]
+  static member GetBlockFromHeight(this: IBlockChainClient, height: BlockHeight, ct) = task {
+    let! hash = this.GetBlockHash(height, ct)
+    let! b = this.GetBlock(hash, ct)
+    return b.Block
+  }
+  [<Extension>]
+  static member GetBlockFromHeight(this: IBlockChainClient, height: BlockHeight) =
+    this.GetBlockFromHeight(height, CancellationToken.None)

@@ -69,6 +69,7 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManager>() :> IHostedService
           )
+          .AddHostedService<ZmqBlockchainListener>()
           |> ignore
 
       this

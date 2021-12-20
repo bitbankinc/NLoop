@@ -20,54 +20,6 @@ open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
 
-type ChainedBlock = {
-  Height: BlockHeight
-  Header: BlockHeader
-  Prev: ChainedBlock option
-}
-
-module ChainedBlock =
-  let rec private rewindToSameHeight (maybeA: ChainedBlock option) (maybeB: ChainedBlock option) =
-    match maybeA, maybeB with
-    | Some a, Some b when a.Height > b.Height ->
-      rewindToSameHeight a.Prev maybeB
-    | Some a, Some b when a.Height < b.Height ->
-      rewindToSameHeight maybeA b.Prev
-    | Some a, Some b ->
-      Some (a, b)
-    | _ -> None
-
-  let rec rewindToSameAncestor (a: ChainedBlock option) (b: ChainedBlock option) =
-    match a, b with
-    | Some a, Some b when a.Header.GetHash() <> b.Header.GetHash() ->
-      rewindToSameAncestor a.Prev b.Prev
-    | Some a, Some _ ->
-      Some a
-    | _ ->
-      None
-
-  let findFork x y =
-    rewindToSameHeight (Some x) (Some y)
-    |> Option.bind(fun (a, b) -> rewindToSameAncestor (Some a) (Some b))
-
-type ComparableOutpoint = uint256 * uint
-type SlimChainedBlock = {
-  Height: BlockHeight
-  HeaderHash: uint256
-  PrevHash: uint256
-}
-  with
-  static member Zero = {
-    Height = BlockHeight.Zero
-    HeaderHash = uint256.Zero
-    PrevHash = uint256.Zero
-  }
-  member this.Clone() = {
-    Height = this.Height.Value |> BlockHeight
-    HeaderHash = this.HeaderHash.ToBytes() |> uint256
-    PrevHash = this.PrevHash.ToBytes() |> uint256
-  }
-
 type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logger: ILogger<RPCBlockchainListener>) as this =
   inherit BackgroundService()
 
@@ -136,7 +88,7 @@ type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logg
     (cc: SupportedCryptoCode)
     (cli: RPCClient)
     (newHeight: BlockHeight) = task {
-    let { Height = oldHeight; } = this.CurrentHeights.[cc]
+    let { SlimChainedBlock.Height = oldHeight; } = this.CurrentHeights.[cc]
     assert(oldHeight <= newHeight)
     for h in oldHeight.Value..newHeight.Value do
       do! commitOneBlock cc cli (BlockHeight h)
@@ -168,8 +120,9 @@ type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logg
           let! info = cli.GetBlockchainInfoAsync()
           let newBlockNum = info.Blocks |> uint32 |> BlockHeight
           let isIBDDone = not <| (info.VerificationProgress < 1.0f)
-          let { Height = currentHeight; } as currentBlock =
+          let currentBlock =
             this.CurrentHeights.[cc]
+          let currentHeight = currentBlock.Height
           let firstTimeIBDDone = isIBDDone && currentBlock = SlimChainedBlock.Zero
           if not isIBDDone then ()
           elif firstTimeIBDDone then

@@ -6,6 +6,8 @@ open NLoop.Domain
 type [<Measure>] percent
 type [<Measure>] ppm
 
+type ComparableOutpoint = uint256 * uint
+
 [<AutoOpen>]
 module internal Helpers =
   let getChainOptionString (chain: SupportedCryptoCode) (optionSubSectionName: string) =
