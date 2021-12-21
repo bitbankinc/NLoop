@@ -13,7 +13,7 @@ type BlockWithHeight = {
     Block = n.GetGenesis()
     Height = BlockHeight.Zero
   }
-  override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash()})"
+  override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash().ToString().[..7]}...)"
   member this.AsString = this.ToString()
 
 [<RequireQualifiedAccess>]
