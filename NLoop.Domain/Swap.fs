@@ -133,6 +133,7 @@ module Swap =
     // -- both
     | MarkAsErrored of err: string
     | NewBlock of height: BlockHeight * block: Block * cryptoCode: SupportedCryptoCode
+    | UnConfirmBlock of blockHash: uint256 * height: BlockHeight
 
   type PayInvoiceParams = {
     MaxFee: Money
@@ -144,12 +145,11 @@ module Swap =
     | NewLoopOutAdded of height: BlockHeight * loopOut: LoopOut
     | OffChainOfferStarted of swapId: SwapId * pairId: PairId * invoice: PaymentRequest * payInvoiceParams: PayInvoiceParams
     | ClaimTxPublished of txid: uint256
-    | SweepTxConfirmed of txid: uint256 * sweepAmount: Money
+    | SweepTxConfirmed of blockHash: uint256 * txid: uint256 * sweepAmount: Money
     | PrePayFinished of PayInvoiceResult
     | OffchainOfferResolved of PayInvoiceResult
     | TheirSwapTxPublished of txHex: string
-    | TheirSwapTxConfirmedFirstTime
-    | TheirSwapTxReorgedOut
+    | TheirSwapTxConfirmedFirstTime of blockHash: uint256
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
@@ -157,14 +157,15 @@ module Swap =
     // if we stop using json serializer for serializing this event, we can use `Transaction` instead.
     // But it seems that just using string is much simpler.
     | OurSwapTxPublished of fee: Money * txHex: string
-    | OurSwapTxConfirmed of txid: uint256 * htlcOutIndex: uint
+    | OurSwapTxConfirmed of blockHash: uint256 * txid: uint256 * htlcOutIndex: uint
     | RefundTxPublished of txid: uint256
-    | RefundTxConfirmed of fee: Money * txid: uint256
-    | SuccessTxConfirmed of htlcValue: Money * txid: uint256
+    | RefundTxConfirmed of blockHash: uint256 * fee: Money * txid: uint256
+    | SuccessTxConfirmed of blockHash: uint256 * htlcValue: Money * txid: uint256
     | OffChainPaymentReceived of amt: Money
 
     // -- general --
     | NewTipReceived of BlockHeight
+    | BlockUnConfirmed of blockHash: uint256
 
     | FinishedByError of id: SwapId * err: string
     | FinishedSuccessfully of id: SwapId
@@ -182,8 +183,7 @@ module Swap =
       | PrePayFinished _ -> 5us
       | TheirSwapTxPublished _ -> 6us
       | OffChainPaymentReceived _ -> 7us
-      | TheirSwapTxConfirmedFirstTime -> 8us
-      | TheirSwapTxReorgedOut -> 9us
+      | TheirSwapTxConfirmedFirstTime _ -> 8us
 
       | NewLoopInAdded _ -> 256us + 0us
       | OurSwapTxPublished _ -> 256us + 1us
@@ -193,6 +193,7 @@ module Swap =
       | SuccessTxConfirmed _ -> 256us + 5us
 
       | NewTipReceived _ -> 512us + 0us
+      | BlockUnConfirmed _ -> 512us + 1us
 
       | FinishedSuccessfully _ -> 1024us + 0us
       | FinishedByRefund _ -> 1024us + 1us
@@ -200,6 +201,20 @@ module Swap =
       | FinishedByTimeout _ -> 1024us + 3us
 
       | UnknownTagEvent (t, _) -> t
+
+    /// returns the block hash for which the on-chain event took place.
+    /// If an event is not on-chain, returns None.
+    member this.WhichBlock =
+      match this with
+      | SweepTxConfirmed(blockHash, _, _) -> Some blockHash
+      | TheirSwapTxConfirmedFirstTime blockHash -> Some blockHash
+      | OurSwapTxConfirmed(blockHash, _, _) -> Some blockHash
+      | RefundTxConfirmed(blockHash, _, _) -> Some blockHash
+      | SuccessTxConfirmed(blockHash, _, _)-> Some blockHash
+      | _ -> None
+
+    member this.IsOnChainEvent =
+      this.WhichBlock.IsSome
 
     member this.Type =
       match this with
@@ -211,8 +226,7 @@ module Swap =
       | PrePayFinished _ -> "prepay_finished"
       | TheirSwapTxPublished _ -> "their_swap_tx_published"
       | OffChainPaymentReceived _ -> "offchain_payment_received"
-      | TheirSwapTxConfirmedFirstTime -> "their_swap_tx_confirmed_first_time"
-      | TheirSwapTxReorgedOut -> "their_swap_tx_reorged_out"
+      | TheirSwapTxConfirmedFirstTime _ -> "their_swap_tx_confirmed_first_time"
 
       | NewLoopInAdded _ -> "new_loop_in_added"
       | OurSwapTxPublished _ -> "our_swap_tx_published"
@@ -222,6 +236,7 @@ module Swap =
       | SuccessTxConfirmed _ -> "success_tx_confirmed"
 
       | NewTipReceived _ -> "new_tip_received"
+      | BlockUnConfirmed _ -> "block_unconfirmed"
 
       | FinishedSuccessfully _ -> "finished_successfully"
       | FinishedByRefund _ -> "finished_by_refund"
@@ -274,7 +289,7 @@ module Swap =
         try
           let e =
             match Utils.ToUInt16(b.[0..1], false) with
-            | 0us | 1us | 2us | 3us | 4us | 5us | 6us | 7us | 8us |9us
+            | 0us | 1us | 2us | 3us | 4us | 5us | 6us | 7us | 8us
             | 256us | 257us | 258us | 259us | 260us | 261us
             | 512us | 513us
             | 1024us | 1025us | 1026us | 1027us ->
@@ -370,14 +385,13 @@ module Swap =
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
         let checkHeight (height: BlockHeight) (oldHeight: BlockHeight) =
-          if height.Value = oldHeight.Value + 1u then
+          let one = BlockHeightOffset16.One
+          if height = oldHeight + one || height = oldHeight then
             [NewTipReceived(height)] |> enhance |> Ok
-          elif height.Value > oldHeight.Value + 1u then
+          elif height < oldHeight || oldHeight + one < height then
+            assert false
             $"Bogus block height. The block has been skipped. This should never happen."
             |> APIMisuseError |> Error
-          elif height <= oldHeight then
-            // reorg
-            [NewTipReceived(height)] |> enhance |> Ok
           else
             failwith "unreachable"
 
@@ -489,13 +503,6 @@ module Swap =
           when baseAsset = cc ->
             let! events = (height, oldHeight) ||> checkHeight
 
-            let reorgEvent =
-              match loopOut.LockupTransactionHeight with
-              | Some h when height <= h && height <= oldHeight ->
-                // reorg
-                [TheirSwapTxReorgedOut] |> enhance
-              | _ -> []
-
             // To make it reorg-safe, we must track the confirmation of swap tx.
             let maybeSwapTx =
               loopOut.LockupTransaction
@@ -504,11 +511,11 @@ module Swap =
               match maybeSwapTx with
               | Some _ ->
                 // First confirmation.
-                [TheirSwapTxConfirmedFirstTime] |> enhance
+                [TheirSwapTxConfirmedFirstTime(block.Header.GetHash())] |> enhance
               | None ->
                 []
 
-            let events = events @ reorgEvent @ maybeSwapTxConfirmedEvent
+            let events = events @  maybeSwapTxConfirmedEvent
 
             let maybeClaimTx =
               maybePrevClaimTxId
@@ -525,7 +532,7 @@ module Swap =
                   )
               // Our sweep tx is confirmed, this swap is finished!
               let additionalEvents = [
-                SweepTxConfirmed(sweepTx.GetHash(), sweepTxAmount)
+                SweepTxConfirmed(block.Header.GetHash(), sweepTx.GetHash(), sweepTxAmount)
                 // We do not mark it as finished until the counterparty receives their share.
                 // This is because we don't know how much we have payed as off-chain routing fee until counterparty
                 // receives. (Usually they receive it way before the sweep tx is confirmed so it is very rare case that
@@ -549,7 +556,7 @@ module Swap =
                 return [FinishedByTimeout(loopOut.Id, msg)] |> enhance
               else
                 match loopOut.LockupTransaction with
-                | Some tx when loopOut.IsLockupTxConfirmedEnough(height) && reorgEvent.IsEmpty ->
+                | Some tx when loopOut.IsLockupTxConfirmedEnough(height) ->
                   match! sweepOrBump deps height tx loopOut with
                   | Some txid ->
                     return [ClaimTxPublished(txid);] |> enhance
@@ -580,7 +587,7 @@ module Swap =
                 tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
                 |> expectBogusSwapTx
               return [
-                OurSwapTxConfirmed(tx.GetHash(), index)
+                OurSwapTxConfirmed(block.Header.GetHash(), tx.GetHash(), index)
               ] |> enhance
             | None ->
               return []
@@ -610,7 +617,7 @@ module Swap =
                 [
                   let htlcOut =
                     swapTx.Outputs.[txin.PrevOut.N]
-                  SuccessTxConfirmed(htlcOut.Value, tx.GetHash())
+                  SuccessTxConfirmed(block.Header.GetHash(), htlcOut.Value, tx.GetHash())
                   FinishedSuccessfully(loopIn.Id)
                 ] |> enhance
               else
@@ -618,7 +625,7 @@ module Swap =
                 let refundTxFee =
                   let c = swapTx.Outputs.AsCoins() |> Seq.cast |> Seq.toArray
                   tx.GetFee(c)
-                [ RefundTxConfirmed(refundTxFee, tx.GetHash()); FinishedByRefund loopIn.Id ] |> enhance
+                [ RefundTxConfirmed(block.Header.GetHash(), refundTxFee, tx.GetHash()); FinishedByRefund loopIn.Id ] |> enhance
             )
             |> Option.toList
             |> List.concat
@@ -651,6 +658,12 @@ module Swap =
               | _ -> return []
             }
           return events @ maybeSwapTxConfirmedEvent @ maybeSpendTxEvent @ publishEvent
+        | UnConfirmBlock(blockHash, h), Out(heightBefore, _)
+        | UnConfirmBlock(blockHash, h), In (heightBefore, _) ->
+          if heightBefore <> h then
+            return! Error(APIMisuseError "")
+          else
+            return [BlockUnConfirmed(blockHash)] |> enhance
         | _, Finished _ ->
           return []
         | x, s ->
@@ -671,7 +684,7 @@ module Swap =
       { cost with
           OffChain = x.Cost.OffChain + fee.ToMoney()
           ServerOffChain = x.Cost.ServerOffChain + amount.ToMoney() }
-    | SweepTxConfirmed(_, sweepTxAmount), Out(_, x) ->
+    | SweepTxConfirmed(_, _, sweepTxAmount), Out(_, x) ->
       let swapTxAmount = x.OnChainAmount
       { cost
           with
@@ -682,9 +695,9 @@ module Swap =
     // loop in
     | OurSwapTxPublished(fee, _), In(_, x) ->
       { x.Cost with OnChain = fee }
-    | SuccessTxConfirmed (htlcAmount, _txid), In(_, x) ->
+    | SuccessTxConfirmed (_, htlcAmount, _txid), In(_, x) ->
       { x.Cost with ServerOnChain = x.Cost.ServerOnChain + htlcAmount }
-    | RefundTxConfirmed (fee, _txid), In(_, x) ->
+    | RefundTxConfirmed (_blockHash, fee, _txid), In(_, x) ->
       { x.Cost with OnChain = x.Cost.OnChain + fee }
     | OffChainPaymentReceived amt, In(_, x) ->
       { x.Cost with ServerOffChain = x.Cost.ServerOffChain - amt }
@@ -699,10 +712,8 @@ module Swap =
       Out (h, { x with ClaimTransactionId = Some txid })
     | TheirSwapTxPublished tx, Out(h, x) ->
       Out (h, { x with LockupTransactionHex = Some tx })
-    | TheirSwapTxConfirmedFirstTime, Out(h, x) ->
+    | TheirSwapTxConfirmedFirstTime _, Out(h, x) ->
       Out(h, { x with LockupTransactionHeight = Some h })
-    | TheirSwapTxReorgedOut, Out(h, x) ->
-      Out(h, { x with LockupTransactionHeight = None })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
                  Cost = updateCost state event x.Cost })
@@ -710,7 +721,7 @@ module Swap =
       Out(h, { x with
                  IsOffchainOfferResolved = true
                  Cost = updateCost state event x.Cost })
-    | SweepTxConfirmed(txid, _), Out(h, x) ->
+    | SweepTxConfirmed(_, txid, _), Out(h, x) ->
       let cost = updateCost state event x.Cost
       Out(h, { x with IsClaimTxConfirmed = true; ClaimTransactionId = Some txid; Cost = cost })
     | NewLoopInAdded(h, x), HasNotStarted ->
@@ -718,7 +729,7 @@ module Swap =
     | OurSwapTxPublished(fee, tx), In(h, x) ->
       let cost = { x.Cost with OnChain = fee }
       In (h, { x with LockupTransactionHex = Some tx; Cost = cost })
-    | OurSwapTxConfirmed(txid, vOut), In(h, x) ->
+    | OurSwapTxConfirmed(_, txid, vOut), In(h, x) ->
       In(h, { x with LockupTransactionOutPoint = Some (txid, vOut) })
     | RefundTxPublished txid, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
@@ -754,7 +765,24 @@ module Swap =
     Zero = State.Zero
     Exec = executeCommand deps
     Aggregate.Apply = applyChanges
-    Filter = id
+    Filter =
+      fun recordedEvents ->
+        let unconfirmedBlocks =
+          recordedEvents
+          |> List.choose(
+            fun re ->
+              match re.Data with
+              | Event.BlockUnConfirmed(blockHash) -> Some blockHash
+              | _ -> None)
+        // skip all on-chain events for unconfirmed blocks.
+        let filteredEvents =
+          recordedEvents
+          |> List.filter(fun re ->
+            match re.Data.WhichBlock with
+            | Some blockHash when unconfirmedBlocks |> List.contains blockHash -> false
+            | _ -> true
+            )
+        filteredEvents
     Enrich = id
   }
 
