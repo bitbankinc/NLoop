@@ -14,20 +14,6 @@ open NLoop.Server
 open NLoop.Server.Services
 open Xunit
 
-type BlockListenerTest() =
-  [<Fact>]
-  member this.TestBlockListener() =
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
-      services
-        .AddSingleton<RPCBlockchainListener>()
-        |> ignore
-    ))
-
-    let listener = server.Services.GetRequiredService<RPCBlockchainListener>()
-    Assert.NotNull(listener)
-    ()
-
-
 [<AutoOpen>]
 module private ZmqListenerTestHelper =
   let privKey1 = new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
@@ -52,14 +38,6 @@ module private ZmqListenerTestHelper =
       }
 type ZmqBlockListenerTest() =
 
-  [<Fact>]
-  member this.FindCommonAncestorTest() =
-    let b0 = {
-      Block = Network.RegTest.GetGenesis()
-      Height = BlockHeight.Zero
-    }
-    ()
-
   static member TestZmqBlockListenerTestData: obj[] seq =
      seq {
 
@@ -71,22 +49,14 @@ type ZmqBlockListenerTest() =
          Block = Network.RegTest.GetGenesis()
          Height = BlockHeight.Zero
        }
-
-       let b1 =
-         let coinbase = pubkey1.WitHash.GetAddress(Network.RegTest)
-         b0.CreateNext(coinbase)
-       let b2_1 =
-         pubkey2.WitHash.GetAddress(Network.RegTest)
-         |> b1.CreateNext
-       let b2_2 =
-         pubkey3.WitHash.GetAddress(Network.RegTest)
-         |> b1.CreateNext
-       let b3_1 =
-         pubkey4.WitHash.GetAddress(Network.RegTest)
-         |> b2_1.CreateNext
-       let b3_2 =
-         pubkey5.WitHash.GetAddress(Network.RegTest)
-         |> b2_2.CreateNext
+       let getNext (b: BlockWithHeight) (pk: PubKey) =
+         pk.WitHash.GetAddress(Network.RegTest)
+         |> b.CreateNext
+       let b1 = getNext b0 pubkey1
+       let b2_1 = getNext b1 pubkey2
+       let b2_2 = getNext b1 pubkey3
+       let b3_1 = getNext b2_1 pubkey4
+       let b3_2 = getNext b2_2 pubkey5
 
        ("Genesis block must be ignored", seq [b0],seq [], seq [])
        ("Next block must be committed", seq[b0; b1], seq[], seq [b1])
@@ -95,6 +65,8 @@ type ZmqBlockListenerTest() =
        ("Reorg", seq[ b0; b1; b2_1; b2_2; b3_2], seq[], seq [b1; b2_1; b2_2; b3_2 ])
        ("Block has been skipped.", seq [b0; b1; b2_1; b3_1;], seq[ b2_1 ], seq[ b1; b2_1; b3_1 ])
        ("Block has been skipped and reorged", seq [b0; b1; b2_1; b2_2; b3_2], seq[b2_2], seq[b1; b2_1; b2_2; b3_2])
+       let b4_2 = getNext b3_2 pubkey6
+       ("More than one block has been skipped and reorged", seq [b0; b1; b2_1; b2_2; b3_2; b4_2], seq[b2_2; b3_2], seq[b1; b2_1; b2_2; b3_2; b4_2])
      }
      |> Seq.map(fun (name, inputBlocks: BlockWithHeight seq, blocksToSkip: BlockWithHeight seq, expectedBlocks: BlockWithHeight seq) -> [|
        name |> box
@@ -110,61 +82,51 @@ type ZmqBlockListenerTest() =
                                    blocksToSkip: BlockWithHeight seq,
                                    expectedBlocks: BlockWithHeight seq) =
     let actualBlocks = ResizeArray()
-    let mockSwapActor = {
-      new ISwapActor with
-        member this.ExecNewLoopOut(req, currentHeight) =
-          failwith "todo"
-        member this.ExecNewLoopIn(req, currentHeight) =
-          failwith "todo"
-        member this.Handler =
-          failwith "todo"
-        member this.Aggregate =
-          failwith "todo"
-        member this.Execute(swapId, msg, source) =
-          match msg with
-          | Swap.Command.NewBlock(h, b, cc) ->
-            actualBlocks.Add({ Height = h; Block = b })
-          | x ->
-            failwith $"Unexpected command type {x}"
-          Task.CompletedTask
-        member this.GetAllEntities ct =
-          failwith "todo"
-    }
-    // we want to assure that GetBlockHash RPC call will return the value only when the block is in the active chain.
-    // thus we must first filter blocks that is only in an active chain.
-    let activeChain =
-      let tips =
-        let highest = inputBlocks |> Seq.maxBy(fun b -> b.Height)
-        inputBlocks |> Seq.filter(fun b -> b.Height = highest.Height)
-      let activeChain = ResizeArray()
-      activeChain.AddRange tips
-      for b in inputBlocks |> Seq.rev do
-        if activeChain |> Seq.exists(fun activeBlock -> activeBlock.Block.Header.HashPrevBlock = b.Block.Header.GetHash()) then
-          activeChain.Add b
-      activeChain |> Seq.rev
-    let mockBlockChainClient = {
-      new IBlockChainClient with
-        member this.GetBlock(blockHash, _) = task {
-          let mutable ret = None
-          for b in inputBlocks do
-            if b.Block.Header.GetHash() = blockHash then
-              ret <- Some b
-            else
-              ()
-          return if ret.IsNone then failwith $"no block found for {blockHash}" else ret.Value
-          }
-        member this.GetBlockChainInfo(_) =
-          failwith "todo"
-        member this.GetBlockHash(height, _) =
-          activeChain
-          |> Seq.pick(fun activeBlock -> if activeBlock.Height = height then Some(activeBlock.Block.Header.GetHash()) else None)
-          |> Task.FromResult
-        member this.GetRawTransaction(txid, ct) =
-          failwith "todo"
-        member this.GetBestBlockHash(ct) =
-          inputBlocks |> Seq.last |> fun b -> b.Block.Header.GetHash() |> Task.FromResult
-    }
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+      let mockSwapActor =
+        TestHelpers.GetDummySwapActor
+          {
+            DummySwapActorParameters.Default
+            with
+              Execute = fun (_swapId, msg, source) ->
+                assert (source.Value = nameof(ZmqBlockchainListener))
+                match msg with
+                | Swap.Command.NewBlock(h, b, _cc) ->
+                  actualBlocks.Add({ Height = h; Block = b })
+                | x ->
+                  failwith $"Unexpected command type {x}"
+          }
+      let mockBlockChainClient =
+        // we want to assure that GetBlockHash RPC call will return the value only when the block is in the active chain.
+        // thus we must first filter blocks that is only in an active chain.
+        let activeChain =
+          let tips =
+            let highest = inputBlocks |> Seq.maxBy(fun b -> b.Height)
+            inputBlocks |> Seq.filter(fun b -> b.Height = highest.Height)
+          let activeChain = ResizeArray()
+          activeChain.AddRange tips
+          for b in inputBlocks |> Seq.rev do
+            if activeChain |> Seq.exists(fun activeBlock -> activeBlock.Block.Header.HashPrevBlock = b.Block.Header.GetHash()) then
+              activeChain.Add b
+          activeChain |> Seq.rev
+        TestHelpers.GetDummyBlockchainClient
+          {
+            DummyBlockChainClientParameters.Default
+              with
+                GetBlock = fun blockHash ->
+                  let mutable ret = None
+                  for b in inputBlocks do
+                    if b.Block.Header.GetHash() = blockHash then
+                      ret <- Some b
+                    else
+                      ()
+                  if ret.IsNone then failwith $"no block found for {blockHash}" else ret.Value
+                GetBlockHash = fun height ->
+                  activeChain
+                  |> Seq.pick(fun activeBlock -> if activeBlock.Height = height then Some(activeBlock.Block.Header.GetHash()) else None)
+                GetBestBlockHash = fun () ->
+                  inputBlocks |> Seq.last |> fun b -> b.Block.Header.GetHash()
+          }
       services
         .AddSingleton<ZmqBlockchainListener>()
         .AddSingleton<ISwapActor>(mockSwapActor)

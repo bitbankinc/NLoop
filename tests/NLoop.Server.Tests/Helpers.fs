@@ -212,6 +212,26 @@ type DummySwapServerClientParameters = {
     }
   }
 
+type DummySwapActorParameters = {
+  Execute: SwapId * Swap.Command * string option -> unit
+}
+  with
+  static member Default = {
+    Execute = fun (_, _, _) -> ()
+  }
+
+type DummyBlockChainClientParameters = {
+  GetBlock: uint256 -> BlockWithHeight
+  GetBlockHash: BlockHeight -> uint256
+  GetBestBlockHash: unit -> uint256
+}
+  with
+  static member Default = {
+    GetBlock = fun _hash -> failwith "todo"
+    GetBlockHash = fun _height -> failwith "todo"
+    GetBestBlockHash = fun () -> failwith "todo"
+  }
+
 type TestHelpers =
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
     WebHostBuilder()
@@ -353,4 +373,41 @@ type TestHelpers =
 
         member this.ListenToSwapTx(swapId: SwapId, ?ct: CancellationToken): Task<Transaction> =
           failwith "todo"
+    }
+
+  static member GetDummySwapActor(?parameters) =
+    let p = defaultArg parameters DummySwapActorParameters.Default
+    {
+      new ISwapActor with
+        member this.ExecNewLoopOut(req, currentHeight) =
+          failwith "todo"
+        member this.ExecNewLoopIn(req, currentHeight) =
+          failwith "todo"
+        member this.Handler =
+          failwith "todo"
+        member this.Aggregate =
+          failwith "todo"
+        member this.Execute(swapId, msg, source) =
+          p.Execute(swapId, msg, source); Task.CompletedTask
+        member this.GetAllEntities ct =
+          failwith "todo"
+    }
+
+  static member GetDummyBlockchainClient(?parameters) =
+    let p = defaultArg parameters DummyBlockChainClientParameters.Default
+    {
+      new IBlockChainClient with
+        member this.GetBlock(blockHash, _) =
+          p.GetBlock blockHash
+          |> Task.FromResult
+        member this.GetBlockChainInfo(_) =
+          failwith "todo"
+        member this.GetBlockHash(height, _) =
+          p.GetBlockHash height
+          |> Task.FromResult
+        member this.GetRawTransaction(txid, ct) =
+          failwith "todo"
+        member this.GetBestBlockHash(ct) =
+          p.GetBestBlockHash()
+          |> Task.FromResult
     }

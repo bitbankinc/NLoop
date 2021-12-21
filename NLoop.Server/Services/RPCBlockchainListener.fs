@@ -20,8 +20,10 @@ open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Actors
 
+(*
 type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logger: ILogger<RPCBlockchainListener>) as this =
-  inherit BackgroundService()
+  do()
+  //inherit BackgroundService()
 
   let swaps = ConcurrentDictionary<SwapId, _>()
 
@@ -100,6 +102,7 @@ type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logg
       Map.empty
   let currentHeightsLockObj = obj()
 
+  (
   member this.CurrentHeights
     with get () = currentHeights
     and set v =
@@ -158,3 +161,5 @@ type RPCBlockchainListener(opts: IOptions<NLoopOptions>, actor: ISwapActor, logg
       else
         logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
 
+
+*)

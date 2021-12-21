@@ -93,8 +93,8 @@ type NLoopExtensions() =
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
-        .AddSingleton<ISwapEventListener, RPCBlockchainListener>()
-        .AddSingleton<IBlockChainListener, RPCBlockchainListener>()
+        .AddSingleton<ISwapEventListener, ZmqBlockchainListener>()
+        //.AddSingleton<IBlockChainListener, RPCBlockchainListener>()
         |> ignore
 
 
