@@ -132,8 +132,8 @@ module Swap =
 
     // -- both
     | MarkAsErrored of err: string
-    | NewBlock of height: BlockHeight * block: Block * cryptoCode: SupportedCryptoCode
-    | UnConfirmBlock of blockHash: uint256 * height: BlockHeight
+    | NewBlock of block: BlockWithHeight * cryptoCode: SupportedCryptoCode
+    | UnConfirmBlock of blockHash: uint256
 
   type PayInvoiceParams = {
     MaxFee: Money
@@ -164,7 +164,7 @@ module Swap =
     | OffChainPaymentReceived of amt: Money
 
     // -- general --
-    | NewTipReceived of BlockHeight
+    | NewTipReceived of blockHash: uint256 * BlockHeight
     | BlockUnConfirmed of blockHash: uint256
 
     | FinishedByError of id: SwapId * err: string
@@ -211,6 +211,7 @@ module Swap =
       | OurSwapTxConfirmed(blockHash, _, _) -> Some blockHash
       | RefundTxConfirmed(blockHash, _, _) -> Some blockHash
       | SuccessTxConfirmed(blockHash, _, _)-> Some blockHash
+      | NewTipReceived(blockHash, _) -> Some blockHash
       | _ -> None
 
     member this.IsOnChainEvent =
@@ -384,10 +385,10 @@ module Swap =
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
         let enhance = enhanceEvents effectiveDate source
-        let checkHeight (height: BlockHeight) (oldHeight: BlockHeight) =
+        let checkHeight newBlockHash (height: BlockHeight) (oldHeight: BlockHeight) =
           let one = BlockHeightOffset16.One
           if height = oldHeight + one || height = oldHeight then
-            [NewTipReceived(height)] |> enhance |> Ok
+            [NewTipReceived(newBlockHash, height)] |> enhance |> Ok
           elif height < oldHeight || oldHeight + one < height then
             assert false
             $"Bogus block height. The block has been skipped. This should never happen."
@@ -499,9 +500,9 @@ module Swap =
         | MarkAsErrored(err), Out(_, { Id = swapId })
         | MarkAsErrored(err), In (_ , { Id = swapId }) ->
           return [FinishedByError( swapId, err )] |> enhance
-        | NewBlock (height, block, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = PairId(struct(baseAsset, _)); TimeoutBlockHeight = timeout } as loopOut))
+        | NewBlock ({ Height = height; Block = block }, cc), Out(oldHeight, ({ ClaimTransactionId = maybePrevClaimTxId; PairId = PairId(struct(baseAsset, _)); TimeoutBlockHeight = timeout } as loopOut))
           when baseAsset = cc ->
-            let! events = (height, oldHeight) ||> checkHeight
+            let! events = (height, oldHeight) ||> checkHeight (block.Header.GetHash())
 
             // To make it reorg-safe, we must track the confirmation of swap tx.
             let maybeSwapTx =
@@ -572,8 +573,8 @@ module Swap =
               }
             return events @ additionalEvents
 
-        | NewBlock (height, block, cc), In(oldHeight, loopIn) when loopIn.PairId.Quote = cc ->
-          let! events = (height, oldHeight) ||> checkHeight
+        | NewBlock ({ Height = height; Block = block }, cc), In(oldHeight, loopIn) when loopIn.PairId.Quote = cc ->
+          let! events = (height, oldHeight) ||> checkHeight (block.Header.GetHash())
           let! maybeSwapTxConfirmedEvent = result {
             let maybeSwapTxInBlock =
               loopIn.LockupTransactionHex
@@ -658,11 +659,8 @@ module Swap =
               | _ -> return []
             }
           return events @ maybeSwapTxConfirmedEvent @ maybeSpendTxEvent @ publishEvent
-        | UnConfirmBlock(blockHash, h), Out(heightBefore, _)
-        | UnConfirmBlock(blockHash, h), In (heightBefore, _) ->
-          if heightBefore <> h then
-            return! Error(APIMisuseError "")
-          else
+        | UnConfirmBlock(blockHash), Out(_heightBefore, _)
+        | UnConfirmBlock(blockHash), In (_heightBefore, _) ->
             return [BlockUnConfirmed(blockHash)] |> enhance
         | _, Finished _ ->
           return []
@@ -752,9 +750,9 @@ module Swap =
     | FinishedByTimeout(_, reason), Out(_, { Cost = cost })
     | FinishedByTimeout(_, reason), In(_, { Cost = cost }) ->
       Finished(cost, FinishedState.Timeout(reason))
-    | NewTipReceived h, Out(_, x) ->
+    | NewTipReceived(_blockHash, h), Out(_, x) ->
       Out(h, x)
-    | NewTipReceived h, In(_, x) ->
+    | NewTipReceived(_blockHash, h), In(_, x) ->
       In(h, x)
     | _, x -> x
 
@@ -767,7 +765,7 @@ module Swap =
     Aggregate.Apply = applyChanges
     Filter =
       fun recordedEvents ->
-        let unconfirmedBlocks =
+        let unconfirmedBlocksHashes =
           recordedEvents
           |> List.choose(
             fun re ->
@@ -779,7 +777,7 @@ module Swap =
           recordedEvents
           |> List.filter(fun re ->
             match re.Data.WhichBlock with
-            | Some blockHash when unconfirmedBlocks |> List.contains blockHash -> false
+            | Some blockHash when unconfirmedBlocksHashes |> List.contains blockHash -> false
             | _ -> true
             )
         filteredEvents

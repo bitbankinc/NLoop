@@ -9,6 +9,7 @@ open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
 open NBitcoin
+open NBitcoin.DataEncoders
 open NLoop.Domain
 open NLoop.Server
 open NLoop.Server.Services

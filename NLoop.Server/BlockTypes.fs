@@ -1,20 +1,8 @@
 namespace NLoop.Server
 
-open DotNetLightning.Utils
 open NBitcoin
+open NLoop.Domain
 
-[<StructuredFormatDisplay("{AsString}")>]
-type BlockWithHeight = {
-  Block: Block
-  Height: BlockHeight
-}
-  with
-  static member Genesis(n: Network) = {
-    Block = n.GetGenesis()
-    Height = BlockHeight.Zero
-  }
-  override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash().ToString().[..7]}...)"
-  member this.AsString = this.ToString()
 
 [<RequireQualifiedAccess>]
 module BlockWithHeight =

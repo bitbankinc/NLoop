@@ -115,20 +115,16 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
 
   let swaps = ConcurrentDictionary<SwapId, _>()
 
-  let newChainTipAsync(cc, height, b: Block) = async {
+  let newChainTipAsync(cc, newB) = async {
       let prevBlock = currentBlocks.[cc]
       let cmd =
-        (height, b, cc)
+        (newB, cc)
         |> Swap.Command.NewBlock
       do!
         swaps.Keys
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(ZmqBlockchainListener)))
         |> Task.WhenAll
         |> Async.AwaitTask
-      let newB = {
-        Height = height
-        Block = b
-      }
       match currentBlocks.TryUpdate(cc, newB, prevBlock) with
       | true ->
         ()
@@ -146,8 +142,11 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
           // nothing we should do.
           ()
         elif currentHeaderHash = b.Header.HashPrevBlock then
-          let height = currentBlock.Height + BlockHeightOffset16.One
-          do! newChainTipAsync(cc, height, b)
+          let b = {
+            Height = currentBlock.Height + BlockHeightOffset16.One
+            Block = b
+          }
+          do! newChainTipAsync(cc, b)
         else
           let getBlock =
             client.GetBlock >> Async.AwaitTask
@@ -159,14 +158,14 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
             assert false
             return ()
           | Some ancestor ->
-            do! newChainTipAsync(cc, ancestor.Height, ancestor.Block)
+            do! newChainTipAsync(cc, ancestor)
             let mutable iHeight = ancestor.Height
             let mutable iHash = ancestor.Block.Header.GetHash()
             let! bestBlockHash = client.GetBestBlockHash() |> Async.AwaitTask
             while bestBlockHash <> iHash do
               iHeight <- iHeight + BlockHeightOffset16.One
               let! nextB = client.GetBlockFromHeight(iHeight) |> Async.AwaitTask
-              do! newChainTipAsync(cc, iHeight, nextB)
+              do! newChainTipAsync(cc, { Height = iHeight; Block = nextB })
               iHash <- nextB.Header.GetHash()
             //if height > prevBlock.Height
           ()

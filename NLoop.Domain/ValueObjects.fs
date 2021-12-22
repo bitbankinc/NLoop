@@ -4,6 +4,7 @@ open System
 open System.Net
 open System.Runtime.CompilerServices
 open System.Text.Json.Serialization
+open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Altcoins
 
@@ -91,3 +92,20 @@ type SwapId = SwapId of string
   member this.Value = let (SwapId v) = this in v
   override this.ToString() =
     this.Value
+
+[<StructuredFormatDisplay("{AsString}")>]
+type BlockWithHeight = {
+  Block: Block
+  Height: BlockHeight
+}
+  with
+  static member Genesis(n: Network) = {
+    Block = n.GetGenesis()
+    Height = BlockHeight.Zero
+  }
+  member this.Copy() = {
+    Block = this.Block.Clone()
+    Height = this.Height.Value |> BlockHeight
+  }
+  override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash().ToString().[..7]}...)"
+  member this.AsString = this.ToString()
