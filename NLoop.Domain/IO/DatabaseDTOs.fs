@@ -71,10 +71,10 @@ type LoopOut = {
   TimeoutBlockHeight: BlockHeight
 
   /// a.k.a. "swap tx", "htlc tx" created and published by the counter party
-  LockupTransactionHex: string option
+  SwapTxHex: string option
 
-  /// The height at which Lockup Tx is confirmed.
-  LockupTransactionHeight: BlockHeight option
+  /// The height at which Swap Tx is confirmed.
+  SwapTxHeight: BlockHeight option
 
   ClaimTransactionId: uint256 option
   IsClaimTxConfirmed: bool
@@ -103,20 +103,24 @@ type LoopOut = {
 
   member this.AcceptZeroConf =
     this.SwapTxConfRequirement = BlockHeightOffset32.Zero
-  member this.IsLockupTxConfirmedEnough(currentHeight: BlockHeight) =
+  member this.IsSwapTxConfirmedEnough(currentHeight: BlockHeight) =
     this.AcceptZeroConf ||
-      match this.LockupTransactionHeight with
+      match this.SwapTxHeight with
       | None -> false
       | Some x ->
         x + this.SwapTxConfRequirement > currentHeight
-  member this.LockupTransaction =
-    this.LockupTransactionHex
+  member this.SwapTx =
+    this.SwapTxHex
     |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
 
   member this.Validate() =
     if this.OnChainAmount <= Money.Zero then Error "LoopOut has non-positive on chain amount" else
     Ok()
 
+type TxOutInfoHex = {
+  TxHex: string
+  N: uint
+}
 type LoopIn = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
@@ -136,8 +140,7 @@ type LoopIn = {
   [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
   HTLCConfTarget: BlockHeightOffset32
 
-  LockupTransactionHex: string option
-  LockupTransactionOutPoint: (uint256 * uint) option
+  SwapTxInfoHex: TxOutInfoHex option
   RefundTransactionId: uint256 option
 
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
@@ -153,6 +156,9 @@ type LoopIn = {
 
   LastHop: PubKey option
 
+  IsOffChainPaymentReceived: bool
+  IsOurSuccessTxConfirmed: bool
+
   Cost: SwapCost
 }
   with
@@ -166,6 +172,10 @@ type LoopIn = {
   member this.PaymentRequest =
     PaymentRequest.Parse(this.Invoice)
     |> ResultUtils.Result.deref
+
+  member this.SwapTxInfo =
+    this.SwapTxInfoHex
+    |> Option.map(fun info -> let tx = Transaction.Parse(info.TxHex, this.QuoteAssetNetwork) in (tx, info.N))
 
   member this.Validate() =
     if this.ExpectedAmount <= Money.Zero then Error $"LoopIn has non-positive expected amount {this.ExpectedAmount}" else

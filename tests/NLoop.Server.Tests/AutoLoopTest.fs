@@ -140,8 +140,8 @@ module private Constants =
         claimKey.PubKey.WitHash.GetAddress(baseN).ToString()
       OnChainAmount = Money.Satoshis(10000L)
       TimeoutBlockHeight = timeoutBlockHeight
-      LockupTransactionHex = None
-      LockupTransactionHeight = None
+      SwapTxHex = None
+      SwapTxHeight = None
       ClaimTransactionId = None
       IsClaimTxConfirmed = false
       IsOffchainOfferResolved = false

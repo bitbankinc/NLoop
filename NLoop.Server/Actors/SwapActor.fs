@@ -152,7 +152,7 @@ type SwapActor(broadcaster: IBroadcaster,
           ClaimAddress = addr.ToString()
           OnChainAmount = outResponse.OnchainAmount
           TimeoutBlockHeight = outResponse.TimeoutBlockHeight
-          LockupTransactionHex = None
+          SwapTxHex = None
           ClaimTransactionId = None
           PairId = pairId
           ChainName = opts.Value.ChainName.ToString()
@@ -171,7 +171,7 @@ type SwapActor(broadcaster: IBroadcaster,
           Cost = SwapCost.Zero
           LoopOut.SwapTxConfRequirement =
             req.Limits.SwapTxConfRequirement
-          LockupTransactionHeight = None
+          SwapTxHeight = None
         }
         match outResponse.Validate(preimageHash.Value,
                                    claimKey.PubKey,
@@ -254,7 +254,7 @@ type SwapActor(broadcaster: IBroadcaster,
               Address = inResponse.Address.ToString()
               ExpectedAmount = inResponse.ExpectedAmount
               TimeoutBlockHeight = inResponse.TimeoutBlockHeight
-              LockupTransactionHex = None
+              SwapTxInfoHex = None
               RefundTransactionId = None
               PairId = pairId
               ChainName = opts.Value.ChainName.ToString()
@@ -268,7 +268,8 @@ type SwapActor(broadcaster: IBroadcaster,
                 loopIn.Limits.MaxMinerFee
               MaxSwapFee =
                 loopIn.Limits.MaxSwapFee
-              LockupTransactionOutPoint = None
+              IsOffChainPaymentReceived = false
+              IsOurSuccessTxConfirmed = false
               LastHop =
                 loopIn.LastHop
             }
