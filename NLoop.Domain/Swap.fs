@@ -143,8 +143,8 @@ module Swap =
     /// Feed the every block you get from the blockchain with this command.
     /// We will scan it to see if there is something we are interested in it.
     | NewBlock of block: BlockWithHeight * cryptoCode: SupportedCryptoCode
-    /// optionally: tell the domain about chain reorg with this command.
-    /// past on-chain events will be skipped for the block.
+    /// Tell the domain about the chain reorg with this command.
+    /// past on-chain events which took place on the block will be skipped.
     | UnConfirmBlock of blockHash: uint256
 
   type PayInvoiceParams = {

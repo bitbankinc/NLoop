@@ -41,7 +41,9 @@
     <Compile Include="BlockTypes.fs" />
     <Compile Include="Interfaces.fs" />
     <Compile Include="NLoopCoindRPCClient.fs" />
-    <Compile Include="ZeroMQClient.fs" />
+    <Compile Include="BlockChainListeners\BlockChainListener.fs" />
+    <Compile Include="BlockChainListeners\ZmqBlockchainListener.fs" />
+    <Compile Include="BlockChainListeners\RPCLongPollingBlockchainListener.fs" />
     <Compile Include="LightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Projections\FlatFileCheckpointDB.fs" />

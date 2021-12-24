@@ -16,7 +16,7 @@ open NLoop.Server.Services
 open Xunit
 
 [<AutoOpen>]
-module private ZmqListenerTestHelper =
+module private BlockchainListenerTestHelper =
   let privKey1 = new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
   let privKey2 = new Key(hex.DecodeData("0202020202020202020202020202020202020202020202020202020202020202"))
   let privKey3 = new Key(hex.DecodeData("0303030303030303030303030303030303030303030303030303030303030303"))
@@ -41,9 +41,9 @@ module private ZmqListenerTestHelper =
         Block = this.Block.CreateNextBlockWithCoinbase(addr, nextHeight.Value |> int)
         Height = nextHeight
       }
-type ZmqBlockListenerTest() =
+type BlockchainListenerTest() =
 
-  static member TestZmqBlockListenerTestData: obj[] seq =
+  static member TestBlockchainListenerTestData: obj[] seq =
      seq {
 
        // blocks
@@ -105,7 +105,7 @@ type ZmqBlockListenerTest() =
      |])
 
   [<Theory>]
-  [<MemberData(nameof(ZmqBlockListenerTest.TestZmqBlockListenerTestData))>]
+  [<MemberData(nameof(BlockchainListenerTest.TestBlockchainListenerTestData))>]
   member this.TestZmqBlockListener(_name: string,
                                    inputBlocks: BlockWithHeight list,
                                    blocksToSkip: BlockWithHeight list,
@@ -121,7 +121,7 @@ type ZmqBlockListenerTest() =
             DummySwapActorParameters.Default
             with
               Execute = fun (_swapId, msg, source) ->
-                assert (source.Value = nameof(ZmqBlockchainListener))
+                assert (source.Value = nameof(BlockchainListener))
                 match msg with
                 | Swap.Command.NewBlock(hb, _cc) ->
                   actualBlocks.Add(hb)
@@ -162,12 +162,12 @@ type ZmqBlockListenerTest() =
                   blocksOnTheNodeSoFar |> Seq.last |> fun b -> b.Block.Header.GetHash()
           }
       services
-        .AddSingleton<ZmqBlockchainListener>()
+        .AddSingleton<BlockchainListener>()
         .AddSingleton<ISwapActor>(mockSwapActor)
         .AddSingleton<IBlockChainClient>(mockBlockChainClient)
         |> ignore
     ))
-    let listener = server.Services.GetRequiredService<ZmqBlockchainListener>()
+    let listener = server.Services.GetRequiredService<BlockchainListener>()
     Assert.NotNull(listener)
     let dummySwap = SwapId (Guid.NewGuid().ToString())
     (listener :> ISwapEventListener).RegisterSwap(dummySwap)
