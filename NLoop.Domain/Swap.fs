@@ -401,7 +401,6 @@ module Swap =
      } as deps)
     (s: State)
     (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
-    printfn $"applying \n{cmd}\n while in the state {s}\n\n"
     taskResult {
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
@@ -541,9 +540,6 @@ module Swap =
               | Some _ when loopOut.SwapTxHeight.IsNone ->
                 [TheirSwapTxConfirmedFirstTime({| Height = height; BlockHash = block.Header.GetHash() |})] |> enhance
               | _ ->
-                printfn $"\nswap tx not found in block : {block.Transactions |> Seq.toList |> List.map(fun tx -> tx.GetHash())}\n"
-                printfn $"\n swap tx: {loopOut.SwapTx |> Option.map(fun t -> t.GetHash())}\n"
-                printfn $"\ntxes: {block.Transactions |> Seq.toList |> List.map(fun tx -> tx.GetHash())}\n"
                 []
 
             let events = events @  maybeSwapTxConfirmedEvent
@@ -701,7 +697,6 @@ module Swap =
       | ex ->
         return! UnExpectedError ex |> Error
     }
-    |> TaskResult.map(fun x -> printfn $"\nResulted events are: {x}\n\n"; x)
 
   let private updateCost (state: State) (event: Event) (cost: SwapCost) =
     match event, state with

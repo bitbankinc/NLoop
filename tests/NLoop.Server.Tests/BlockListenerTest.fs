@@ -24,6 +24,7 @@ module private ZmqListenerTestHelper =
   let privKey5 = new Key(hex.DecodeData("0505050505050505050505050505050505050505050505050505050505050505"))
   let privKey6 = new Key(hex.DecodeData("0606060606060606060606060606060606060606060606060606060606060606"))
   let privKey7 = new Key(hex.DecodeData("0707070707070707070707070707070707070707070707070707070707070707"))
+  let privKey8 = new Key(hex.DecodeData("0808080808080808080808080808080808080808080808080808080808080808"))
   let pubkey1 = privKey1.PubKey
   let pubkey2 = privKey2.PubKey
   let pubkey3 = privKey3.PubKey
@@ -31,6 +32,7 @@ module private ZmqListenerTestHelper =
   let pubkey5 = privKey5.PubKey
   let pubkey6 = privKey6.PubKey
   let pubkey7 = privKey7.PubKey
+  let pubkey8 = privKey8.PubKey
 
   type BlockWithHeight with
     member this.CreateNext(addr: BitcoinAddress) =
@@ -45,9 +47,9 @@ type ZmqBlockListenerTest() =
      seq {
 
        // blocks
-       // b0 --> b1 --> b2_1 --> b3_1
+       // b0 --> b1 --> b2_1 --> b3_1 --> b4_1
        //          \
-       //           --> b2_2 --> b3_2
+       //           --> b2_2 --> b3_2 --> b4_2
        let b0 = {
          Block = Network.RegTest.GetGenesis()
          Height = BlockHeight.Zero
@@ -57,55 +59,61 @@ type ZmqBlockListenerTest() =
          |> b.CreateNext
        let b1 = getNext b0 pubkey1
        let b2_1 = getNext b1 pubkey2
-       let b2_2 = getNext b1 pubkey3
-       let b3_1 = getNext b2_1 pubkey4
-       let b3_2 = getNext b2_2 pubkey5
+       let b3_1 = getNext b2_1 pubkey3
+       let b4_1 = getNext b3_1 pubkey4
 
-       ("Genesis block must be ignored", seq [b0],seq [], seq [])
-       ("Next block must be committed", seq[b0; b1], seq[], seq [b1])
-       ("Competing blocks in the same height must ignored", seq [b0; b1; b2_1; b2_2], seq[], seq [b1; b2_1])
-       ("Non-competing (short) fork must be ignored", seq [b0; b1; b2_1; b3_1; b2_2], seq[], seq [b1; b2_1; b3_1])
-       ("Competing blocks in the same height (2blocks each) must be ignored", seq [b0; b1; b2_1; b3_1; b2_2; b3_2], seq[], seq [b1; b2_1; b3_1])
-       ("Competing blocks in the same height comes in turn", seq [b0; b1; b2_1; b2_2; b3_1; b3_2], seq[], seq [b1; b2_1; b3_1])
-       ("Reorg", seq[ b0; b1; b2_1; b2_2; b3_2], seq[], seq [b1; b2_1; b2_2; b3_2 ])
+       let b2_2 = getNext b1 pubkey5
+       let b3_2 = getNext b2_2 pubkey6
+       let b4_2 = getNext b3_2 pubkey7
 
-       ("Main chain tip skipped", seq [b0; b1; b2_1], seq[b2_1;], seq[b1])
-       ("skipped block must be queried when its child comes", seq [b0; b1; b2_1; b3_1;], seq[ b2_1 ], seq[ b1; b2_1; b3_1 ])
-       ("Non competing (short) fork must be ignored even when the original chain has a skip", seq [b0; b1; b2_1; b3_1; b2_2], seq[b2_1], seq [b1; b2_1; b3_1])
-       ("Original chain and competing chain both have a skip", seq [b0; b1; b2_1; b3_1; b2_2; b3_2;], seq[b2_1; b2_2], seq[b1; b2_1; b3_1; b2_2; b3_2])
-       ("Original chain and competing chain's common ancestor has been skipped.", seq [b0; b1; b2_1; b2_2;], seq[b1], seq[b1; b2_1; b2_2])
-       ("Original chain and reorged chain's common ancestor has been skipped.", seq [b0; b1; b2_1; b2_2; b3_2], seq[b1], seq[b1; b2_1; b2_2; b3_2])
-       ("Skipped block must be detected when the competing block has come", seq [b0; b1; b2_1; b2_2], seq[b2_1], seq[b1; b2_1; b2_2])
-       ("Ancestor and original chain has been skipped entirely (competing)", seq [b0; b1; b2_1; b2_2], seq[b1; b2_1], seq[b1; b2_1; b2_2])
-       ("Ancestor and original chain has been skipped entirely (reorged)", seq [b0; b1; b2_1; b2_2; b3_2], seq[b1; b2_1], seq[b1; b2_2; b3_2])
-       ("Skipped block must be queried even when the reorg happens simultaneously.", seq [b0; b1; b2_1; b2_2; b3_2], seq[b2_2], seq[b1; b2_1; b2_2; b3_2])
+       ("Genesis block must be ignored", [b0],[], [], [])
+       ("Next block must be committed", [b0; b1], [], [b1], [])
+       ("Competing blocks in the same height must ignored", [b0; b1; b2_1; b2_2], [], [b1; b2_1], [])
+       ("Non-competing (short) fork must be ignored", [b0; b1; b2_1; b3_1; b2_2], [], [b1; b2_1; b3_1], [])
+       ("Competing blocks in the same height (2blocks each) must be ignored", [b0; b1; b2_1; b3_1; b2_2; b3_2], [], [b1; b2_1; b3_1], [])
+       ("Competing blocks in the same height comes in turn", [b0; b1; b2_1; b2_2; b3_1; b3_2], [], [b1; b2_1; b3_1], [])
+       ("Reorg", [ b0; b1; b2_1; b2_2; b3_2], [], [b1; b2_1; b2_2; b3_2 ], [b2_1])
 
-       let b4_2 = getNext b3_2 pubkey6
-       ("More than one block has been skipped and reorged", seq [b0; b1; b2_1; b2_2; b3_2; b4_2], seq[b2_2; b3_2], seq[b1; b2_1; b2_2; b3_2; b4_2])
-       ("Original chain and reorged chain both have a skip", seq [b0; b1; b2_1; b3_1; b2_2; b3_2; b4_2], seq[b2_1; b2_2; b3_2], seq[b1; b2_1; b3_1; b2_2; b3_2; b4_2])
-       let b4_1 = getNext b3_2 pubkey7
-       ("Original chain and competing chain both have a multi-block skip", seq [b0; b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2], seq[b2_1; b3_1; b2_2; b3_2;], seq[b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2])
-       (*
-       (*
-       *)
-       *)
-       ()
+       ("Main chain tip skipped", [b0; b1; b2_1], [b2_1;], [b1], [])
+       ("skipped block must be queried when its child comes", [b0; b1; b2_1; b3_1;], [ b2_1 ], [ b1; b2_1; b3_1 ], [])
+       ("Non competing (short) fork must be ignored even when the original chain has a skip", [b0; b1; b2_1; b3_1; b2_2], [b2_1], [b1; b2_1; b3_1], [])
+       ("Original chain and competing chain both have a skip",  [b0; b1; b2_1; b3_1; b2_2; b3_2;], [b2_1; b2_2], [b1; b2_1; b3_1 ], [])
+       ("Original chain and reorged chain's common ancestor has been skipped.",  [b0; b1; b2_1; b2_2; b3_2], [b1], [b1; b2_1; b2_2; b3_2], [b2_1])
+       ("Skipped block must be queried even when the reorg happens simultaneously.",  [b0; b1; b2_1; b2_2; b3_2], [b2_2], [b1; b2_1; b2_2; b3_2], [b2_1])
+
+       ("More than one block has been skipped",  [b0; b1; b2_1; b3_1; b4_1], [b2_1; b3_1], [b1; b2_1; b3_1; b4_1], [])
+       ("More than one block has been skipped and reorged",  [b0; b1; b2_1; b3_1; b2_2; b3_2; b4_2], [b2_2; b3_2], [b1; b2_1; b3_1; b2_2; b3_2; b4_2], [b2_1; b3_1])
+       ("Original chain and reorged chain both have a skip",  [b0; b1; b2_1; b3_1; b2_2; b3_2; b4_2], [b2_1; b2_2; b3_2], [b1; b2_1; b3_1; b2_2; b3_2; b4_2], [b2_1; b3_1])
+
+       let b5_2 = getNext b4_2 pubkey8
+       ("Original chain and reorged chain both have a multi-block skip",  [b0; b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2; b5_2], [b2_1; b2_2; b3_1; b3_2;], [b1; b2_1; b3_1; b4_1 ;b2_2; b3_2; b4_2; b5_2], [b2_1; b3_1; b4_1])
+       let allBlocks = [b0; b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2; b5_2]
+       let skipped = allBlocks |> List.filter(fun b -> b <> b4_1 && b <> b5_2 && b <> b0)
+       let expected =  allBlocks |> List.filter((<>)b0)
+       ("Everything is skipped besides two tips", allBlocks, skipped, expected, [b2_1; b3_1; b4_1])
      }
-     |> Seq.map(fun (name, inputBlocks: BlockWithHeight seq, blocksToSkip: BlockWithHeight seq, expectedBlocks: BlockWithHeight seq) -> [|
+     |> Seq.map(fun (name,
+                     inputBlocks: BlockWithHeight list,
+                     blocksToSkip: BlockWithHeight list,
+                     expectedBlocks: BlockWithHeight list,
+                     expectedUnConfirmedBlocks) -> [|
        name |> box
        inputBlocks |> box
        blocksToSkip |> box
        expectedBlocks |> box
+       expectedUnConfirmedBlocks |> box
      |])
 
   [<Theory>]
   [<MemberData(nameof(ZmqBlockListenerTest.TestZmqBlockListenerTestData))>]
   member this.TestZmqBlockListener(_name: string,
-                                   inputBlocks: BlockWithHeight seq,
-                                   blocksToSkip: BlockWithHeight seq,
-                                   expectedBlocks: BlockWithHeight seq) =
+                                   inputBlocks: BlockWithHeight list,
+                                   blocksToSkip: BlockWithHeight list,
+                                   expectedBlocks: BlockWithHeight list,
+                                   expectedUnConfirmedBlocks: BlockWithHeight list) =
     let actualBlocks = ResizeArray()
     let blocksOnTheNodeSoFar = ResizeArray()
+    let unconfirmedBlocks = ResizeArray()
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       let mockSwapActor =
         TestHelpers.GetDummySwapActor
@@ -117,6 +125,8 @@ type ZmqBlockListenerTest() =
                 match msg with
                 | Swap.Command.NewBlock(hb, _cc) ->
                   actualBlocks.Add(hb)
+                | Swap.Command.UnConfirmBlock(blockHash) ->
+                  unconfirmedBlocks.Add(blockHash)
                 | x ->
                   failwith $"Unexpected command type {x}"
           }
@@ -168,7 +178,8 @@ type ZmqBlockListenerTest() =
         if blocksToSkip |> Seq.contains b |> not then
           do! listener.OnBlock(SupportedCryptoCode.BTC, b.Block) |> Async.StartAsTask
 
-      Assert.Equal<BlockWithHeight list>(expectedBlocks |> Seq.toList, actualBlocks |> Seq.toList)
+      Assert.Equal<BlockWithHeight list>(expectedBlocks, actualBlocks |> Seq.toList)
+      Assert.Equal<uint256 list>(expectedUnConfirmedBlocks |> List.map(fun b -> b.Block.Header.GetHash()), unconfirmedBlocks |> Seq.toList)
     }
 
 

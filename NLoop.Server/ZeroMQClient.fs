@@ -68,6 +68,7 @@ type private OnBlock = SupportedCryptoCode * Block -> unit
 type ZmqClient(cc: SupportedCryptoCode,
                opts: IOptions<NLoopOptions>,
                onBlock: OnBlock,
+               logger: ILogger<ZmqClient>,
                ?ct: CancellationToken) as this =
   let sock = new SubscriberSocket()
   let runtime = new NetMQRuntime()
@@ -95,14 +96,15 @@ type ZmqClient(cc: SupportedCryptoCode,
         runtime.Dispose()
       with
       | ex ->
-        printfn $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
+        logger.LogError $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
 
 
 type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
-               logger: ILogger<ZmqBlockchainListener>,
-               client: IBlockChainClient,
-               actor: ISwapActor) =
+                           loggerFactory: ILoggerFactory,
+                           client: IBlockChainClient,
+                           actor: ISwapActor) =
 
+  let logger: ILogger<ZmqBlockchainListener> = loggerFactory.CreateLogger<_>()
   let zmqClients = ResizeArray()
   let currentTips =
     let d = ConcurrentDictionary<SupportedCryptoCode, BlockWithHeight>()
@@ -158,9 +160,7 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
           let getBlock =
             client.GetBlock >> Async.AwaitTask
           let! newBlock = getBlock (b.Header.GetHash())
-          if newBlock.Height = currentBlock.Height then
-            ()
-          elif newBlock.Height < currentBlock.Height then
+          if newBlock.Height <= currentBlock.Height then
             // no reorg (stale tip). we can safely ignore.
             ()
           else
@@ -181,7 +181,8 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
             while bestBlockHash <> iHash do
               iHeight <- iHeight + BlockHeightOffset16.One
               let! nextB = client.GetBlockFromHeight(iHeight) |> Async.AwaitTask
-              do! newChainTipAsync(cc, { Height = iHeight; Block = nextB })
+              let nextBH = { Height = iHeight; Block = nextB }
+              do! newChainTipAsync(cc, nextBH)
               iHash <- nextB.Header.GetHash()
             //if height > prevBlock.Height
           ()
@@ -197,7 +198,7 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
       |> Seq.iter(fun cc ->
         let network = opts.Value.GetNetwork(cc)
         currentTips.AddOrReplace(cc, BlockWithHeight.Genesis network)
-        let c = new ZmqClient(cc, opts, this.OnBlock >> Async.Start, cancellationToken)
+        let c = new ZmqClient(cc, opts, this.OnBlock >> Async.Start, loggerFactory.CreateLogger<_>(), cancellationToken)
         zmqClients.Add(c)
       )
     }
