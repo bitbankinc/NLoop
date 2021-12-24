@@ -161,7 +161,7 @@ module Swap =
     | PrePayFinished of PayInvoiceResult
     | OffchainOfferResolved of PayInvoiceResult
     | TheirSwapTxPublished of txHex: string
-    | TheirSwapTxConfirmedFirstTime of blockHash: uint256
+    | TheirSwapTxConfirmedFirstTime of {| BlockHash: uint256; Height: BlockHeight |}
 
     // -- loop in --
     | NewLoopInAdded of height: BlockHeight * loopIn: LoopIn
@@ -219,7 +219,7 @@ module Swap =
     member this.WhichBlock =
       match this with
       | ClaimTxConfirmed(blockHash, _, _) -> Some blockHash
-      | TheirSwapTxConfirmedFirstTime blockHash -> Some blockHash
+      | TheirSwapTxConfirmedFirstTime item -> Some item.BlockHash
       | OurSwapTxConfirmed(blockHash, _, _) -> Some blockHash
       | RefundTxConfirmed(blockHash, _, _) -> Some blockHash
       | SuccessTxConfirmed(blockHash, _, _)-> Some blockHash
@@ -401,6 +401,7 @@ module Swap =
      } as deps)
     (s: State)
     (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
+    printfn $"applying \n{cmd}\n while in the state {s}\n\n"
     taskResult {
       try
         let { CommandMeta.EffectiveDate = effectiveDate; Source = source } = cmd.Meta
@@ -537,10 +538,12 @@ module Swap =
                 loopOut.SwapTx
                 |> Option.bind(fun swapTx -> block.Transactions |> Seq.tryFind(fun t -> t.GetHash() = swapTx.GetHash()))
               match maybeSwapTx with
-              | Some _ ->
-                // First confirmation.
-                [TheirSwapTxConfirmedFirstTime(block.Header.GetHash())] |> enhance
-              | None ->
+              | Some _ when loopOut.SwapTxHeight.IsNone ->
+                [TheirSwapTxConfirmedFirstTime({| Height = height; BlockHash = block.Header.GetHash() |})] |> enhance
+              | _ ->
+                printfn $"\nswap tx not found in block : {block.Transactions |> Seq.toList |> List.map(fun tx -> tx.GetHash())}\n"
+                printfn $"\n swap tx: {loopOut.SwapTx |> Option.map(fun t -> t.GetHash())}\n"
+                printfn $"\ntxes: {block.Transactions |> Seq.toList |> List.map(fun tx -> tx.GetHash())}\n"
                 []
 
             let events = events @  maybeSwapTxConfirmedEvent
@@ -698,6 +701,7 @@ module Swap =
       | ex ->
         return! UnExpectedError ex |> Error
     }
+    |> TaskResult.map(fun x -> printfn $"\nResulted events are: {x}\n\n"; x)
 
   let private updateCost (state: State) (event: Event) (cost: SwapCost) =
     match event, state with
@@ -738,8 +742,8 @@ module Swap =
       Out (h, { x with ClaimTransactionId = Some txid })
     | TheirSwapTxPublished tx, Out(h, x) ->
       Out (h, { x with SwapTxHex = Some tx })
-    | TheirSwapTxConfirmedFirstTime _, Out(h, x) ->
-      Out(h, { x with SwapTxHeight = Some h })
+    | TheirSwapTxConfirmedFirstTime item, Out(h, x) ->
+      Out(h, { x with SwapTxHeight = Some item.Height })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
                  Cost = updateCost state event x.Cost })
@@ -798,14 +802,12 @@ module Swap =
               | Event.BlockUnConfirmed(blockHash) -> Some blockHash
               | _ -> None)
         // skip all on-chain events for unconfirmed blocks.
-        let filteredEvents =
-          recordedEvents
-          |> List.filter(fun re ->
-            match re.Data.WhichBlock with
-            | Some blockHash when unconfirmedBlocksHashes |> List.contains blockHash -> false
-            | _ -> true
-            )
-        filteredEvents
+        recordedEvents
+        |> List.filter(fun re ->
+          match re.Data.WhichBlock with
+          | Some blockHash when unconfirmedBlocksHashes |> List.contains blockHash -> false
+          | _ -> true
+          )
     Enrich = id
   }
 
