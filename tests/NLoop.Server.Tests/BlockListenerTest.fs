@@ -63,10 +63,10 @@ type ZmqBlockListenerTest() =
 
        ("Genesis block must be ignored", seq [b0],seq [], seq [])
        ("Next block must be committed", seq[b0; b1], seq[], seq [b1])
-       ("Competing blocks in the same height must be both committed", seq [b0; b1; b2_1; b2_2], seq[], seq [b1; b2_1; b2_2])
-       ("Non competing (short) fork must be ignored", seq [b0; b1; b2_1; b3_1; b2_2], seq[], seq [b1; b2_1; b3_1])
-       ("Competing blocks in the same height (2blocks each)", seq [b0; b1; b2_1; b3_1; b2_2; b3_2], seq[], seq [b1; b2_1; b3_1; b2_2; b3_2])
-       ("Competing blocks in the same height comes in turn", seq [b0; b1; b2_1;  b2_2; b3_1; b3_2], seq[], seq [b1; b2_1; b2_2; b3_1; b3_2])
+       ("Competing blocks in the same height must ignored", seq [b0; b1; b2_1; b2_2], seq[], seq [b1; b2_1])
+       ("Non-competing (short) fork must be ignored", seq [b0; b1; b2_1; b3_1; b2_2], seq[], seq [b1; b2_1; b3_1])
+       ("Competing blocks in the same height (2blocks each) must be ignored", seq [b0; b1; b2_1; b3_1; b2_2; b3_2], seq[], seq [b1; b2_1; b3_1])
+       ("Competing blocks in the same height comes in turn", seq [b0; b1; b2_1; b2_2; b3_1; b3_2], seq[], seq [b1; b2_1; b3_1])
        ("Reorg", seq[ b0; b1; b2_1; b2_2; b3_2], seq[], seq [b1; b2_1; b2_2; b3_2 ])
 
        ("Main chain tip skipped", seq [b0; b1; b2_1], seq[b2_1;], seq[b1])
@@ -85,6 +85,10 @@ type ZmqBlockListenerTest() =
        ("Original chain and reorged chain both have a skip", seq [b0; b1; b2_1; b3_1; b2_2; b3_2; b4_2], seq[b2_1; b2_2; b3_2], seq[b1; b2_1; b3_1; b2_2; b3_2; b4_2])
        let b4_1 = getNext b3_2 pubkey7
        ("Original chain and competing chain both have a multi-block skip", seq [b0; b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2], seq[b2_1; b3_1; b2_2; b3_2;], seq[b1; b2_1; b3_1; b4_1; b2_2; b3_2; b4_2])
+       (*
+       (*
+       *)
+       *)
        ()
      }
      |> Seq.map(fun (name, inputBlocks: BlockWithHeight seq, blocksToSkip: BlockWithHeight seq, expectedBlocks: BlockWithHeight seq) -> [|
@@ -111,8 +115,8 @@ type ZmqBlockListenerTest() =
               Execute = fun (_swapId, msg, source) ->
                 assert (source.Value = nameof(ZmqBlockchainListener))
                 match msg with
-                | Swap.Command.NewBlock(h, b, _cc) ->
-                  actualBlocks.Add({ Height = h; Block = b })
+                | Swap.Command.NewBlock(hb, _cc) ->
+                  actualBlocks.Add(hb)
                 | x ->
                   failwith $"Unexpected command type {x}"
           }

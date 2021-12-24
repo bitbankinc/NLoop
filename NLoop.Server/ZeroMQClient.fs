@@ -104,7 +104,7 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
                actor: ISwapActor) =
 
   let zmqClients = ResizeArray()
-  let currentBlocks =
+  let currentTips =
     let d = ConcurrentDictionary<SupportedCryptoCode, BlockWithHeight>()
     opts.Value.OnChainCrypto
     |> Array.iter(fun cc ->
@@ -116,7 +116,6 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
   let swaps = ConcurrentDictionary<SwapId, _>()
 
   let newChainTipAsync(cc, newB) = async {
-      let prevBlock = currentBlocks.[cc]
       let cmd =
         (newB, cc)
         |> Swap.Command.NewBlock
@@ -125,17 +124,25 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(ZmqBlockchainListener)))
         |> Task.WhenAll
         |> Async.AwaitTask
-      match currentBlocks.TryUpdate(cc, newB, prevBlock) with
-      | true ->
-        ()
+      let prevTips = currentTips.[cc]
+      match currentTips.TryUpdate(cc, newB, prevTips) with
+      | true -> ()
       | false ->
-        assert false
         logger.LogError($"Failed to update prevBlocks. This should never happen")
+  }
+
+  let onBlockDisconnected blockHash = async {
+    let cmd = (Swap.Command.UnConfirmBlock(blockHash))
+    do!
+      swaps.Keys
+      |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(ZmqBlockchainListener)))
+      |> Task.WhenAll
+      |> Async.AwaitTask
   }
 
   member this.OnBlock(cc, b: Block) = async {
       try
-        let currentBlock = currentBlocks.[cc]
+        let currentBlock = currentTips.[cc]
         let newHeaderHash = b.Header.GetHash()
         let currentHeaderHash = currentBlock.Block.Header.GetHash()
         if currentHeaderHash = newHeaderHash then
@@ -151,13 +158,22 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
           let getBlock =
             client.GetBlock >> Async.AwaitTask
           let! newBlock = getBlock (b.Header.GetHash())
-          let! maybeAncestor = BlockWithHeight.rewindToNextOfCommonAncestor getBlock currentBlock newBlock
+          if newBlock.Height = currentBlock.Height then
+            ()
+          elif newBlock.Height < currentBlock.Height then
+            // no reorg (stale tip). we can safely ignore.
+            ()
+          else
+          let! maybeAncestor =
+            BlockWithHeight.rewindToNextOfCommonAncestor getBlock currentBlock newBlock
           match maybeAncestor with
           | None ->
             logger.LogCritical "The block with no common ancestor detected, this should never happen"
             assert false
             return ()
-          | Some ancestor ->
+          | Some (ancestor, disconnectedBlockHashes) ->
+            for h in disconnectedBlockHashes do
+              do! onBlockDisconnected h
             do! newChainTipAsync(cc, ancestor)
             let mutable iHeight = ancestor.Height
             let mutable iHash = ancestor.Block.Header.GetHash()
@@ -180,7 +196,7 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
       opts.Value.OnChainCrypto
       |> Seq.iter(fun cc ->
         let network = opts.Value.GetNetwork(cc)
-        currentBlocks.AddOrReplace(cc, BlockWithHeight.Genesis network)
+        currentTips.AddOrReplace(cc, BlockWithHeight.Genesis network)
         let c = new ZmqClient(cc, opts, this.OnBlock >> Async.Start, cancellationToken)
         zmqClients.Add(c)
       )
