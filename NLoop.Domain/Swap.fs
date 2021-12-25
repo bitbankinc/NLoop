@@ -692,7 +692,11 @@ module Swap =
         | _, Finished _ ->
           return []
         | x, s ->
-          return raise <| Exception($"Unexpected Command \n{x} \n\nWhile in the state\n{s}")
+#if DEBUG
+          return failwith $"Unexpected Command \n{x} \n\nWhile in the state\n{s}"
+#else
+          return []
+#endif
       with
       | ex ->
         return! UnExpectedError ex |> Error

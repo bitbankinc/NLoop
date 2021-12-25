@@ -40,7 +40,6 @@
     <Compile Include="SwapServerClient\interfaces.fs" />
     <Compile Include="SwapServerClient\BoltzSwapServerClient.fs" />
     <Compile Include="EventAggregator.fs" />
-    <Compile Include="BlockTypes.fs" />
     <Compile Include="BlockChainListeners\BlockChainListener.fs" />
     <Compile Include="BlockChainListeners\ZmqBlockchainListener.fs" />
     <Compile Include="BlockChainListeners\RPCLongPollingBlockchainListener.fs" />

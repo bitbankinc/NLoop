@@ -172,21 +172,6 @@ module private Constants =
 
 
 type AutoLoopTests() =
-  let mockSwapActor = {
-    new ISwapActor with
-      member this.ExecNewLoopOut(req, currentHeight) =
-        failwith "todo"
-      member this.ExecNewLoopIn(req, currentHeight) =
-        failwith "todo"
-      member this.Handler =
-        failwith "todo"
-      member this.Aggregate =
-        failwith "todo"
-      member this.Execute(swapId, msg, source) =
-        failwith "todo"
-      member this.GetAllEntities ct =
-        failwith "todo"
-  }
   let mockRecentSwapFailureProjection = {
     new IRecentSwapFailureProjection with
       member this.FailedLoopIns = Map.empty
@@ -206,7 +191,7 @@ type AutoLoopTests() =
   member this.TestParameters() = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       services
-        .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
         .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
@@ -315,7 +300,7 @@ type AutoLoopTests() =
         .AddSingleton<IFeeEstimator>(f)
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
-        .AddSingleton<ISwapActor>(mockSwapActor)
+        .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
         .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)

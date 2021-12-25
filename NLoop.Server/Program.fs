@@ -151,8 +151,6 @@ module App =
       if (env.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
         services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
-      else
-        ()
 
       services.AddCors()    |> ignore
 
@@ -236,7 +234,7 @@ module Main =
             |> ignore
       )
 
-  /// Mostly the same with `UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
+  /// Mostly the same with `CommandLineBuilder.UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
   /// We need this because we want to bind the CLI options into <see cref="NLoop.Server.NLoopOptions"/> with
   /// `BindCommandLine`, which requires `BindingContext` injected in a DI container.

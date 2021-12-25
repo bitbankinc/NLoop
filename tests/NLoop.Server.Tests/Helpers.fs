@@ -379,9 +379,9 @@ type TestHelpers =
     let p = defaultArg parameters DummySwapActorParameters.Default
     {
       new ISwapActor with
-        member this.ExecNewLoopOut(req, currentHeight) =
+        member this.ExecNewLoopOut(req, currentHeight, source, ct) =
           failwith "todo"
-        member this.ExecNewLoopIn(req, currentHeight) =
+        member this.ExecNewLoopIn(req, currentHeight, source, ct) =
           failwith "todo"
         member this.Handler =
           failwith "todo"

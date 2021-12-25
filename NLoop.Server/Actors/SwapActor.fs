@@ -75,8 +75,8 @@ type SwapActor(broadcaster: IBroadcaster,
   member val Aggregate = aggr with get
 
   member this.Execute(swapId, msg: Swap.Command, ?source) = unitTask {
+    let source = defaultArg source (nameof(SwapActor))
     logger.LogDebug($"New Command {msg}")
-    let source = source |> Option.defaultValue (nameof(SwapActor))
     let cmd =
       { ESCommand.Data = msg
         Meta = { CommandMeta.Source = source
@@ -102,10 +102,8 @@ type SwapActor(broadcaster: IBroadcaster,
   interface ISwapActor with
     member this.Execute(i, cmd, s) =
       match s with
-      | None ->
-        this.Execute(i, cmd)
-      | Some s ->
-        this.Execute(i, cmd, s)
+      | Some s -> this.Execute(i, cmd, s)
+      | None -> this.Execute(i, cmd)
 
     member this.Handler = this.Handler
     member this.Aggregate = this.Aggregate
@@ -119,8 +117,12 @@ type SwapActor(broadcaster: IBroadcaster,
     /// function can go into the domain layer. But that complicates things by having two kinds of IDs for each swaps.
     member this.ExecNewLoopOut(
                                req: LoopOutRequest,
-                               height: BlockHeight
+                               height: BlockHeight,
+                               ?s,
+                               ?ct
                                ) = taskResult {
+        let s = defaultArg s (nameof(SwapActor))
+        let ct = defaultArg ct CancellationToken.None
         let claimKey = new Key()
         let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
         let preimageHash = preimage.Hash
@@ -137,11 +139,13 @@ type SwapActor(broadcaster: IBroadcaster,
           swapServerClient.LoopOut req
         let lnClient = lightningClientProvider.GetClient(pairId.Quote)
 
+        ct.ThrowIfCancellationRequested()
         let! addr =
           match req.Address with
           | Some a -> Task.FromResult a
           | None ->
             lnClient.GetDepositAddress()
+        ct.ThrowIfCancellationRequested()
         let loopOut = {
           LoopOut.Id = outResponse.Id |> SwapId
           LoopOut.ClaimKey = claimKey
@@ -187,12 +191,14 @@ type SwapActor(broadcaster: IBroadcaster,
             Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
             Swap.LoopOutParams.Height = height
           }
-          do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut))
+          do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut), s)
           return loopOut
     }
 
 
-    member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight) = taskResult {
+    member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight, ?source, ?ct) = taskResult {
+        let ct = defaultArg ct CancellationToken.None
+        let source = defaultArg source (nameof(SwapActor))
         let pairId =
           loopIn.PairIdValue
         let struct(baseCryptoCode, quoteCryptoCode) =
@@ -208,7 +214,7 @@ type SwapActor(broadcaster: IBroadcaster,
           let onPaymentFinished = fun (amt: Money) ->
             match maybeSwapId with
             | Some i ->
-              this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), nameof(invoiceProvider)) :> Task
+              this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), (nameof(invoiceProvider)))
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
@@ -216,7 +222,7 @@ type SwapActor(broadcaster: IBroadcaster,
           let onPaymentCanceled = fun (msg: string) ->
             match maybeSwapId with
             | Some i ->
-              this.Execute(i, Swap.Command.MarkAsErrored(msg)) :> Task
+              this.Execute(i, Swap.Command.MarkAsErrored(msg), nameof(invoiceProvider))
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
@@ -227,6 +233,8 @@ type SwapActor(broadcaster: IBroadcaster,
             loopIn.Label |> Option.defaultValue(String.Empty),
             loopIn.LndClientRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
+
+        ct.ThrowIfCancellationRequested()
         try
           let! inResponse =
             let req =
@@ -235,6 +243,7 @@ type SwapActor(broadcaster: IBroadcaster,
                 SwapDTO.LoopInRequest.RefundPublicKey = refundKey.PubKey }
             swapServerClient.LoopIn req
           let swapId = inResponse.Id |> SwapId
+          ct.ThrowIfCancellationRequested()
           maybeSwapId <- swapId |> Some
           match inResponse.Validate(invoice.PaymentHash.Value,
                                     refundKey.PubKey,
@@ -242,7 +251,7 @@ type SwapActor(broadcaster: IBroadcaster,
                                     loopIn.Limits.MaxSwapFee,
                                     onChainNetwork) with
           | Error e ->
-            do! this.Execute(swapId, Swap.Command.MarkAsErrored(e))
+            do! this.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)
           | Ok _events ->
             let loopIn = {
@@ -273,7 +282,7 @@ type SwapActor(broadcaster: IBroadcaster,
               LastHop =
                 loopIn.LastHop
             }
-            do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn))
+            do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn), source)
             let response = {
               LoopInResponse.Id = inResponse.Id
               Address = inResponse.Address

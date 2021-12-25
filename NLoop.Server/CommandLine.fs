@@ -106,24 +106,25 @@ module NLoopServerCommandLine =
       yield! rpcOptions
     ]
 
-  let getChainOptions(c) =
-     let b = getChainOptionString (c)
+  let getChainOptions c =
+     let b = getChainOptionString c
+     let opts = ChainOptions.Instance
      seq [
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCHost)),
+       let o = Option<string>(b (nameof(opts.RPCHost)),
                               "RPC host name of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o :> Option
-       let o = Option<int>(b (nameof(ChainOptions.Instance.RPCPort)),
+       let o = Option<int>(b (nameof(opts.RPCPort)),
                               "RPC port number of the blockchain client")
        o.Argument <-
          let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCUser)),
+       let o = Option<string>(b (nameof(opts.RPCUser)),
                               "RPC username of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -131,7 +132,7 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCPassword)),
+       let o = Option<string>(b (nameof(opts.RPCPassword)),
                               "RPC password of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -139,10 +140,25 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCCookieFile)),
+       let o = Option<string>(b (nameof(opts.RPCCookieFile)),
                               "RPC cookie file path of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+
+       let o = Option<string>(b (nameof(opts.ZmqHost)),
+                              $"optional: zeromq host address. It will fallback to rpc long-polling " +
+                              "if it is unavailable (default: {opts.ZmqHost})")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+       let o = Option<int>(b (nameof(opts.ZmqPort)), $"optional: zeromq port")
+       o.Argument <-
+         let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o

@@ -373,7 +373,8 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
   abstract member Execute:
     swapId: 'TEntityId *
     msg: 'TCommand *
-    ?source: string -> Task
+    ?source: string
+      -> Task
 
   // todo: use asyncSeq
   abstract member GetAllEntities: ?ct: CancellationToken -> Task<Result<Map<StreamId, 'TState>, StoreError>>

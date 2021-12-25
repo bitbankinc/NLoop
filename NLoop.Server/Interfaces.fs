@@ -67,11 +67,18 @@ type ISwapActor =
   abstract member
     ExecNewLoopOut:
     req: LoopOutRequest *
-    currentHeight: BlockHeight -> Task<Result<LoopOut, string>>
+    currentHeight: BlockHeight *
+    ?source: string *
+    ?ct: CancellationToken
+      -> Task<Result<LoopOut, string>>
+
   abstract member
     ExecNewLoopIn:
     req: LoopInRequest *
-    currentHeight: BlockHeight -> Task<Result<LoopInResponse, string>>
+    currentHeight: BlockHeight *
+    ?source: string *
+    ?ct: CancellationToken
+      -> Task<Result<LoopInResponse, string>>
 
 type BlockChainInfo = {
   Progress: float32
