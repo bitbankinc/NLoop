@@ -79,8 +79,8 @@ type ZmqClient(cc: SupportedCryptoCode,
       | ex ->
         logger.LogError $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
 
-type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, client, actor) =
-  inherit BlockchainListener(opts, loggerFactory, client, actor)
+type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, actor) =
+  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, actor)
   let zmqClients = ResizeArray()
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
 
@@ -88,7 +88,8 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, client, 
     member this.StartAsync(cancellationToken) = unitTask {
       opts.Value.OnChainCrypto
       |> Seq.iter(fun cc ->
-        new ZmqClient(cc, opts, this.OnBlock >> Async.Start, loggerFactory.CreateLogger<_>(), cancellationToken)
+        let onBlockSync = (fun (cc, b) -> this.OnBlock(cc, b, cancellationToken).GetAwaiter().GetResult())
+        new ZmqClient(cc, opts, onBlockSync, loggerFactory.CreateLogger<_>(), cancellationToken)
         |> zmqClients.Add
       )
     }

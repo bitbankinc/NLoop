@@ -14,6 +14,7 @@ open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
@@ -95,6 +96,12 @@ type NLoopExtensions() =
         .AddSingleton<ISwapEventListener, BoltzListener>()
         .AddSingleton<ISwapEventListener, ZmqBlockchainListener>()
         //.AddSingleton<IBlockChainListener, RPCBlockchainListener>()
+        |> ignore
+      let getBCClient(sc: IServiceProvider): GetBlockchainClient =
+        let opts = sc.GetService<IOptions<NLoopOptions>>()
+        opts.Value.GetBlockChainClient
+      this
+        .AddSingleton<GetBlockchainClient>(Func<_,_> getBCClient)
         |> ignore
 
 

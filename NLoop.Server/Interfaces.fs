@@ -98,3 +98,12 @@ type IBlockChainClientExtensions =
   [<Extension>]
   static member GetBlockFromHeight(this: IBlockChainClient, height: BlockHeight) =
     this.GetBlockFromHeight(height, CancellationToken.None)
+
+  [<Extension>]
+  static member GetBestBlock(this: IBlockChainClient, ?ct) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let! hash = this.GetBestBlockHash(ct)
+    return! this.GetBlock(hash, ct)
+  }
+
+type GetBlockchainClient = SupportedCryptoCode -> IBlockChainClient

@@ -77,9 +77,9 @@ let handleLoopOutCore (req: LoopOutRequest) =
           return! json response next ctx
     }
 
-let private validateLoopOutRequest opts (req: LoopOutRequest) =
+let private validateLoopOutRequest (opts: NLoopOptions) (req: LoopOutRequest) =
   fun (next: HttpFunc) ->
-    match req.Validate(opts) with
+    match req.Validate(opts.GetNetwork) with
     | Ok() ->
       next
     | Error errorMsg ->

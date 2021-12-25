@@ -55,6 +55,9 @@ type NLoopOptions() =
   member this.GetRPCClient(cryptoCode: SupportedCryptoCode) =
     this.ChainOptions.[cryptoCode].GetRPCClient(this.Network)
 
+  member this.GetBlockChainClient cc =
+    cc |> this.GetRPCClient |> RPCBlockchainClient :> IBlockChainClient
+
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --
   // -- https --

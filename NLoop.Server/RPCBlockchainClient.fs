@@ -6,9 +6,9 @@ open System.Threading
 open NBitcoin.RPC
 
 
-type NLoopCoindRPCClient(rpc: RPCClient) =
+type RPCBlockchainClient(rpc: RPCClient) =
   interface IBlockChainClient with
-    member this.GetBlock(blockHash, _ct) = task {
+    member this.GetBlock(blockHash, ?ct) = task {
       let! resp = rpc.GetBlockAsync(blockHash, GetBlockVerbosity.WithFullTx)
       return
         {

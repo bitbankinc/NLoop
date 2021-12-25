@@ -218,12 +218,12 @@ type LoopOutRequest = {
     Swap.Group.PairId = this.PairIdValue
     Swap.Group.Category = Swap.Category.Out
   }
-  member this.Validate(opts: NLoopOptions): Result<unit, string list> =
+  member this.Validate(getNetwork: SupportedCryptoCode -> Network): Result<unit, string list> =
     let struct (onChain, _offChain) = this.PairIdValue.Value
     let checkAddressHasCorrectNetwork =
       match this.Address with
-      | Some a when a.Network <> opts.GetNetwork(onChain) ->
-        Error $"on-chain address must be the one for network: {opts.GetNetwork(onChain)}. It was {a.Network}"
+      | Some a when a.Network <> getNetwork(onChain) ->
+        Error $"on-chain address must be the one for network: {getNetwork(onChain)}. It was {a.Network}"
       | _ ->
         Ok()
 

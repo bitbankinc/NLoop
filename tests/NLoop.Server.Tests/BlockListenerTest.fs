@@ -130,7 +130,7 @@ type BlockchainListenerTest() =
                 | x ->
                   failwith $"Unexpected command type {x}"
           }
-      let mockBlockChainClient =
+      let getMockBlockChainClient: GetBlockchainClient = fun _ ->
         TestHelpers.GetDummyBlockchainClient
           {
             DummyBlockChainClientParameters.Default
@@ -164,7 +164,7 @@ type BlockchainListenerTest() =
       services
         .AddSingleton<BlockchainListener>()
         .AddSingleton<ISwapActor>(mockSwapActor)
-        .AddSingleton<IBlockChainClient>(mockBlockChainClient)
+        .AddSingleton<GetBlockchainClient>(getMockBlockChainClient)
         |> ignore
     ))
     let listener = server.Services.GetRequiredService<BlockchainListener>()
@@ -176,7 +176,7 @@ type BlockchainListenerTest() =
       for b in inputBlocks do
         blocksOnTheNodeSoFar.Add(b)
         if blocksToSkip |> Seq.contains b |> not then
-          do! listener.OnBlock(SupportedCryptoCode.BTC, b.Block) |> Async.StartAsTask
+          do! listener.OnBlock(SupportedCryptoCode.BTC, b.Block)
 
       Assert.Equal<BlockWithHeight list>(expectedBlocks, actualBlocks |> Seq.toList)
       Assert.Equal<uint256 list>(expectedUnConfirmedBlocks |> List.map(fun b -> b.Block.Header.GetHash()), unconfirmedBlocks |> Seq.toList)

@@ -789,7 +789,7 @@ module Swap =
     Aggregate.Apply = applyChanges
     Filter =
       fun recordedEvents ->
-        let unconfirmedBlocksHashes =
+        let unconfirmedBlockHashes =
           recordedEvents
           |> List.choose(
             fun re ->
@@ -800,7 +800,7 @@ module Swap =
         recordedEvents
         |> List.filter(fun re ->
           match re.Data.WhichBlock with
-          | Some blockHash when unconfirmedBlocksHashes |> List.contains blockHash -> false
+          | Some blockHash when unconfirmedBlockHashes |> List.contains blockHash -> false
           | _ -> true
           )
     Enrich = id

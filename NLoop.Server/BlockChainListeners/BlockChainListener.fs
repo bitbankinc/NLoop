@@ -1,16 +1,18 @@
 namespace NLoop.Server
 
 open System.Collections.Concurrent
+open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
+open FSharp.Control.Tasks
 
 type BlockchainListener(opts: IOptions<NLoopOptions>,
                         loggerFactory: ILoggerFactory,
-                        client: IBlockChainClient,
+                        getBlockchainClient: GetBlockchainClient,
                         actor: ISwapActor) =
 
   let logger: ILogger<BlockchainListener> = loggerFactory.CreateLogger<_>()
@@ -25,7 +27,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
 
   let swaps = ConcurrentDictionary<SwapId, _>()
 
-  let newChainTipAsync(cc, newB) = async {
+  let newChainTipAsync(cc, newB) = task {
       let cmd =
         (newB, cc)
         |> Swap.Command.NewBlock
@@ -33,7 +35,6 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
         swaps.Keys
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener)))
         |> Task.WhenAll
-        |> Async.AwaitTask
       let prevTips = currentTips.[cc]
       match currentTips.TryUpdate(cc, newB, prevTips) with
       | true -> ()
@@ -41,17 +42,22 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
         logger.LogError($"Failed to update prevBlocks. This should never happen")
   }
 
-  let onBlockDisconnected blockHash = async {
+  let onBlockDisconnected blockHash = unitTask {
     let cmd = (Swap.Command.UnConfirmBlock(blockHash))
     do!
       swaps.Keys
       |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener)))
       |> Task.WhenAll
-      |> Async.AwaitTask
   }
 
-  member this.OnBlock(cc, b: Block) = async {
+  /// Whatever we use for listening to the tip of the blockchain (e.g. Zeromq or long-polling),
+  /// It is always possible that we miss a block.
+  /// This method assures the safety in that case by detecting the skip, and supplementing the missed block
+  /// by querying against the blockchain.
+  member this.OnBlock(cc, b: Block, ?ct: CancellationToken) = unitTask {
+      let ct = defaultArg ct CancellationToken.None
       try
+        let client = getBlockchainClient cc
         let currentBlock = currentTips.[cc]
         let newHeaderHash = b.Header.GetHash()
         let currentHeaderHash = currentBlock.Block.Header.GetHash()
@@ -65,15 +71,14 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
           }
           do! newChainTipAsync(cc, bh)
         else
-          let getBlock =
-            client.GetBlock >> Async.AwaitTask
-          let! newBlock = getBlock (b.Header.GetHash())
+          let! newBlock = client.GetBlock (b.Header.GetHash())
           if newBlock.Height <= currentBlock.Height then
             // no reorg (stale tip). we can safely ignore.
             ()
           else
           let! maybeAncestor =
-            BlockWithHeight.rewindToNextOfCommonAncestor getBlock currentBlock newBlock
+            BlockWithHeight.rewindToNextOfCommonAncestor (client.GetBlock >> Async.AwaitTask) currentBlock newBlock
+            |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
           match maybeAncestor with
           | None ->
             logger.LogCritical "The block with no common ancestor detected, this should never happen"
@@ -82,11 +87,13 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
           | Some (ancestor, disconnectedBlockHashes) ->
             for h in disconnectedBlockHashes do
               do! onBlockDisconnected h
+            ct.ThrowIfCancellationRequested()
             do! newChainTipAsync(cc, ancestor)
             let mutable iHeight = ancestor.Height
             let mutable iHash = ancestor.Block.Header.GetHash()
             let! bestBlockHash = client.GetBestBlockHash() |> Async.AwaitTask
             while bestBlockHash <> iHash do
+              ct.ThrowIfCancellationRequested()
               iHeight <- iHeight + BlockHeightOffset16.One
               let! nextB = client.GetBlockFromHeight(iHeight) |> Async.AwaitTask
               let nextBH = { Height = iHeight; Block = nextB }
