@@ -22,6 +22,7 @@ open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
 
+open NLoop.Server.Options
 open NLoop.Server.SwapServerClient
 open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
@@ -40,9 +41,9 @@ type NLoopExtensions() =
           config.Bind(opts)
           let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
-            let cOpts = ChainOptions()
+            let cOpts = c.GetDefaultOptions()
             cOpts.CryptoCode <- c
-            for p in typeof<ChainOptions>.GetProperties() do
+            for p in typeof<IChainOptions>.GetProperties() do
               let op =
                 let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
                 bindingContext.ParseResult.ValueForOption(optsString)

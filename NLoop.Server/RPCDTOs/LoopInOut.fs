@@ -6,6 +6,7 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.Options
 open FsToolkit.ErrorHandling
 
 [<AutoOpen>]

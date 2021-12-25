@@ -1,11 +1,8 @@
 namespace NLoop.Server
 
 open System
-open System.Collections.Concurrent
 open System.Threading
-open System.Threading.Channels
 open System.Threading.Tasks
-open DotNetLightning.Utils.Primitives
 open FSharp.Control
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
@@ -16,6 +13,7 @@ open NLoop.Domain
 open FSharp.Control.Tasks
 
 open NLoop.Server
+open NLoop.Server.Options
 open NetMQ
 open NetMQ.Sockets
 
@@ -62,7 +60,7 @@ type ZmqClient(cc: SupportedCryptoCode,
   member private this.WorkerThread() =
     for bTypes in seq [RawBlock; HashBlock] do
       sock.Subscribe bTypes.Topic
-    sock.Connect opts.Value.ChainOptions.[cc].ZmqAddress
+    sock.Connect <| opts.Value.ChainOptions.[cc].GetZmqAddress()
     while not <| ct.IsCancellationRequested do
       let m = sock.ReceiveMultipartMessage(3)
       let topic, body, sequence = (m.Item 0), (m.Item 1), (m.Item 2)

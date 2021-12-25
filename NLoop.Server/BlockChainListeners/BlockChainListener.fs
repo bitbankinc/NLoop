@@ -161,3 +161,5 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
       else
         logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
 
+  interface IBlockChainListener with
+    member this.CurrentHeight cc = currentTips.[cc].Height

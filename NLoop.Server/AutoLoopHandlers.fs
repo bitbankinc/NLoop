@@ -15,9 +15,9 @@ open NLoop.Domain.Utils
 open NLoop.Server.Actors
 open NLoop.Server.RPCDTOs
 open FsToolkit.ErrorHandling
+open NLoop.Server.Options
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
-
 let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
     let man = ctx.GetService<AutoLoopManager>()

@@ -12,6 +12,7 @@ open Microsoft.Extensions.Configuration
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server
+open NLoop.Server.Options
 
 module NLoopServerCommandLine =
   module Validators =
@@ -108,7 +109,7 @@ module NLoopServerCommandLine =
 
   let getChainOptions c =
      let b = getChainOptionString c
-     let opts = ChainOptions.Instance
+     let opts = c.GetDefaultOptions()
      seq [
        let o = Option<string>(b (nameof(opts.RPCHost)),
                               "RPC host name of the blockchain client")

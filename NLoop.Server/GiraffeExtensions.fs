@@ -11,6 +11,7 @@ open Microsoft.Extensions.Options
 open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
+open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
 

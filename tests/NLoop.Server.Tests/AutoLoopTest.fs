@@ -22,14 +22,12 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Server
+open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
-open NLoop.Server.SwapServerClient
-open NLoop.Server.Tests.Extensions
-open Org.BouncyCastle.Asn1.IsisMtt.X509
 open Xunit
 
 
@@ -178,6 +176,11 @@ type AutoLoopTests() =
       member this.FailedLoopOuts = Map.empty
   }
 
+  let mockBlockchainListener = {
+    new IBlockChainListener with
+      member this.CurrentHeight(cc) = BlockHeight.One
+  }
+
   let mockOnGoingSwapProjection = {
     new IOnGoingSwapStateProjection with
       member this.State = Map.empty
@@ -192,6 +195,7 @@ type AutoLoopTests() =
     use server = new TestServer(TestHelpers.GetTestHost(fun services ->
       services
         .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+        .AddSingleton<IBlockChainListener>(mockBlockchainListener)
         .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
@@ -301,6 +305,7 @@ type AutoLoopTests() =
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
         .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+        .AddSingleton<IBlockChainListener>(mockBlockchainListener)
         .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)

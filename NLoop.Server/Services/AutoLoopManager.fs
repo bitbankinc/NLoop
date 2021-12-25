@@ -19,7 +19,7 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
-open NLoop.Server.Actors
+open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
