@@ -176,7 +176,7 @@ type BlockchainListenerTest() =
       for b in inputBlocks do
         blocksOnTheNodeSoFar.Add(b)
         if blocksToSkip |> Seq.contains b |> not then
-          do! listener.OnBlock(SupportedCryptoCode.BTC, b.Block)
+          do! listener.OnBlock(b.Block)
 
       Assert.Equal<BlockWithHeight list>(expectedBlocks, actualBlocks |> Seq.toList)
       Assert.Equal<uint256 list>(expectedUnConfirmedBlocks |> List.map(fun b -> b.Block.Header.GetHash()), unconfirmedBlocks |> Seq.toList)

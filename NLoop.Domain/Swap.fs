@@ -407,9 +407,9 @@ module Swap =
         let enhance = enhanceEvents effectiveDate source
         let checkHeight newBlockHash (height: BlockHeight) (oldHeight: BlockHeight) =
           let one = BlockHeightOffset16.One
-          if height = oldHeight + one || height = oldHeight then
+          if height <= oldHeight + one then
             [NewTipReceived(newBlockHash, height)] |> enhance |> Ok
-          elif height < oldHeight || oldHeight + one < height then
+          elif oldHeight + one < height then
             assert false
             $"Bogus block height. The block has been skipped. This should never happen."
             |> APIMisuseError |> Error

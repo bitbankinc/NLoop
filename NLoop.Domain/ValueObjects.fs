@@ -107,5 +107,6 @@ type BlockWithHeight = {
     Block = this.Block.Clone()
     Height = this.Height.Value |> BlockHeight
   }
+
   override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash().ToString().[..7]}...)"
   member this.AsString = this.ToString()

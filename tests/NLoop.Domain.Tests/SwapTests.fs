@@ -51,15 +51,17 @@ module Helpers =
         Height = nextHeight
       }
 
-    member this.CreateNextMany (network: Network) (num: int) =
-      let mutable b = this.Copy()
-      [
-        for i in 1..num do
-          let addr = (new Key()).PubKey.WitHash.GetAddress(network)
-          let n = b.CreateNext(addr)
-          yield n
-          b <- n
-      ]
+
+    member this.CreateInfinite(network: Network) =
+      Seq.unfold(fun (b: BlockWithHeight) ->
+        let addr = (new Key()).PubKey.WitHash.GetAddress(network)
+        let next = b.CreateNext(addr)
+        (b, next) |> Some
+        )
+        this
+    member this.CreateNextMany(network: Network, n: int) =
+      this.CreateInfinite(network)
+      |> Seq.take n
 
 
   type LoopOut with
@@ -517,85 +519,6 @@ type SwapDomainTests() =
       |> commandsToEvents
       |> getLastEvent
     Assert.Equal(Swap.Event.FinishedSuccessfully(loopOut.Id), lastEvent.Data)
-
-  /// It should time out when the server does not tell us about swap tx that they ought to published
-  /// after we made an offer.
-  [<Property(MaxTest=10)>]
-  member this.TestLoopOut_Timeout(loopOutParams: Swap.LoopOutParams, acceptZeroConf) =
-    let repo = getTestRepository()
-    let mutable i = 0
-    let commandsToEvents (loopOut: LoopOut) (commands: Swap.Command list) =
-      let deps =
-        mockDeps()
-      commands
-      |> List.map(fun c ->
-        i <- i + 1
-        let d = DateTime(2001, 01, 30, 0, 0, 0) + TimeSpan.FromSeconds(i |> float)
-        (d, c) ||> getCommand
-      )
-      |> commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB
-    let RunAndAssertFinishedByTimeout (loopOut: LoopOut) cmd =
-      let lastEvent =
-        ((Swap.Command.NewLoopOut(loopOutParams, loopOut)) :: cmd)
-        |> commandsToEvents loopOut
-        |> getLastEvent
-      Assert.Equal(Swap.Event.FinishedByTimeout(loopOut.Id, "foo").Type, lastEvent.Data.Type)
-
-    let currentHeight = loopOutParams.Height
-    let confirmCommandsUntilTimeout (loopOut: LoopOut) =
-      let generator =
-        Seq.unfold(fun (b: BlockWithHeight) ->
-          let addr = (new Key()).PubKey.WitHash.GetAddress(loopOut.BaseAssetNetwork)
-          let next =  b.CreateNext(addr)
-          (Swap.Command.NewBlock(b, loopOut.PairId.Base), next) |> Some
-          )
-          (loopOut.GetGenesis())
-      generator
-      |> Seq.skip(currentHeight.Value |> int)
-      |> Seq.take(1 + (loopOut.TimeoutBlockHeight.Value |> int))
-      |> Seq.toList
-
-    let loopOut = testLoopOut1
-    // case 1: nothing happens after creation.
-    let _ =
-      let loopOut = {
-        loopOut with
-          Invoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
-          PrepayInvoice = getDummyTestInvoice(loopOut.QuoteAssetNetwork)
-          TimeoutBlockHeight = BlockHeight(30u)
-          Id = (Guid.NewGuid()).ToString() |> SwapId
-      }
-      confirmCommandsUntilTimeout loopOut |> RunAndAssertFinishedByTimeout loopOut
-
-    // case 2: nothing happens after they tell us about the swap tx.
-    let _ =
-      let loopOut =
-        let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-        let timeoutBlockHeight = BlockHeight(30u)
-        let onChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
-        {
-          loopOut.Sanitize(paymentPreimage, timeoutBlockHeight, onChainAmount, acceptZeroConf)
-          with
-            Id = (Guid.NewGuid()).ToString() |> SwapId
-        }
-      let recklessLoopOut = {
-        loopOut
-          with
-            SwapTxConfRequirement = BlockHeightOffset32.Zero
-      }
-      let conservativeLoopOut = {
-        loopOut
-        with
-          SwapTxConfRequirement = 31u |> BlockHeightOffset32
-      }
-      let commands =
-        [
-          let swapTx = loopOut.GetDummySwapTx()
-          (Swap.Command.CommitSwapTxInfoFromCounterParty(swapTx.ToHex()))
-        ]
-      (commands @ confirmCommandsUntilTimeout conservativeLoopOut)|> RunAndAssertFinishedByTimeout loopOut
-    ()
-
 
   static member TestLoopOut_Reorg_TestData =
     let loopOut = testLoopOut1
