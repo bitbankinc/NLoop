@@ -70,7 +70,7 @@ type ISwapActor =
     currentHeight: BlockHeight *
     ?source: string *
     ?ct: CancellationToken
-      -> Task<Result<LoopOut, string>>
+      -> Task<Result<LoopOutResponse, string>>
 
   abstract member
     ExecNewLoopIn:

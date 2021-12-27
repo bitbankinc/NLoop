@@ -926,7 +926,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         let! loopOut =
           swapActor.ExecNewLoopOut(swap, blockChainListener.CurrentHeight(group.OnChainAsset), nameof(AutoLoopManager), ct)
           |> TaskResult.mapError(AutoLoopError.FailedToDispatchLoop)
-        logger.LogInformation($"loop out automatically dispatched.: (id {loopOut.Id}, onchain address: {loopOut.ClaimAddress}. amount: {loopOut.OnChainAmount.Satoshi} sats)")
+        logger.LogInformation($"loop out automatically dispatched.: (id {loopOut.Id}, onchain address: {loopOut.Address}.")
 
     for inSwap in suggestion.InSwaps do
       let par = this.Parameters.[group]

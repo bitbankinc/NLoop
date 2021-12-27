@@ -24,9 +24,10 @@ open NLoop.Server
 open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
+open System.Reactive.Linq
 
 [<AutoOpen>]
-module private Helpers =
+module private SwapActorHelpers =
   let getSwapDeps b f u g payInvoice =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
@@ -35,6 +36,29 @@ module private Helpers =
       Swap.Deps.GetRefundAddress = g
       Swap.Deps.PayInvoice = payInvoice
       }
+
+  let getObs (eventAggregator: IEventAggregator) (sId) =
+      eventAggregator.GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
+      |> Observable.filter(function
+                           | Choice1Of2 { Id = swapId }
+                           | Choice2Of2 { Id = swapId } -> swapId = sId)
+
+
+[<RequireQualifiedAccess>]
+module private Observable =
+  let inline chooseOrError
+    (selector: Swap.Event -> _ option)
+    (obs: IObservable<Choice<Swap.EventWithId, Swap.ErrorWithId>>) =
+      obs
+      |> Observable.choose(
+        function
+        | Choice1Of2{ Event = Swap.Event.FinishedByError(_id, err) } -> err |> Error |> Some
+        | Choice2Of2{ Error = e } -> e.ToString() |> Error |> Some
+        | Choice1Of2{ Event = e } -> selector e |> Option.map(Ok)
+      )
+      |> Observable.catchWith(fun ex -> Observable.Return(Error $"Error while handling observable {ex}"))
+      |> Observable.first
+      |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
 
 type SwapActor(broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
@@ -192,8 +216,25 @@ type SwapActor(broadcaster: IBroadcaster,
             Swap.LoopOutParams.MaxPaymentFee = req.MaxSwapFee |> ValueOption.defaultValue(Money.Coins 100000m)
             Swap.LoopOutParams.Height = height
           }
+          let obs =
+            getObs eventAggregator loopOut.Id
+            |> Observable.replay
+          use _ = obs.Connect()
           do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut), s)
-          return loopOut
+          let! maybeClaimTxId =
+            let chooser =
+              if loopOut.AcceptZeroConf then
+                (function | Swap.Event.ClaimTxPublished txId  -> Some (Some txId) | _ -> None)
+              else
+                (function | Swap.Event.NewLoopOutAdded _  -> Some (None) | _ -> None)
+            obs
+            |> Observable.chooseOrError chooser
+          return
+            {
+              LoopOutResponse.Id = loopOut.Id.Value
+              Address = loopOut.ClaimAddress
+              ClaimTxId = maybeClaimTxId
+            }
     }
 
 
@@ -254,7 +295,7 @@ type SwapActor(broadcaster: IBroadcaster,
           | Error e ->
             do! this.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)
-          | Ok _events ->
+          | Ok () ->
             let loopIn = {
               LoopIn.Id = swapId
               RefundPrivateKey = refundKey
@@ -283,12 +324,19 @@ type SwapActor(broadcaster: IBroadcaster,
               LastHop =
                 loopIn.LastHop
             }
+            let obs =
+              getObs(eventAggregator) swapId
+              |> Observable.replay
+            use _ = obs.Connect()
             do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn), source)
-            let response = {
-              LoopInResponse.Id = inResponse.Id
-              Address = inResponse.Address
+            let! () =
+              obs
+              |> Observable.chooseOrError
+                (function | Swap.Event.NewLoopInAdded _ -> Some () | _ -> None)
+            return {
+              LoopInResponse.Id = loopIn.Id.Value
+              Address = loopIn.Address
             }
-            return response
         with
         | :? HttpRequestException as ex ->
           return! Error($"Error requesting to boltz ({ex.Message})")
