@@ -833,9 +833,11 @@
         "type": "object",
         "properties": {
           "channel_id": {
+            "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "pubkey": {
+            "nullable": true,
             "$ref": "#/components/schemas/PubKey"
           },
           "reason": {

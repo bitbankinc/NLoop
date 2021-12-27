@@ -677,8 +677,10 @@ components:
       properties:
         channel_id:
           $ref: '#/components/schemas/ShortChannelId'
+          nullable: true
         pubkey:
           $ref: "#/components/schemas/PubKey"
+          nullable: true
         reason:
           type: string
 
