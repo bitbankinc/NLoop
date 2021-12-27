@@ -39,9 +39,15 @@ type NLoopExtensions() =
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
           config.Bind(opts)
+          )
+        .BindCommandLine()
+        .Configure<IServiceProvider>(fun opts serviceProvider ->
+          let config = serviceProvider.GetService<IConfiguration>()
           let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
-            let cOpts = c.GetDefaultOptions()
+            let cOpts =
+              let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
+              c.GetDefaultOptions(network)
             cOpts.CryptoCode <- c
             for p in typeof<IChainOptions>.GetProperties() do
               let op =
@@ -53,7 +59,6 @@ type NLoopExtensions() =
             config.GetSection(c.ToString()).Bind(cOpts)
             opts.ChainOptions.Add(c, cOpts)
           )
-        .BindCommandLine()
         |> ignore
 
       if (not <| test) then
@@ -104,8 +109,6 @@ type NLoopExtensions() =
       this
         .AddSingleton<GetBlockchainClient>(Func<_,_> getBCClient)
         |> ignore
-
-
       this
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
         .AddHttpClient<BoltzClient>()

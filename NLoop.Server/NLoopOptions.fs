@@ -6,6 +6,7 @@ open System.IO
 open LndClient
 open NBitcoin
 open NLoop.Domain
+open NLoop.Server.DTOs
 open NLoop.Server.Options
 
 type NLoopOptions() =
@@ -67,7 +68,7 @@ type NLoopOptions() =
 
   member val AcceptZeroConf = false with get, set
 
-  member val OnChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
+  member val OnChainCrypto = [|SupportedCryptoCode.BTC; SupportedCryptoCode.LTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 
   member this.PairIds(cat: Swap.Category) =

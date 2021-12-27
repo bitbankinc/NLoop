@@ -11,7 +11,7 @@ certthumbprint=$(openssl x509 -in ${SCRIPT_DIR}/../tests/NLoop.Server.Tests/data
 LOGGING__LogLevel__Microsoft=Information
 
 ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
-  --network RegTest \
+  --network regtest \
   --nohttps true \
   --btc.rpcuser=johndoe \
   --btc.rpcpassword=unsafepassword \

@@ -72,10 +72,12 @@ module CryptoCodeExtensions =
         }
       | x -> failwith $"Unknown CryptoCode {x}"
 
-    member this.GetDefaultOptions() =
+    member this.GetDefaultOptions(?n: Network) =
       match this with
       | SupportedCryptoCode.BTC ->
-        BTCChainOptions() :> IChainOptions
+        match n with | Some n -> BTCChainOptions(n) | None -> BTCChainOptions()
+        :> IChainOptions
       | SupportedCryptoCode.LTC ->
-        LTCChainOptions() :> IChainOptions
+        match n with | Some n -> LTCChainOptions(n) | None -> LTCChainOptions()
+        :> IChainOptions
       | x -> failwith $"Unknown CryptoCode {x}"

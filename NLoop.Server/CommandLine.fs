@@ -89,7 +89,8 @@ module NLoopServerCommandLine =
     ]
   let optionsForBothCliAndServer =
     seq [
-      let networkNames = Network.GetNetworks() |> Seq.map(fun n -> n.Name) |> Array.ofSeq
+      let networks = Network.GetNetworks()
+      let networkNames = networks |> Seq.map(fun n -> n.Name.ToLowerInvariant()) |> Array.ofSeq
       let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default: mainnet)")
       o.Argument <-
         let a = Argument<string>()
@@ -107,12 +108,18 @@ module NLoopServerCommandLine =
       yield! rpcOptions
     ]
 
-  let getChainOptions c =
+  let getChainOptions c (networks: Network list) =
      let b = getChainOptionString c
      let opts = c.GetDefaultOptions()
+     let nDefaults = networks |> List.map(fun n -> (n, c.GetDefaultOptions(n)))
      seq [
-       let o = Option<string>(b (nameof(opts.RPCHost)),
-                              "RPC host name of the blockchain client")
+       let o =
+         let defaults =
+           nDefaults
+           |> List.fold(fun acc (n, o) -> $"{acc}{n.ToString().ToLowerInvariant()}: {o.RPCPort}, ") "defaults: ("
+           |> (+) <| ")"
+         Option<string>(b (nameof(opts.RPCHost)),
+                        $"RPC host name of the blockchain client. {defaults}")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
@@ -151,7 +158,7 @@ module NLoopServerCommandLine =
 
        let o = Option<string>(b (nameof(opts.ZmqHost)),
                               $"optional: zeromq host address. It will fallback to rpc long-polling " +
-                              "if it is unavailable (default: {opts.ZmqHost})")
+                              $"if it is unavailable (default: {opts.ZmqHost})")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
@@ -166,6 +173,7 @@ module NLoopServerCommandLine =
      ]
 
   let getOptions(): Option seq =
+    let networks = Network.GetNetworks() |> Seq.toList
     seq [
       yield! optionsForBothCliAndServer
       let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCCors).ToLowerInvariant()}",
@@ -206,7 +214,7 @@ module NLoopServerCommandLine =
         a
       o
       for c in Enum.GetValues<SupportedCryptoCode>() do
-        yield! getChainOptions c
+        yield! getChainOptions c networks
 
       let o = Option<string>($"--boltzhost", $"Host name of your boltz server: (default: {Constants.DefaultBoltzServer})")
       o.Argument <-

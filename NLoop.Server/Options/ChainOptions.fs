@@ -44,14 +44,15 @@ type IChainOptionExtensions =
   [<Extension>]
   static member GetZmqAddress(this: IChainOptions) = $"tcp://{this.ZmqHost}:{this.ZmqPort}"
 
-type BTCChainOptions() =
+type BTCChainOptions(n: Network) =
+  new () = BTCChainOptions(Network.RegTest)
   static member val Instance = BTCChainOptions() with get
   interface IChainOptions with
     member val CryptoCode = SupportedCryptoCode.BTC with get, set
 
     // --- on-chain node host ---
     member val RPCHost = "localhost" with get, set
-    member val RPCPort = 18332 with get, set
+    member val RPCPort = n.RPCPort with get, set
     member val RPCUser = String.Empty with get, set
     member val RPCPassword = String.Empty with get, set
     member val RPCCookieFile = String.Empty with get, set
@@ -68,14 +69,15 @@ type BTCChainOptions() =
     member val SweepConf = 6 with get, set
 
 
-type LTCChainOptions() =
+type LTCChainOptions(n: Network) =
+  new () = LTCChainOptions(Altcoins.Litecoin.Instance.Regtest)
   static member val Instance = LTCChainOptions() with get
   interface IChainOptions with
     member val CryptoCode = SupportedCryptoCode.LTC with get, set
 
     // --- on-chain node host ---
     member val RPCHost = "localhost" with get, set
-    member val RPCPort = Altcoins.Litecoin.Instance.Regtest.DefaultPort with get, set
+    member val RPCPort = n.RPCPort with get, set
     member val RPCUser = String.Empty with get, set
     member val RPCPassword = String.Empty with get, set
     member val RPCCookieFile = String.Empty with get, set
