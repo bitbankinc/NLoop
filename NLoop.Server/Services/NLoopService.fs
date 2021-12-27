@@ -101,8 +101,13 @@ type NLoopExtensions() =
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
-        .AddSingleton<ISwapEventListener, BlockchainListeners>()
-        .AddSingleton<IBlockChainListener, BlockchainListeners>()
+        |> ignore
+
+      // Workaround to register one instance as a multiple interfaces.
+      // see: https://github.com/aspnet/DependencyInjection/issues/360
+      this.AddSingleton<BlockchainListeners>()
+        .AddSingleton<ISwapEventListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> ISwapEventListener)
+        .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
         |> ignore
       let getBCClient(sc: IServiceProvider): GetBlockchainClient =
         let opts = sc.GetService<IOptions<NLoopOptions>>()

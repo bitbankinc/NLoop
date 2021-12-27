@@ -67,15 +67,23 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
             // TODO: re-registering everything from start is not very performant nor scalable.
             // Ideally we should register only the one which is not finished.
             logger.LogDebug($"Registering new Swap {swapId}")
-            for l in listeners do
-              l.RegisterSwap(swapId)
+            try
+              for l in listeners do
+                l.RegisterSwap(swapId)
+            with
+            | ex ->
+              logger.LogError $"Failed to register swap (id: {swapId}) {ex}"
           | Swap.Event.FinishedSuccessfully swapId
           | Swap.Event.FinishedByRefund swapId
           | Swap.Event.FinishedByTimeout(swapId, _)
           | Swap.Event.FinishedByError (swapId, _) ->
             logger.LogDebug($"Removing Finished Swap {swapId}")
-            for l in listeners do
-              l.RemoveSwap swapId
+            try
+              for l in listeners do
+                l.RemoveSwap swapId
+            with
+            | ex ->
+              logger.LogError $"Failed to remove swap (id: {swapId}) {ex}"
           | _ -> ()
         )
       subscriptions.Add subsc2

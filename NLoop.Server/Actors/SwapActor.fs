@@ -340,7 +340,8 @@ type SwapActor(broadcaster: IBroadcaster,
             }
         with
         | :? HttpRequestException as ex ->
-          return! Error($"Error requesting to boltz ({ex.Message})")
+          let msg = ex.Message.Replace("\"", "")
+          return! Error($"Error requesting to boltz ({msg})")
       }
 
     member this.GetAllEntities(?ct: CancellationToken) = task {
