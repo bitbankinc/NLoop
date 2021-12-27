@@ -282,6 +282,12 @@ module Swap =
     | CounterPartyReturnedBogusResponse of BogusResponseError
     | BogusSwapTransaction of msg: string
     | APIMisuseError of string
+    with
+    member this.Msg =
+      "SwapError: " +
+      match this with
+      | UTXOProviderError e -> e.Msg
+      | x -> x.ToString()
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
     r |> Result.mapError(fun e -> $"Error while creating {txName}: {e.Message}" |> TransactionError)

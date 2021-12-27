@@ -40,7 +40,10 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
       let! us = cli.ListUnspentAsync()
       let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
       if whatWeHave < amount then
-        return Error (UTXOProviderError.InsufficientFunds({| WhatWeHave = whatWeHave; WhatWeNeed = amount |}))
+        return
+          (cryptoCode, whatWeHave, amount)
+          |> UTXOProviderError.InsufficientFunds
+          |> Error
       else
         return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
     }

@@ -53,7 +53,8 @@ module private Observable =
       |> Observable.choose(
         function
         | Choice1Of2{ Event = Swap.Event.FinishedByError(_id, err) } -> err |> Error |> Some
-        | Choice2Of2{ Error = e } -> e.ToString() |> Error |> Some
+        | Choice2Of2{ Error = DomainError e } -> e.Msg |> Error |> Some
+        | Choice2Of2{ Error = Store(StoreError e) } -> e |> Error |> Some
         | Choice1Of2{ Event = e } -> selector e |> Option.map(Ok)
       )
       |> Observable.catchWith(fun ex -> Observable.Return(Error $"Error while handling observable {ex}"))
