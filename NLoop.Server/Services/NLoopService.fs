@@ -76,7 +76,9 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManager>() :> IHostedService
           )
-          .AddHostedService<ZmqBlockchainListener>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+          )
           |> ignore
 
       this
@@ -100,8 +102,7 @@ type NLoopExtensions() =
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
-        .AddSingleton<ISwapEventListener, ZmqBlockchainListener>()
-        //.AddSingleton<IBlockChainListener, RPCBlockchainListener>()
+        .AddSingleton<IBlockChainListener, BlockchainListeners>()
         |> ignore
       let getBCClient(sc: IServiceProvider): GetBlockchainClient =
         let opts = sc.GetService<IOptions<NLoopOptions>>()

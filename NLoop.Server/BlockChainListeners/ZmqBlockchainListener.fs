@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System
+open System.Collections.Generic
 open System.Threading
 open System.Threading.Tasks
 open FSharp.Control
@@ -43,30 +44,32 @@ module private ZmqHelpers =
   let rawtxB = "rawtx" |> utf8ToBytes
   let sequenceB = "sequence" |> utf8ToBytes
 
-type private OnBlock = SupportedCryptoCode * Block -> unit
-type ZmqClient(cc: SupportedCryptoCode,
-               opts: IOptions<NLoopOptions>,
-               onBlock: OnBlock,
-               logger: ILogger<ZmqClient>,
-               ?ct: CancellationToken) as this =
+type private OnBlock = Block -> unit
+type ZmqClient(logger: ILogger<ZmqClient>, address) =
   let sock = new SubscriberSocket()
   let runtime = new NetMQRuntime()
-  let ct = defaultArg ct CancellationToken.None
+  let mutable _executingTask = null
 
   do
-    Task.Factory.StartNew(this.WorkerThread, TaskCreationOptions.LongRunning)
-    |> ignore
-
-  member private this.WorkerThread() =
     for bTypes in seq [RawBlock; HashBlock] do
       sock.Subscribe bTypes.Topic
-    sock.Connect <| opts.Value.ChainOptions.[cc].GetZmqAddress()
+    sock.Connect <| address
+
+  member this.StartListening onBlock =
+    _executingTask <- Task.Factory.StartNew(this.WorkerThread onBlock, TaskCreationOptions.LongRunning)
+    Task.CompletedTask
+
+  member private this.WorkerThread (onBlock: OnBlock, ct: CancellationToken) () =
     while not <| ct.IsCancellationRequested do
       let m = sock.ReceiveMultipartMessage(3)
       let topic, body, sequence = (m.Item 0), (m.Item 1), (m.Item 2)
       if topic.Buffer = rawblockB then
         let b = Block.Parse(body.Buffer |> hex.EncodeData, Network.RegTest)
-        onBlock(cc, b)
+        onBlock b
+
+  member this.IsConnected(t: TimeSpan) =
+    let mutable m = null
+    sock.TryReceiveMultipartMessage(t, &m, 3)
 
   interface IDisposable with
     member this.Dispose () =
@@ -77,25 +80,32 @@ type ZmqClient(cc: SupportedCryptoCode,
       | ex ->
         logger.LogError $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
 
-type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, actor) =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, actor)
-  let zmqClients = ResizeArray()
+type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, zmqAddress, loggerFactory, getBlockchainClient, actor, cryptoCode) as this =
+  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, actor, cryptoCode)
+  let zmqClient = new ZmqClient(loggerFactory.CreateLogger<_>(), zmqAddress)
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
+
+  let [<Literal>] ConnectionRetryCount = 5
+  let ConnectionBackoffInitialTime = TimeSpan.FromSeconds(0.5)
+
+  member this.CheckConnection(ct: CancellationToken) = task {
+    let mutable connectionEstablished = false
+    let mutable i = 0
+    while (i < ConnectionRetryCount && not <| connectionEstablished) do
+      ct.ThrowIfCancellationRequested()
+      let waitTime = (2. ** (float i)) * ConnectionBackoffInitialTime
+      connectionEstablished <- zmqClient.IsConnected(waitTime)
+      if not <| connectionEstablished then
+        logger.LogInformation($"Failed to establish zmq connection to {cryptoCode}. Retrying in {waitTime.Seconds} seconds...")
+        i <- i + 1
+    return connectionEstablished
+  }
 
   interface IHostedService with
     member this.StartAsync(cancellationToken) = unitTask {
-      opts.Value.OnChainCrypto
-      |> Seq.iter(fun cc ->
-        let onBlockSync = (fun (cc, b) -> this.OnBlock(cc, b, cancellationToken).GetAwaiter().GetResult())
-        new ZmqClient(cc, opts, onBlockSync, loggerFactory.CreateLogger<_>(), cancellationToken)
-        |> zmqClients.Add
-      )
+      let onBlockSync = (fun b -> this.OnBlock(b, cancellationToken).GetAwaiter().GetResult())
+      do! zmqClient.StartListening(onBlockSync, cancellationToken)
     }
     member this.StopAsync(_cancellationToken) = unitTask {
-      for c in zmqClients do
-        try
-          (c :> IDisposable).Dispose()
-        with
-        | ex ->
-          logger.LogDebug $"socket already closed"
+      (zmqClient :> IDisposable).Dispose()
     }

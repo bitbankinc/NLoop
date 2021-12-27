@@ -59,21 +59,20 @@ module private BlockchainListenerHelpers =
 type BlockchainListener(opts: IOptions<NLoopOptions>,
                         loggerFactory: ILoggerFactory,
                         getBlockchainClient: GetBlockchainClient,
-                        actor: ISwapActor) =
+                        cc: SupportedCryptoCode,
+                        actor: ISwapActor) as this =
 
   let logger: ILogger<BlockchainListener> = loggerFactory.CreateLogger<_>()
-  let currentTips =
-    let d = ConcurrentDictionary<SupportedCryptoCode, BlockWithHeight>()
-    opts.Value.OnChainCrypto
-    |> Array.iter(fun cc ->
-      let n = opts.Value.GetNetwork cc
-      d.TryAdd(cc, BlockWithHeight.Genesis n) |> ignore
-    )
-    d
+  let mutable _currentTip =
+    let n = opts.Value.GetNetwork cc
+    BlockWithHeight.Genesis(n)
+
+  let _currentTipLockObj = obj()
 
   let swaps = ConcurrentDictionary<SwapId, _>()
 
-  let newChainTipAsync(cc, newB) = task {
+  let newChainTipAsync newB = task {
+      logger.LogInformation $"New blockchain tip {newB} for {cc}"
       let cmd =
         (newB, cc)
         |> Swap.Command.NewBlock
@@ -81,11 +80,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
         swaps.Keys
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener)))
         |> Task.WhenAll
-      let prevTips = currentTips.[cc]
-      match currentTips.TryUpdate(cc, newB, prevTips) with
-      | true -> ()
-      | false ->
-        logger.LogError($"Failed to update prevBlocks. This should never happen")
+      this.CurrentTip <- newB
   }
 
   let onBlockDisconnected blockHash = unitTask {
@@ -96,15 +91,20 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
       |> Task.WhenAll
   }
 
+  member this.CurrentTip
+    with get() = _currentTip
+    and set v =
+      lock _currentTipLockObj <| fun () -> _currentTip <- v
+
   /// Whatever we use for listening to the tip of the blockchain (e.g. Zeromq or long-polling),
   /// It is always possible that we miss a block.
   /// This method assures the safety in that case by detecting the skip, and supplementing the missed block
   /// by querying against the blockchain.
-  member this.OnBlock(cc, b: Block, ?ct: CancellationToken) = unitTask {
+  member this.OnBlock( b: Block, ?ct: CancellationToken) = unitTask {
       let ct = defaultArg ct CancellationToken.None
       try
         let client = getBlockchainClient cc
-        let currentBlock = currentTips.[cc]
+        let currentBlock = this.CurrentTip
         let newHeaderHash = b.Header.GetHash()
         let currentHeaderHash = currentBlock.Block.Header.GetHash()
         if currentHeaderHash = newHeaderHash then
@@ -115,7 +115,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
             Height = currentBlock.Height + BlockHeightOffset16.One
             Block = b
           }
-          do! newChainTipAsync(cc, bh)
+          do! newChainTipAsync bh
         else
           let! newBlock = client.GetBlock (b.Header.GetHash())
           if newBlock.Height <= currentBlock.Height then
@@ -134,7 +134,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
             for h in disconnectedBlockHashes do
               do! onBlockDisconnected h
             ct.ThrowIfCancellationRequested()
-            do! newChainTipAsync(cc, ancestor)
+            do! newChainTipAsync ancestor
             let mutable iHeight = ancestor.Height
             let mutable iHash = ancestor.Block.Header.GetHash()
             let! bestBlockHash = client.GetBestBlockHash() |> Async.AwaitTask
@@ -143,13 +143,14 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
               iHeight <- iHeight + BlockHeightOffset16.One
               let! nextB = client.GetBlockFromHeight(iHeight) |> Async.AwaitTask
               let nextBH = { Height = iHeight; Block = nextB }
-              do! newChainTipAsync(cc, nextBH)
+              do! newChainTipAsync nextBH
               iHash <- nextB.Header.GetHash()
           ()
       with
       | ex ->
         logger.LogError($"Error while handling block {ex}")
   }
+
   interface ISwapEventListener with
     member this.RegisterSwap(id: SwapId) =
       if not <| swaps.TryAdd(id, ()) then
@@ -161,5 +162,3 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
       else
         logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
 
-  interface IBlockChainListener with
-    member this.CurrentHeight cc = currentTips.[cc].Height

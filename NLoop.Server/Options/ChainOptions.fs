@@ -42,7 +42,11 @@ type IChainOptionExtensions =
     RPCClient($"{this.RPCUser}:{this.RPCPassword}", $"{this.RPCHost}:{this.RPCPort}", this.GetNetwork(chainName))
 
   [<Extension>]
-  static member GetZmqAddress(this: IChainOptions) = $"tcp://{this.ZmqHost}:{this.ZmqPort}"
+  static member TryGetZmqAddress(this: IChainOptions) =
+    if this.ZmqHost |> String.IsNullOrEmpty || this.ZmqPort |> isNull then
+      None
+    else
+      Some $"tcp://{this.ZmqHost}:{this.ZmqPort}"
 
 type BTCChainOptions(n: Network) =
   new () = BTCChainOptions(Network.RegTest)
@@ -59,8 +63,8 @@ type BTCChainOptions(n: Network) =
     // --- ---
 
     // --- zeromq ---
-    member val ZmqHost = "localhost" with get, set
-    member val ZmqPort = "28332" with get, set
+    member val ZmqHost = null with get, set
+    member val ZmqPort = null with get, set
     // --- ---
 
     // --- swap params ---
@@ -84,8 +88,8 @@ type LTCChainOptions(n: Network) =
     // --- --
 
     // --- zeromq ---
-    member val ZmqHost = "localhost" with get, set
-    member val ZmqPort = "28332" with get, set
+    member val ZmqHost = null with get, set
+    member val ZmqPort = null with get, set
     // --- ---
 
     // --- swap params ---

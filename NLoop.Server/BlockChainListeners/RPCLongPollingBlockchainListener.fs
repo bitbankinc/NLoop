@@ -8,23 +8,20 @@ open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Logging
+open NLoop.Domain
 open NLoop.Server
 
-type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, actor) =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, actor)
+type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, actor, cc) =
+  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cc, actor)
   let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
   let _stoppingCts = new CancellationTokenSource()
 
-  member private this.Worker(cc, ct) = unitTask {
-    let client = getBlockchainClient(cc)
-    let! tip = client.GetBestBlock(ct)
-    do! this.OnBlock(cc, tip.Block, ct)
-  }
-
   member private this.ExecuteAsync(ct) = unitTask {
-    for cc in opts.Value.OffChainCrypto do
-      do! this.Worker(cc, ct)
+    while true do
+      let client = getBlockchainClient(cc)
+      let! tip = client.GetBestBlock(ct)
+      do! this.OnBlock(tip.Block, ct)
       do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
   }
 

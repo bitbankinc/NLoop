@@ -53,7 +53,7 @@ module CustomHandlers =
         let! info = rpcClient.GetBlockchainInfoAsync()
         ctx.SetBlockHeight(cc, info.Blocks)
         if info.VerificationProgress < 1.f then
-          errorMsg <- $"{cc} blockchain is not synced. VerificationProgress: %f{info.VerificationProgress}"
+          errorMsg <- $"{cc} blockchain is not synced. VerificationProgress: %f{info.VerificationProgress}. Please wait until its done."
         else
           ()
 

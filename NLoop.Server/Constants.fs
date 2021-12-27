@@ -56,4 +56,5 @@ module Constants =
 
   let [<Literal>] MaxRateDiffDelta: int64<ppm> = 100L<ppm>
 
-  let [<Literal>] BlockchainLongPollingIntervalSec = 10.
+  let [<Literal>] BlockchainLongPollingIntervalSec = 8.
+
