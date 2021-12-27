@@ -39,8 +39,10 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
       let cli = opts.Value.GetRPCClient(cryptoCode)
       let! us = cli.ListUnspentAsync()
       let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
-      if whatWeHave < amount then return Error (UTXOProviderError.InsufficientFunds(whatWeHave, amount)) else
-      return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
+      if whatWeHave < amount then
+        return Error (UTXOProviderError.InsufficientFunds({| WhatWeHave = whatWeHave; WhatWeNeed = amount |}))
+      else
+        return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
     }
 
     member this.SignSwapTxPSBT(psbt, cryptoCode) = task {

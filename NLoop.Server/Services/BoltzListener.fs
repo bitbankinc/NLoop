@@ -33,7 +33,6 @@ type BoltzListener(swapServerClient: ISwapServerClient,
         // Just to check the connection on the startup.
         let! _boltzVersion = swapServerClient.CheckConnection(ct).ConfigureAwait(false)
 
-        // todo: handle cancellation
         while not <| ct.IsCancellationRequested do
           ct.ThrowIfCancellationRequested()
           let ts = statuses.Values |> Seq.cast<_> |> Array.ofSeq

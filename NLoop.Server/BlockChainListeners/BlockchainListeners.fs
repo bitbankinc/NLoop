@@ -62,3 +62,9 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFac
 
   interface IBlockChainListener with
     member this.CurrentHeight cc = listeners.[cc].CurrentTip.Height
+
+  interface ISwapEventListener with
+    member this.RegisterSwap(swapId) =
+      listeners |> Seq.iter(fun l -> (l.Value :> ISwapEventListener).RegisterSwap(swapId))
+    member this.RemoveSwap(swapId) =
+      listeners |> Seq.iter(fun l -> (l.Value :> ISwapEventListener).RemoveSwap(swapId))

@@ -13,7 +13,7 @@ type IBroadcaster =
   abstract member BroadcastTx: tx: Transaction * cryptoCode: SupportedCryptoCode -> Task
 
 type UTXOProviderError =
-  | InsufficientFunds of whatWeHave: Money * whatWeNeed: Money
+  | InsufficientFunds of {| WhatWeHave: Money; WhatWeNeed: Money |}
 
 type IUTXOProvider =
   /// Get UTXO from your wallet

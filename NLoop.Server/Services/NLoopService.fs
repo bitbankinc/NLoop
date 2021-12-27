@@ -63,7 +63,6 @@ type NLoopExtensions() =
 
       if (not <| test) then
         this
-          .AddHostedService<SwapEventListeners>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
@@ -102,6 +101,7 @@ type NLoopExtensions() =
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<ISwapEventListener, BoltzListener>()
+        .AddSingleton<ISwapEventListener, BlockchainListeners>()
         .AddSingleton<IBlockChainListener, BlockchainListeners>()
         |> ignore
       let getBCClient(sc: IServiceProvider): GetBlockchainClient =
