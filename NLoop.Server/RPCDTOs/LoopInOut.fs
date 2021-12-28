@@ -133,6 +133,7 @@ type LoopOutLimits = {
   MaxRoutingFee: Money
   MaxPrepayRoutingFee: Money
   MaxMinerFee: Money
+  MaxCLTVDelta: BlockHeightOffset32
   SwapTxConfRequirement: BlockHeightOffset32
 }
   with
@@ -146,7 +147,7 @@ type LoopOutLimits = {
 
 type LoopOutRequest = {
   [<JsonPropertyName "channel_id">]
-  OutgoingChannelIds: ShortChannelId array
+  ChannelIds: ShortChannelId array voption
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
   [<JsonPropertyName "address">]
@@ -181,7 +182,23 @@ type LoopOutRequest = {
   SweepConfTarget: int voption
 }
   with
+  member this.OutgoingChannelIds =
+    this.ChannelIds |> ValueOption.toArray |> Array.concat
 
+  static member Instance = {
+    ChannelIds = ValueNone
+    Address = None
+    PairId = None
+    Amount = Money.Zero
+    SwapTxConfRequirement = None
+    Label = None
+    MaxSwapRoutingFee = ValueNone
+    MaxPrepayRoutingFee = ValueNone
+    MaxSwapFee = ValueNone
+    MaxPrepayAmount = ValueNone
+    MaxMinerFee = ValueNone
+    SweepConfTarget = ValueNone
+  }
   member this.AcceptZeroConf =
     match this.SwapTxConfRequirement with
     | None
@@ -210,6 +227,7 @@ type LoopOutRequest = {
         this.SwapTxConfRequirement
         |> Option.map(uint32 >> BlockHeightOffset32)
         |> Option.defaultValue(d.SwapTxConfRequirement)
+      MaxCLTVDelta = d.MaxCLTVDelta
     }
   member this.PairIdValue: PairId =
     this.PairId

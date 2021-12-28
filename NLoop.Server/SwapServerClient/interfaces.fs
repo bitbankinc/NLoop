@@ -8,8 +8,10 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Domain
+open NLoop.Server
 open NLoop.Server.DTOs
 open FSharp.Control.Tasks
+open NLoop.Server.DTOs
 
 /// DTO against swap server (e.g. boltz-backend, loop-server)
 [<RequireQualifiedAccess>]
@@ -134,9 +136,14 @@ module SwapDTO =
       | MinerFeeTooHigh(ourMax, actual) ->
         $"Miner fee specified by the server is too high (ourMax: {ourMax}, The amount they specified {actual})"
       | CLTVDeltaTooShort(ourMax, actual) ->
-        $"CLTVDelta they say they want to specify for their invoice is too short for our HTLCConfirmation parameter.
-        (our acceptable max is {ourMax}, actual value is {actual})
-        "
+        "CLTVDelta they say they want to specify for their invoice is too short for our HTLCConfirmation parameter. " +
+        $"(our acceptable max is {ourMax}, actual value is {actual})" +
+        $"You may want to set a longer value to \"{nameof(LoopOutRequest.Instance.SwapTxConfRequirement)}\" in a loopout request, " +
+        "The risk of having longer value is that worst-case swap time gets longer. " +
+        "This means that the counterparty will e a larger chance to have a incentive to quit the " +
+        "swap in case of sudden price fluctuation. " +
+        $"Another way is to make {nameof(LoopOutRequest.Instance.SwapTxConfRequirement)} shorter, you will have a larger chance" +
+        $"to lose your funds in case of reorg in this case."
 
   type LoopOutQuoteRequest = {
     Amount: Money
@@ -159,9 +166,12 @@ module SwapDTO =
       elif this.SweepMinerFee > limits.MaxMinerFee then
         (limits.MaxMinerFee, this.SweepMinerFee) |> UnAcceptableQuoteError.MinerFeeTooHigh |> Error
       else
-        let ourAcceptableMaxHTLCConf = limits.SwapTxConfRequirement + Swap.Constants.DefaultSweepConfTargetDelta
-        if this.CltvDelta > ourAcceptableMaxHTLCConf then
-          (ourAcceptableMaxHTLCConf, this.CltvDelta) |> UnAcceptableQuoteError.CLTVDeltaTooShort |> Error
+        let ourAcceptableMaxCLTVDelta =
+          limits.SwapTxConfRequirement
+            + Swap.Constants.DefaultSweepConfTargetDelta
+            + limits.MaxCLTVDelta
+        if this.CltvDelta > ourAcceptableMaxCLTVDelta then
+          (ourAcceptableMaxCLTVDelta, this.CltvDelta) |> UnAcceptableQuoteError.CLTVDeltaTooShort |> Error
         else
           Ok ()
 

@@ -86,7 +86,7 @@ module CustomHandlers =
             .LogError $"{ex}"
 
       if maybeResult.IsNone then
-        return! error503 $"Failed to find route to Boltz server. Make sure the channel is open" next ctx
+        return! error503 $"Failed to find route to Boltz server. Make sure the channel is open and active" next ctx
       else
         let chanIds =
           maybeResult.Value.Value

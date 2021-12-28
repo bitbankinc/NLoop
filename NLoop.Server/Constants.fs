@@ -2,6 +2,7 @@ namespace NLoop.Server
 
 open System
 open System.IO
+open DotNetLightning.Utils.Primitives
 open NLoop.Domain
 
 [<RequireQualifiedAccess>]
@@ -57,4 +58,3 @@ module Constants =
   let [<Literal>] MaxRateDiffDelta: int64<ppm> = 100L<ppm>
 
   let [<Literal>] BlockchainLongPollingIntervalSec = 8.
-

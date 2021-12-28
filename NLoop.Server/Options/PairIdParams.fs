@@ -23,6 +23,14 @@ type PairIdDefaultLoopOutParameters = {
   /// If the sweep feerate is above this value, autolooper will not dispatch the swap.
   SweepFeeRateLimit: FeeRate
 
+  /// In case of loop-out, we first check the value they will put into their invoice is not too long.
+  /// If it is too short, the counterparty might lose their funds, so that is their business, we don't have to validate.
+  /// If it is too long, they will have a more incentive to quit the swap when the price fluctuates suddenly, this
+  /// is a inherent risk for multi-asset swap. If we think it as an options trading, it means they will have a longer
+  /// expiration date.
+  /// see: https://github.com/BoltzExchange/boltz-backend/issues/264
+  MaxCLTVDelta: BlockHeightOffset32
+
   SwapTxConfRequirement: BlockHeightOffset32
   /// SweepConfTarget for estimating sweep tx (claim tx) fee rate.
   /// Used for Loop Out
@@ -55,6 +63,10 @@ module PairIdExtensions =
           // in loop-out, base asset is an onchain.
           SweepConfTarget = baseP.SweepConfTarget
           SweepFeeRateLimit = baseP.SweepFeeRateLimit
+          MaxCLTVDelta =
+            // in case of a swap with the same asset, we don't have options-trading risk.
+            // so we can set a longer value.
+            BlockHeightOffset32(144u)
         }
       match this with
       | PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC) ->
@@ -69,6 +81,7 @@ module PairIdExtensions =
           p
             with
             MaxSwapFeePPM = 30000L<ppm> // 3%
+            MaxCLTVDelta = BlockHeightOffset32(40u)
         }
       | _ -> p
 

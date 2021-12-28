@@ -335,6 +335,7 @@ type FeePortion = {
             MaxRoutingFee = route
             MaxMinerFee = miner
             SwapTxConfRequirement = BlockHeightOffset32.Zero // unused dummy
+            MaxCLTVDelta = BlockHeightOffset32.Zero // unused dummy
           }
           limits.WorstCaseFee
         if fees > feeLimit then
@@ -580,7 +581,7 @@ type SwapBuilder = {
               Task.FromResult None
         let req = {
           LoopOutRequest.Address = addr
-          OutgoingChannelIds = channels
+          ChannelIds = channels |> ValueSome
           PairId = pairId |> Some
           Amount = amount
           SwapTxConfRequirement =
