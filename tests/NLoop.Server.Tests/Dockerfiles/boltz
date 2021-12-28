@@ -1,14 +1,20 @@
-FROM node:14.16.0-alpine3.10 as build
+FROM node:16.13.1-alpine3.14 as build
 
 LABEL maintainer="Joe Miyamoto <joemphilips@gmail.com>"
-ARG BOLTZ_VERSION=trim-cookie-suffix
+ARG BOLTZ_VERSION=master
 
 # Install dependencies and install/build lnd.
 RUN apk add --no-cache --update alpine-sdk \
-    git \
-	python \
+  git \
 	g++ \
-    make 
+  python2 \
+  make \
+  jq \
+  psmisc \
+  openssl \
+  libevent-dev \
+  zeromq-dev \
+  boost-dev
 
 # Copy in the local repository to build from.
 RUN git clone --quiet --depth 1 --single-branch --branch $BOLTZ_VERSION https://github.com/BoltzExchange/boltz-backend /boltz-backend
@@ -25,7 +31,7 @@ RUN npm run compile
 
 RUN pwd && ls .
 
-FROM node:14.16.0-alpine3.10 as final
+FROM node:16.13.1-alpine3.14 as final
 
 COPY --from=build /boltz-backend /boltz-backend
 
