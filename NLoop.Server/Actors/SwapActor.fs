@@ -255,6 +255,7 @@ type SwapActor(broadcaster: IBroadcaster,
         let! invoice =
           let amt = loopIn.Amount.ToLNMoney()
           let onPaymentFinished = fun (amt: Money) ->
+            logger.LogInformation $"Received on-chain payment for loopIn swap {maybeSwapId}"
             match maybeSwapId with
             | Some i ->
               this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), (nameof(invoiceProvider)))
@@ -263,6 +264,7 @@ type SwapActor(broadcaster: IBroadcaster,
               Task.CompletedTask
 
           let onPaymentCanceled = fun (msg: string) ->
+            logger.LogWarning $"Invoice for the loopin swap {maybeSwapId} has been cancelled"
             match maybeSwapId with
             | Some i ->
               this.Execute(i, Swap.Command.MarkAsErrored(msg), nameof(invoiceProvider))

@@ -81,11 +81,10 @@ module Transactions =
     |> Ok
 
   let dummySwapTx (feeRate) =
+    let coinBase = Network.RegTest.CreateTransaction()
+    coinBase.Outputs
+      .Add(TxOut(Money.Coins(1.1m), Scripts.pubkey1)) |> ignore
     let dummyCoin =
-      let alice = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
-      let coinBase = Network.RegTest.CreateTransaction()
-      coinBase.Outputs
-        .Add(TxOut(Money.Coins(1.1m), alice)) |> ignore
       coinBase.Outputs.AsCoins()
       |> Seq.cast<ICoin>
     let dummyChange = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
@@ -96,7 +95,13 @@ module Transactions =
       (feeRate)
       (dummyChange)
       Network.RegTest
-    |> Result.map(fun psbt -> psbt.Finalize().ExtractTransaction())
+    |> Result.map(fun psbt ->
+      psbt
+        .AddTransactions(coinBase)
+        .SignWithKeys(Scripts.privKey1)
+        .Finalize()
+        .ExtractTransaction()
+      )
     |> Result.valueOr(failwith)
 
   let createRefundTx
@@ -140,7 +145,7 @@ module Transactions =
       |> Ok
 
   let hex = HexEncoder()
-  let dummyRefundTxFee feeRate =
+  let dummyRefundTx feeRate =
     let prev = dummySwapTx feeRate
     let refundKey =
       "4141414141414141414141414141414141414141414141414141414141414141"
@@ -156,4 +161,7 @@ module Transactions =
       BlockHeight.One
       Network.RegTest
     |> Result.valueOr(fun e -> failwith $"Failed create dummy fund tx: {e.Message}")
+  let dummyRefundTxFee feeRate =
+    let prev = dummySwapTx feeRate
+    dummyRefundTx feeRate
     |> fun t -> t.GetFee(prev.Outputs.AsCoins() |> Seq.cast<_> |> Seq.toArray)

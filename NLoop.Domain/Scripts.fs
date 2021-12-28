@@ -43,17 +43,21 @@ module Scripts =
     l.Add(Op.op_Implicit OpcodeType.OP_CHECKSIG)
     Script(l)
 
+  let private hex =  HexEncoder()
+  let internal privKey1 = new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
+  let internal privKey2 = new Key(hex.DecodeData("0202020202020202020202020202020202020202020202020202020202020202"))
+  let internal pubkey1 = privKey1.PubKey
+  let internal pubkey2 = privKey2.PubKey
   let dummySwapScriptV1 =
     swapScriptV1
       (PaymentPreimage.Create(Array.zeroCreate PaymentPreimage.LENGTH).Hash)
-      (PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619"))
-      (PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619"))
+      pubkey1
+      pubkey2
       BlockHeight.One
 
   let private checkOpcode (os: Op []) index expected =
     (os.[index].Code = expected)
     |> Result.requireTrue $"The {index}th opcode must be {expected}, it was {os.[index].Code}"
-  let private hex =  HexEncoder()
   let private checkPushData (os: Op []) index expected =
     (Utils.ArrayEqual(os.[index].PushData, expected))
     |> Result.requireTrue
@@ -103,5 +107,5 @@ module Scripts =
     }
 
   let isSuccessWitness(witness: WitScript): bool =
-    let isRefund = (witness.PushCount = 3)
+    let isRefund = (witness.PushCount = 3) && (witness.Pushes |> Seq.item 1 |> Array.isEmpty)
     not <| isRefund

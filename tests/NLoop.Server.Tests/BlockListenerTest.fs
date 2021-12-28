@@ -182,4 +182,12 @@ type BlockchainListenerTest() =
       Assert.Equal<uint256 list>(expectedUnConfirmedBlocks |> List.map(fun b -> b.Block.Header.GetHash()), unconfirmedBlocks |> Seq.toList)
     }
 
+  [<Fact>]
+  member this.BlockchainListenersTest() =
+    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+        ()
+      ))
+
+    let service = server.Services.GetRequiredService<ISwapEventListener>()
+    ()
 
