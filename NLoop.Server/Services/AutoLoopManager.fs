@@ -314,6 +314,7 @@ type FeePortion = {
       // our total limit. We do this so that we can provide more specific reasons for not executing swaps.
       let feeLimit = ppmToSat(swapAmount, this.PartsPerMillion)
       let minerFee = scaleMinerFee(quote.SweepMinerFee)
+      let swapFee = quote.SwapFee
       if minerFee > feeLimit then
         Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = minerFee; OurLimit = feeLimit |})
       elif quote.SwapFee > feeLimit then
@@ -382,7 +383,7 @@ type FeePortion = {
 
 type FeeCategoryLimit = {
   MaximumPrepay: Money
-  MaximumSwapFeePPM: int64<ppm>
+  MaximumSwapFee: Money
   MaximumRoutingFeePPM: int64<ppm>
   MaximumPrepayRoutingFeePPM: int64<ppm>
   MaximumMinerFee: Money
@@ -393,7 +394,7 @@ type FeeCategoryLimit = {
     let p  = pairId.DefaultLoopOutParameters
     {
       MaximumPrepay = p.MaxPrepay
-      MaximumSwapFeePPM = p.MaxSwapFeePPM
+      MaximumSwapFee = p.MaxSwapFee
       MaximumRoutingFeePPM = defaultMaxRoutingFeePPM
       MaximumPrepayRoutingFeePPM = defaultMaxPrepayRoutingFeePPM
       MaximumMinerFee = p.MaxMinerFee
@@ -401,8 +402,8 @@ type FeeCategoryLimit = {
     }
   interface IFeeLimit with
     member this.Validate(): Result<unit, string> =
-      if this.MaximumSwapFeePPM <= 0L<ppm> then
-        Error $"SwapFeePPM must be positive, it was {this.MaximumSwapFeePPM}"
+      if this.MaximumSwapFee <= Money.Zero then
+        Error $"SwapFeePPM must be positive, it was ({this.MaximumSwapFee.Satoshi} sats)"
       elif this.MaximumRoutingFeePPM <= 0L<ppm> then
         Error $"MaximumRoutingFeePPM must be positive, it was {this.MaximumRoutingFeePPM}"
       elif this.MaximumPrepayRoutingFeePPM <= 0L<ppm> then
@@ -424,9 +425,8 @@ type FeeCategoryLimit = {
 
     /// Checks whether the quote provided is within our fee limits for the swap amount.
     member this.CheckLoopOutLimits(amount: Money, quote: SwapDTO.LoopOutQuote): Result<unit, SwapDisqualifiedReason> =
-      let maxFee = ppmToSat(amount, this.MaximumSwapFeePPM)
-      if quote.SwapFee > maxFee then
-        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = maxFee |})
+      if quote.SwapFee > this.MaximumSwapFee then
+        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = this.MaximumSwapFee |})
       elif quote.SweepMinerFee > this.MaximumMinerFee then
         Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = quote.SweepMinerFee; OurLimit = this.MaximumMinerFee |})
       elif quote.PrepayAmount > this.MaximumPrepay then
@@ -440,9 +440,8 @@ type FeeCategoryLimit = {
       prepayMaxFee, routeMaxFee, this.MaximumMinerFee
 
     member this.CheckLoopInLimits(amount: Money, quote: SwapDTO.LoopInQuote): Result<unit, SwapDisqualifiedReason> =
-      let maxFee = ppmToSat(amount, this.MaximumSwapFeePPM)
-      if quote.SwapFee > maxFee then
-        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = maxFee |})
+      if quote.SwapFee > this.MaximumSwapFee then
+        Error <| SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = quote.SwapFee; OurLimit = this.MaximumSwapFee |})
       elif quote.MinerFee > this.MaximumMinerFee then
         Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = quote.MinerFee; OurLimit = this.MaximumMinerFee |})
       else

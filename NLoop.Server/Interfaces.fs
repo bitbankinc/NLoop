@@ -114,3 +114,6 @@ type IBlockChainClientExtensions =
   }
 
 type GetBlockchainClient = SupportedCryptoCode -> IBlockChainClient
+
+type ExchangeRate = decimal
+type TryGetExchangeRate = PairId * CancellationToken -> Task<ExchangeRate option>

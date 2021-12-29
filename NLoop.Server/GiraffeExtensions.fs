@@ -92,7 +92,7 @@ module CustomHandlers =
           maybeResult.Value.Value
           |> List.head
           |> fun firstRoute -> firstRoute.ShortChannelId
-        logger.LogDebug($"paying through following channel ({chanIds})")
+        logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
         return! next ctx
     }
 

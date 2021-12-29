@@ -39,6 +39,7 @@ module SwapDTO =
                          offChainAmountWePay: Money,
                          maxSwapServiceFee: Money,
                          maxPrepay: Money,
+                         rate: ExchangeRate,
                          n: Network): Result<_, string> =
       let mutable addr = null
       let mutable e = null
@@ -67,7 +68,7 @@ module SwapDTO =
           Error $"The amount specified in invoice ({prepayAmount.Satoshi} sats) was larger than the max we can accept ({maxPrepay})"
         else
         let swapServiceFee =
-          offChainAmountWePay.Satoshi + prepayAmount.Satoshi - this.OnchainAmount.Satoshi
+          decimal (offChainAmountWePay.Satoshi + prepayAmount.Satoshi) - (decimal(this.OnchainAmount.Satoshi) * rate)
           |> Money.Satoshis
         if maxSwapServiceFee < swapServiceFee then
           Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
@@ -91,7 +92,13 @@ module SwapDTO =
     TimeoutBlockHeight: BlockHeight
   }
     with
-    member this.Validate(preimageHash: uint256, refundPubKey, ourInvoiceAmount: Money, maxSwapServiceFee: Money, onChainNetwork: Network): Result<_, string> =
+    member this.Validate(preimageHash: uint256,
+                         refundPubKey,
+                         ourInvoiceAmount: Money,
+                         maxSwapServiceFee: Money,
+                         onChainNetwork: Network,
+                         rate: ExchangeRate
+                         ): Result<_, string> =
       let mutable addr = null
       let mutable e = null
       try
@@ -101,19 +108,19 @@ module SwapDTO =
       | :? FormatException as ex ->
         e <- ex
         ()
-      if isNull addr then Error($"Boltz returned invalid bitcoin address ({this.Address}): error msg: {e.Message}") else
+      if isNull addr then Error $"Boltz returned invalid bitcoin address ({this.Address}): error msg: {e.Message}" else
       let actualSpk = addr.ScriptPubKey
       let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
       if (actualSpk <> expectedSpk) then
-        Error ($"Address {this.Address} and redeem script ({this.RedeemScript}) does not match")
+        Error $"Address {this.Address} and redeem script ({this.RedeemScript}) does not match"
       else
         let swapServiceFee =
-          ourInvoiceAmount - this.ExpectedAmount
+          (decimal ourInvoiceAmount.Satoshi) - (decimal this.ExpectedAmount.Satoshi / rate)
+          |> Money.Satoshis
         if maxSwapServiceFee < swapServiceFee then
-          Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+          Error $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable fee ({maxSwapServiceFee.Satoshi} sats)"
         else
           (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
-
 
   type GetNodesResponse = {
     Nodes: Map<string, NodeInfo>
@@ -153,6 +160,7 @@ module SwapDTO =
 
   /// estimates for the fees making up the total swap cost for the client.
   type LoopOutQuote = {
+    /// An amount the service will take in swap. unit is an off-chain asset
     SwapFee: Money
     SweepMinerFee: Money
     SwapPaymentDest: PubKey
@@ -183,6 +191,7 @@ module SwapDTO =
   }
 
   type LoopInQuote = {
+    /// An amount the service will take in swap. unit is an off-chain asset
     SwapFee: Money
     MinerFee: Money
   }

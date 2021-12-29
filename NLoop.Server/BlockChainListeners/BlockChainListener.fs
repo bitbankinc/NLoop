@@ -72,7 +72,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
   let swaps = ConcurrentDictionary<SwapId, _>()
 
   let newChainTipAsync newB = task {
-      logger.LogInformation $"New blockchain tip {newB} for {cc}"
+      logger.LogDebug $"New blockchain tip {newB} for {cc}"
       let cmd =
         (newB, cc)
         |> Swap.Command.NewBlock

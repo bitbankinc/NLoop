@@ -213,7 +213,7 @@ type LoopOutRequest = {
         |> ValueOption.defaultValue(d.MaxPrepay)
       MaxSwapFee =
         this.MaxSwapFee
-        |> ValueOption.defaultValue(ppmToSat(this.Amount, d.MaxSwapFeePPM))
+        |> ValueOption.defaultValue(d.MaxSwapFee)
       MaxRoutingFee =
         this.MaxSwapRoutingFee
         |> ValueOption.defaultValue(d.MaxRoutingFee)

@@ -71,7 +71,7 @@ type NLoopOptions() =
   member val OnChainCrypto = [|SupportedCryptoCode.BTC; SupportedCryptoCode.LTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 
-  member this.PairIds(cat: Swap.Category) =
+  member this.GetPairIds(cat: Swap.Category) =
     match cat with
     | Swap.Category.Out ->
       seq [
@@ -86,10 +86,15 @@ type NLoopOptions() =
             PairId(baseAsset, quoteAsset)
       ]
 
+  member this.PairIds =
+    seq [this.GetPairIds Swap.Category.Out; this.GetPairIds Swap.Category.In]
+    |> Seq.concat
+    |> Seq.distinct
+
   member this.SwapGroups =
     let g cat =
       seq [
-        for p in this.PairIds(cat) ->
+        for p in this.GetPairIds(cat) ->
           {
             Swap.Group.PairId = p
             Swap.Group.Category = cat
@@ -115,6 +120,10 @@ type NLoopOptions() =
   member val LndMacaroonFilePath = null with get, set
   member val LndGrpcServer = "https://localhost:10009" with get, set
   member val LndAllowInsecure = false with get, set
+
+  // --- exchange ---
+  member val Exchanges = [| "BitBank" |] with get, set
+  // --- ---
 
   member val TargetIncomingLiquidityRatio = 50s<percent> with get, set
 

@@ -5,6 +5,7 @@ open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open System.Threading.Tasks
 open BoltzClient
 open EventStore.ClientAPI
 open EventStore.ClientAPI
@@ -78,6 +79,9 @@ type NLoopExtensions() =
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
           )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
+          )
           |> ignore
 
       this
@@ -103,17 +107,20 @@ type NLoopExtensions() =
         .AddSingleton<ISwapEventListener, BoltzListener>()
         |> ignore
 
+      this
+        .AddSingleton<ExchangeRateProvider>()
+        .AddSingleton<TryGetExchangeRate>(Func<IServiceProvider,_> (fun sp ->
+          sp.GetService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
+        ))
+        |> ignore
       // Workaround to register one instance as a multiple interfaces.
       // see: https://github.com/aspnet/DependencyInjection/issues/360
       this.AddSingleton<BlockchainListeners>()
         .AddSingleton<ISwapEventListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> ISwapEventListener)
         .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
         |> ignore
-      let getBCClient(sc: IServiceProvider): GetBlockchainClient =
-        let opts = sc.GetService<IOptions<NLoopOptions>>()
-        opts.Value.GetBlockChainClient
       this
-        .AddSingleton<GetBlockchainClient>(Func<_,_> getBCClient)
+        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient))
         |> ignore
       this
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()

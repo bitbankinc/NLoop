@@ -71,6 +71,7 @@ type SwapActor(broadcaster: IBroadcaster,
                logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator,
                swapServerClient: ISwapServerClient,
+               tryGetExchangeRate: TryGetExchangeRate,
                conn: IEventStoreConnection
   )  =
 
@@ -203,11 +204,15 @@ type SwapActor(broadcaster: IBroadcaster,
             req.Limits.SwapTxConfRequirement
           SwapTxHeight = None
         }
+        let! exchangeRate =
+          tryGetExchangeRate(pairId, ct)
+          |> Task.map(Result.requireSome $"exchange rate for {pairId} is not avilable")
         match outResponse.Validate(preimageHash.Value,
                                    claimKey.PubKey,
                                    req.Amount,
                                    req.Limits.MaxSwapFee,
                                    req.Limits.MaxPrepay,
+                                   exchangeRate,
                                    n) with
         | Error e ->
           return! Error e
@@ -290,11 +295,15 @@ type SwapActor(broadcaster: IBroadcaster,
           let swapId = inResponse.Id |> SwapId
           ct.ThrowIfCancellationRequested()
           maybeSwapId <- swapId |> Some
+          let! exchangeRate =
+            tryGetExchangeRate(pairId, ct)
+            |> Task.map(Result.requireSome $"exchange rate for {pairId} is not available")
           match inResponse.Validate(invoice.PaymentHash.Value,
                                     refundKey.PubKey,
                                     loopIn.Amount,
                                     loopIn.Limits.MaxSwapFee,
-                                    onChainNetwork) with
+                                    onChainNetwork,
+                                    exchangeRate) with
           | Error e ->
             do! this.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)

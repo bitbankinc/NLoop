@@ -15,7 +15,9 @@ type PairIdDefaultLoopOutParameters = {
   /// However, in order to be a trustless exchange, we can't take the response from the server as granted, thus we must
   /// query other source of an price information and check the price specified by the server is in the acceptable range.
   MaxPrepay: Money
-  MaxSwapFeePPM: int64<ppm>
+
+  /// The swap fee we pay for the server. calculated in off-chain asset.
+  MaxSwapFee: Money
   MaxRoutingFee: Money
   MaxPrepayRoutingFee: Money
   MaxMinerFee: Money
@@ -55,7 +57,7 @@ module PairIdExtensions =
       // most default values can be derived from CryptoCode parameters.
       let p = {
           PairIdDefaultLoopOutParameters.MaxPrepay = quoteP.MaxPrepay
-          MaxSwapFeePPM = 5000L<ppm> // 0.5%
+          MaxSwapFee = Money.Satoshis(20000L)
           MaxRoutingFee = quoteP.MaxRoutingFee
           MaxPrepayRoutingFee = quoteP.MaxPrepayRoutingFee
           MaxMinerFee = baseP.MaxMinerFee
@@ -70,18 +72,15 @@ module PairIdExtensions =
         }
       match this with
       | PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC) ->
-        {
-          p
-            with
-            MaxSwapFeePPM = 20000L<ppm>
-        }
+        p
 
       | PairId(SupportedCryptoCode.LTC, SupportedCryptoCode.BTC) ->
         {
           p
             with
-            MaxSwapFeePPM = 30000L<ppm> // 3%
             MaxCLTVDelta = BlockHeightOffset32(40u)
+            // Why don't we expect cheaper? isn't that the point of using LTC?
+            MaxSwapFee = Money.Satoshis(6000L)
         }
       | _ -> p
 

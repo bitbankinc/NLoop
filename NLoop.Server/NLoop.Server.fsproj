@@ -12,6 +12,7 @@
     <ProjectReference Include="..\LndClient\LndClient.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="DigitalRuby.ExchangeSharp" Version="0.9.1" />
     <PackageReference Include="FSharp.Control.Reactive" Version="5.0.2" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
@@ -31,7 +32,6 @@
     <Compile Include="Options\ChainOptions.fs" />
     <Compile Include="Options\CryptoCodeParams.fs" />
     <Compile Include="Options\PairIdParams.fs" />
-    <Compile Include="RPCDTOs\Client.fs" />
     <Compile Include="RPCDTOs\Common.fs" />
     <Compile Include="RPCDTOs\LoopInOut.fs" />
     <Compile Include="RPCDTOs\AutoLoop.fs" />
@@ -53,6 +53,7 @@
     <Compile Include="Projections\RecentSwapFailureProjection.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
     <Compile Include="Services\LightningInvoiceProvider.fs" />
+    <Compile Include="Services\ExchangeRateProvider.fs" />
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\BoltzListener.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />

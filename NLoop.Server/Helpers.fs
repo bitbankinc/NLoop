@@ -8,6 +8,8 @@ type [<Measure>] ppm
 
 type ComparableOutpoint = uint256 * uint
 
+exception NLoopConfigException of msg: string
+
 [<AutoOpen>]
 module internal Helpers =
   let getChainOptionString (chain: SupportedCryptoCode) (optionSubSectionName: string) =
