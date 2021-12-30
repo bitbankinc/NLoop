@@ -1089,7 +1089,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_prepay_routing_fee { get; set; }
     
-        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.</summary>
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
@@ -1150,7 +1150,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
-        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.</summary>
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
@@ -1489,10 +1489,10 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_kvbyte", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Sweep_fee_rate_sat_per_kvbyte { get; set; }
     
-        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts per million of the swap volume.
+        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as satoshis.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int? Max_swap_fee_ppm { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_swap_fee { get; set; }
     
         [Newtonsoft.Json.JsonProperty("max_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Max_routing_fee_ppm { get; set; }

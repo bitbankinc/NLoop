@@ -512,7 +512,7 @@
           },
           "max_swap_fee": {
             "type": "integer",
-            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.",
+            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
             "format": "int64",
             "nullable": true
           },
@@ -570,7 +570,7 @@
           },
           "max_swap_fee": {
             "type": "integer",
-            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap.",
+            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
             "format": "int64",
             "nullable": true
           },
@@ -768,9 +768,9 @@
             "description": "The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.\n",
             "nullable": true
           },
-          "max_swap_fee_ppm": {
+          "max_swap_fee": {
             "type": "integer",
-            "description": "The maximum fee paid to the server for facilitating the swap, expressed as parts per million of the swap volume.\n",
+            "description": "The maximum fee paid to the server for facilitating the swap, expressed as satoshis.\n",
             "nullable": true
           },
           "max_routing_fee_ppm": {

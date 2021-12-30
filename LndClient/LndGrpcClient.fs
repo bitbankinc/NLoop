@@ -350,6 +350,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           req.PaymentRequest <- param.Invoice.ToString()
           req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
           req.FeeLimitSat <- param.MaxFee.Satoshi
+          req.TimeoutSeconds <- param.Invoice.Expiry.Second |> int
           routerClient.SendPaymentV2(req).ResponseStream
 
         let f (s:Payment) =
@@ -371,7 +372,9 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
               | Payment.Types.PaymentStatus.Succeeded ->
                 result <- status |> f |> Ok |> Some
               | Payment.Types.PaymentStatus.Failed ->
-                result <- status.FailureReason |> Enum.GetName |> Error |> Some
+                result <- $"payment failed. reason: {status.FailureReason}" |> Error |> Some
+              | Payment.Types.PaymentStatus.InFlight ->
+                ()
               | s ->
                 result <- $"Unexpected payment state: {s}" |> Error |> Some
           return

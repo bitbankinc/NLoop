@@ -54,7 +54,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                 do! handleError swapId e
             with
             | ex ->
-                do! handleError swapId ex.Message
+                do! handleError swapId (ex.ToString())
           })
         |> Observable.subscribe(id)
       subscriptions.Add subsc1

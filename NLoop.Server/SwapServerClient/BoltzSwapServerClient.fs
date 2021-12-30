@@ -170,19 +170,16 @@ type BoltzSwapServerClient(b: BoltzClient) =
       let ct = defaultArg ct CancellationToken.None
       task {
         let mutable result = null
-        let mutable lastStatus = SwapStatusType.SwapCreated
         while result |> isNull && not <| ct.IsCancellationRequested do
-          do! Task.Delay 6000
           let! resp = b.GetSwapStatusAsync(swapId.Value, ct).ConfigureAwait(false)
-          if lastStatus = resp.SwapStatus then () else
-          lastStatus <- resp.SwapStatus
           match resp.Transaction with
           | Some {Tx = tx} ->
              result <- tx
           | None ->
             ()
+          do! Task.Delay 6000
         if result |> isNull then
-          ct.ThrowIfCancellationRequested()
+          failwith "unreachable: result is null"
         return result
       }
 

@@ -108,7 +108,7 @@ type LoopOut = {
       match this.SwapTxHeight with
       | None -> false
       | Some x ->
-        x + this.SwapTxConfRequirement > currentHeight
+        x + this.SwapTxConfRequirement <= currentHeight
   member this.SwapTx =
     this.SwapTxHex
     |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
