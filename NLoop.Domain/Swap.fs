@@ -589,7 +589,7 @@ module Swap =
                 return [FinishedByTimeout(loopOut.Id, msg)] |> enhance
               else
                 match loopOut.SwapTx with
-                | Some tx when loopOut.IsSwapTxConfirmedEnough(height) ->
+                | Some tx when loopOut.IsSwapTxConfirmedEnough(height) && not <| loopOut.IsClaimTxConfirmed ->
                   match! sweepOrBump deps height tx loopOut with
                   | Some txid ->
                     return [ClaimTxPublished(txid);] |> enhance
