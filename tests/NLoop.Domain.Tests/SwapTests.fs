@@ -5,6 +5,7 @@ open DotNetLightning.Utils
 open NBitcoin.DataEncoders
 open NLoop.Domain
 open NLoop.Domain
+open NLoop.Domain
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -375,17 +376,26 @@ type SwapDomainTests() =
       commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
     Assertion.isOk events
 
-  [<Property(MaxTest=10)>]
-  member this.TestLoopOut_Success(loopOut: LoopOut, loopOutParams: Swap.LoopOutParams, testAltcoin: bool, acceptZeroConf: bool) =
-    let baseAsset =
-       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
-    let loopOut = { loopOut.Normalize() with PairId = PairId (baseAsset, SupportedCryptoCode.BTC) }
+  static member TestLoopOut_SuccessTestData =
+    seq [
+      ("basic case", testLoopOut1, testLoopOutParams)
+      let loopOut = { testLoopOut1 with PairId = PairId (SupportedCryptoCode.LTC, SupportedCryptoCode.BTC) }
+      ("test altcoin", loopOut, testLoopOutParams)
+      let loopOut = {testLoopOut1 with SwapTxConfRequirement = BlockHeightOffset32.Zero }
+      ("accept zero conf", loopOut, testLoopOutParams)
+      ()
+    ]
+    |> Seq.map(fun (name, loopOut, loopOutParams) -> [|
+      name |> box
+      loopOut |> box
+      loopOutParams |> box
+    |])
 
+  [<Theory>]
+  [<MemberData(nameof(SwapDomainTests.TestLoopOut_SuccessTestData))>]
+  member this.TestLoopOut_Success(name, loopOut: LoopOut, loopOutParams: Swap.LoopOutParams) =
     let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-    let timeoutBlockHeight = BlockHeight(30u)
-    let onChainAmount = Money.Max(loopOut.OnChainAmount, Money.Satoshis(100000m))
-    let loopOut =
-      loopOut.Sanitize(paymentPreimage, timeoutBlockHeight, onChainAmount, acceptZeroConf)
+    let loopOut = { loopOut with Preimage = paymentPreimage }
     let txBroadcasted = ResizeArray()
     let mutable i = 0
     let repo = getTestRepository()
@@ -437,7 +447,7 @@ type SwapDomainTests() =
       let lastEvent =
         events |> getLastEvent
       let expected =
-        if acceptZeroConf then
+        if loopOut.AcceptZeroConf then
           Swap.Event.ClaimTxPublished(null).Type
         else
           Swap.Event.TheirSwapTxPublished(null).Type
@@ -445,50 +455,40 @@ type SwapDomainTests() =
 
     let genesis =
       loopOut.GetGenesis()
+    let b1 =
+      genesis.CreateNext(pubkey1.WitHash.GetAddress(loopOut.BaseAssetNetwork))
+    b1.Block.AddTransaction(swapTx) |> ignore
     let _ =
-      let block =
-        genesis.CreateNext(pubkey1.WitHash.GetAddress(loopOut.BaseAssetNetwork))
-      block.Block.AddTransaction(swapTx) |> ignore
       // first confirmation
       let events =
         [
-          (Swap.Command.NewBlock(block, baseAsset))
+          (Swap.Command.NewBlock(b1, loopOut.PairId.Base))
         ]
         |> commandsToEvents
-      Assert.Contains(Swap.Event.TheirSwapTxConfirmedFirstTime({| BlockHash = block.Block.Header.GetHash(); Height = block.Height |}),
+      Assert.Contains(Swap.Event.TheirSwapTxConfirmedFirstTime({| BlockHash = b1.Block.Header.GetHash(); Height = b1.Height |}),
                       events |> Result.deref |> List.map(fun e -> e.Data))
-      if acceptZeroConf then
+      if loopOut.AcceptZeroConf then
         let lastEvent = events |> getLastEvent
         let expected = Swap.Event.ClaimTxPublished(null).Type
         Assert.Equal(expected, lastEvent.Data.Type)
 
-    let genesis =
-      {
-        Block = loopOut.BaseAssetNetwork.GetGenesis()
-        Height = BlockHeight.Zero
-      }
-
-    let b1 =
-      genesis.CreateNext(pubkey1.WitHash.GetAddress(loopOut.BaseAssetNetwork))
     let b2 =
       b1.CreateNext(pubkey2.WitHash.GetAddress(loopOut.BaseAssetNetwork))
     let b3 =
       b2.CreateNext(pubkey3.WitHash.GetAddress(loopOut.BaseAssetNetwork))
     let _ =
       // confirm until our claim tx gets published for sure.
-      let commands =
-        [
-          (Swap.Command.NewBlock(b1, baseAsset))
-          (Swap.Command.NewBlock(b2, baseAsset))
-          (Swap.Command.NewBlock(b3, baseAsset))
-        ]
       let events =
-        commandsToEvents commands
+        [
+          (Swap.Command.NewBlock(b2, loopOut.PairId.Base))
+          (Swap.Command.NewBlock(b3, loopOut.PairId.Base))
+        ]
+        |> commandsToEvents
         |> Result.deref
-      if not <| acceptZeroConf then
-        let expected =
-          Swap.Event.ClaimTxPublished(null).Type
-        Assert.Contains(expected, events |> List.map(fun e -> e.Data.Type))
+
+      let expected =
+        Swap.Event.ClaimTxPublished(null).Type
+      Assert.Contains(expected, events |> List.map(fun e -> e.Data.Type))
 
     let claimTx =
       txBroadcasted |> Seq.last
@@ -497,7 +497,7 @@ type SwapDomainTests() =
     b4.Block.AddTransaction(claimTx) |> ignore
     let lastEvent =
       [
-        (Swap.Command.NewBlock(b4, baseAsset))
+        (Swap.Command.NewBlock(b4, loopOut.PairId.Base))
       ]
       |> commandsToEvents
       |> getLastEvent
@@ -512,7 +512,7 @@ type SwapDomainTests() =
       [
         let r =
           let routingFee = LNMoney.Satoshis(100L)
-          { Swap.PayInvoiceResult.AmountPayed = onChainAmount.ToLNMoney() + serverFee
+          { Swap.PayInvoiceResult.AmountPayed = loopOut.OnChainAmount.ToLNMoney() + serverFee
             Swap.PayInvoiceResult.RoutingFee = routingFee }
         (Swap.Command.OffChainOfferResolve(r))
       ]
