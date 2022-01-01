@@ -11,7 +11,7 @@ open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Server
 
-type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, actor, cc) =
+type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactory, getBlockchainClient, getRewindLimit, actor, cc) =
   inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cc, actor)
   let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
@@ -21,7 +21,7 @@ type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>, loggerFactor
     while true do
       let client = getBlockchainClient(cc)
       let! tip = client.GetBestBlock(ct)
-      do! this.OnBlock(tip.Block, ct)
+      do! this.OnBlock(tip.Block, getRewindLimit, ct)
       do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
   }
 

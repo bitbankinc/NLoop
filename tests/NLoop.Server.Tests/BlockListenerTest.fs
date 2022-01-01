@@ -91,6 +91,7 @@ type BlockchainListenerTest() =
        let skipped = allBlocks |> List.filter(fun b -> b <> b4_1 && b <> b5_2 && b <> b0)
        let expected =  allBlocks |> List.filter((<>)b0)
        ("Everything is skipped besides two tips", allBlocks, skipped, expected, [b2_1; b3_1; b4_1])
+
      }
      |> Seq.map(fun (name,
                      inputBlocks: BlockWithHeight list,
@@ -106,7 +107,7 @@ type BlockchainListenerTest() =
 
   [<Theory>]
   [<MemberData(nameof(BlockchainListenerTest.TestBlockchainListenerTestData))>]
-  member this.TestZmqBlockListener(_name: string,
+  member this.TestBlockListener(_name: string,
                                    inputBlocks: BlockWithHeight list,
                                    blocksToSkip: BlockWithHeight list,
                                    expectedBlocks: BlockWithHeight list,
@@ -165,9 +166,12 @@ type BlockchainListenerTest() =
         .AddSingleton<BlockchainListener>()
         .AddSingleton<ISwapActor>(mockSwapActor)
         .AddSingleton<GetBlockchainClient>(getMockBlockChainClient)
+        .AddSingleton<BlockchainListener>(fun sp ->
+          BlockchainListener(sp.GetRequiredService<_>(), sp.GetRequiredService<_>(), sp.GetRequiredService<_>(), SupportedCryptoCode.BTC, sp.GetRequiredService<_>())
+        )
         |> ignore
     ))
-    let listener = server.Services.GetRequiredService<BlockchainListener>()
+    let listener = server.Services.GetService<BlockchainListener>()
     Assert.NotNull(listener)
     let dummySwap = SwapId (Guid.NewGuid().ToString())
     (listener :> ISwapEventListener).RegisterSwap(dummySwap)
@@ -176,18 +180,8 @@ type BlockchainListenerTest() =
       for b in inputBlocks do
         blocksOnTheNodeSoFar.Add(b)
         if blocksToSkip |> Seq.contains b |> not then
-          do! listener.OnBlock(b.Block)
+          do! listener.OnBlock(b.Block, fun () -> BlockHeight.Zero)
 
       Assert.Equal<BlockWithHeight list>(expectedBlocks, actualBlocks |> Seq.toList)
       Assert.Equal<uint256 list>(expectedUnConfirmedBlocks |> List.map(fun b -> b.Block.Header.GetHash()), unconfirmedBlocks |> Seq.toList)
     }
-
-  [<Fact>]
-  member this.BlockchainListenersTest() =
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
-        ()
-      ))
-
-    let service = server.Services.GetRequiredService<ISwapEventListener>()
-    ()
-

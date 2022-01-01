@@ -59,3 +59,5 @@ module Constants =
 
   let [<Literal>] BlockchainLongPollingIntervalSec = 8.
   let [<Literal>] ExchangeLongPollingIntervalSec = 20.
+
+  let [<Literal>] MaxBlockRewind = 1200u

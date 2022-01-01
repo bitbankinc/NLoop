@@ -14,7 +14,7 @@ open NLoop.Domain
 open FSharp.Control.Tasks
 
 open NLoop.Server
-open NLoop.Server.Options
+open NLoop.Server.Projections
 open NetMQ
 open NetMQ.Sockets
 
@@ -80,8 +80,14 @@ type ZmqClient(logger: ILogger<ZmqClient>, address) =
       | ex ->
         logger.LogError $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
 
-type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, zmqAddress, loggerFactory, getBlockchainClient, actor, cryptoCode) as this =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, actor, cryptoCode)
+type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
+                           zmqAddress,
+                           loggerFactory,
+                           getBlockchainClient,
+                           actor,
+                           cryptoCode,
+                           rewindLimit: unit -> StartHeight) as this =
+  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cryptoCode, actor)
   let zmqClient = new ZmqClient(loggerFactory.CreateLogger<_>(), zmqAddress)
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
 
@@ -103,7 +109,7 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>, zmqAddress, loggerFacto
 
   interface IHostedService with
     member this.StartAsync(cancellationToken) = unitTask {
-      let onBlockSync = (fun b -> this.OnBlock(b, cancellationToken).GetAwaiter().GetResult())
+      let onBlockSync = (fun b -> this.OnBlock(b, rewindLimit, cancellationToken).GetAwaiter().GetResult())
       do! zmqClient.StartListening(onBlockSync, cancellationToken)
     }
     member this.StopAsync(_cancellationToken) = unitTask {

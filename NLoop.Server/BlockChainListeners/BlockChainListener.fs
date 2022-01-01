@@ -33,13 +33,18 @@ module private BlockchainListenerHelpers =
       (getBlock: uint256 -> Async<BlockWithHeight>)
       (blockDisconnected: uint256 list)
       (oldTip: BlockWithHeight)
-      (newTip: BlockWithHeight) =
+      (newTip: BlockWithHeight)
+      (getRewindLimit: unit -> BlockHeight) =
       async {
         let! ct = Async.CancellationToken
         ct.ThrowIfCancellationRequested()
         let oldHash = oldTip.Block.Header.GetHash()
         let newHash = newTip.Block.Header.GetHash()
         assert(oldHash <> newHash)
+        match getRewindLimit() with
+        | rewindLimit when newTip.Height <= rewindLimit ->
+          return (newTip, blockDisconnected) |> Some
+        | _ ->
         if oldTip.Block.Header.HashPrevBlock = newTip.Block.Header.HashPrevBlock then
           let d = oldHash::blockDisconnected
           return (newTip, d) |> Some
@@ -47,11 +52,11 @@ module private BlockchainListenerHelpers =
           return (newTip, blockDisconnected) |> Some
         elif oldTip.Height <= newTip.Height then
           let! newTipPrev = getBlock newTip.Block.Header.HashPrevBlock
-          return! loop getBlock blockDisconnected oldTip newTipPrev
+          return! loop getBlock blockDisconnected oldTip newTipPrev getRewindLimit
         elif oldTip.Height > newTip.Height then
           let d = oldHash::blockDisconnected
           let! oldTipPrev = getBlock oldTip.Block.Header.HashPrevBlock
-          return! loop getBlock d oldTipPrev newTip
+          return! loop getBlock d oldTipPrev newTip getRewindLimit
         else
           return failwith "unreachable!"
       }
@@ -100,7 +105,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
   /// It is always possible that we miss a block.
   /// This method assures the safety in that case by detecting the skip, and supplementing the missed block
   /// by querying against the blockchain.
-  member this.OnBlock( b: Block, ?ct: CancellationToken) = unitTask {
+  member this.OnBlock( b: Block, getRewindLimit, ?ct: CancellationToken) = unitTask {
       let ct = defaultArg ct CancellationToken.None
       try
         let client = getBlockchainClient cc
@@ -123,7 +128,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
             ()
           else
           let! maybeAncestor =
-            rewindToNextOfCommonAncestor (client.GetBlock >> Async.AwaitTask) currentBlock newBlock
+            rewindToNextOfCommonAncestor (client.GetBlock >> Async.AwaitTask) currentBlock newBlock getRewindLimit
             |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
           match maybeAncestor with
           | None ->

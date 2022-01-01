@@ -79,7 +79,7 @@ module QueryHandlers =
       let resp: GetOngoingSwapResponse =
         ctx.GetService<IOnGoingSwapStateProjection>().State
         |> Map.toList
-        |> List.choose(fun (_, v) ->
+        |> List.choose(fun (_, (_, v)) ->
           match v with
           | Swap.State.Finished _ | Swap.State.HasNotStarted -> None
           | x -> Some x)

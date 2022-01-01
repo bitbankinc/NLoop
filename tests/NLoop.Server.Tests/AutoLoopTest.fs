@@ -79,7 +79,7 @@ module private Constants =
   // this is the suggested swap for channel 1 when se use chanRule.
   let chan1Rec = {
     LoopOutRequest.Amount = swapAmount
-    OutgoingChannelIds = [| chanId1 |]
+    ChannelIds = [| chanId1 |] |> ValueSome
     Address = None
     PairId = pairId |> Some
     SwapTxConfRequirement = pairId.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -95,7 +95,7 @@ module private Constants =
   let chan2Rec = {
     chan1Rec
       with
-      OutgoingChannelIds = [| chanId2 |]
+      ChannelIds = [| chanId2 |] |> ValueSome
   }
 
   let getDummyTestInvoice(network: Network) =
@@ -184,6 +184,7 @@ type AutoLoopTests() =
   let mockOnGoingSwapProjection = {
     new IOnGoingSwapStateProjection with
       member this.State = Map.empty
+      member this.FinishCatchup = Task.CompletedTask
   }
 
   let defaultTestRestrictions = {
@@ -451,7 +452,8 @@ type AutoLoopTests() =
           new IOnGoingSwapStateProjection with
             member this.State =
               ongoingSwaps
-              |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+              |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
+            member this.FinishCatchup = Task.CompletedTask
       }
       let failureView = {
         new IRecentSwapFailureProjection with
@@ -577,7 +579,7 @@ type AutoLoopTests() =
             let expectedAmount = Money.Satoshis(10000L)
             let prepay, routing = testPPMFees(defaultFeePPM, testQuote, expectedAmount)
             { LoopOutRequest.Amount = expectedAmount
-              OutgoingChannelIds = [|chanId1; chanId2|]
+              ChannelIds = [|chanId1; chanId2|] |> ValueSome
               Address = None
               PairId = pairId |> Some
               SwapTxConfRequirement =
@@ -672,7 +674,7 @@ type AutoLoopTests() =
           DisqualifiedChannels = Map.ofSeq [(chanId1, SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourLimit |}))]
       }
       ("insufficient miner fee", quote, expected)
-      let ourLimit = ppmToSat(swapAmount, pairId.DefaultLoopOutParameters.MaxSwapFeePPM)
+      let ourLimit = pairId.DefaultLoopOutParameters.MaxSwapFee
       let serverRequirement = ourLimit + Money.Satoshis(1L)
       let quote = {
         quoteBase
@@ -792,6 +794,7 @@ type AutoLoopTests() =
           member this.State =
             existingSwaps
             |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+          member this.FinishCatchup = Task.CompletedTask
       }
       services
         .AddSingleton<IOnGoingSwapStateProjection>(swapState)
@@ -836,7 +839,7 @@ type AutoLoopTests() =
       ("minimum more than server, no swap", Some(8000L), None, [|serverTerms; serverTerms|], Ok expected)
 
       let clientMax = 7000L
-      let prepay, routing = testPPMFees(pairId.DefaultLoopOutParameters.MaxSwapFeePPM, testQuote, 7000L |> Money.Satoshis)
+      let prepay, routing = pairId.DefaultLoopOutParameters.MaxSwapFee, 7000L |> Money.Satoshis
       let outSwap = {
         chan1Rec
           with
@@ -920,7 +923,7 @@ type AutoLoopTests() =
       let maxPrepayRoutingFee, maxSwapRoutingFee = testPPMFees(okPPM, okQuote, 7500L |> Money.Satoshis)
       let req = {
         LoopOutRequest.Amount = 7500L |> Money.Satoshis
-        OutgoingChannelIds = [|chanId1|]
+        ChannelIds = [|chanId1|] |> ValueSome
         Address = None
         PairId = pairId |> Some
         SwapTxConfRequirement =

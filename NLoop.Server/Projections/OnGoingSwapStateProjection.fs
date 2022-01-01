@@ -1,8 +1,9 @@
 namespace NLoop.Server.Projections
 
 open System
-open System.Runtime.CompilerServices
 open System.Threading
+open System.Threading.Tasks
+open DotNetLightning.Utils
 open EventStore.ClientAPI
 open FSharp.Control.Tasks
 open FsToolkit.ErrorHandling
@@ -10,14 +11,13 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Domain
-open NLoop.Domain.IO
 open NLoop.Domain.Utils
-open NLoop.Domain.Utils.EventStore
 open NLoop.Server
-open NLoop.Server.Actors
 
+type StartHeight = BlockHeight
 type IOnGoingSwapStateProjection =
-  abstract member State: Map<StreamId, Swap.State>
+  abstract member State: Map<StreamId, StartHeight * Swap.State>
+  abstract member FinishCatchup: Task
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
@@ -30,9 +30,8 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
   inherit BackgroundService()
   let log = loggerFactory.CreateLogger<OnGoingSwapStateProjection>()
 
-  let mutable _state: Map<StreamId, Swap.State> = Map.empty
+  let mutable _state: Map<StreamId, StartHeight * Swap.State> = Map.empty
   let lockObj = obj()
-
 
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun event -> unitTask {
@@ -43,17 +42,22 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         this.State <-
           (
             if this.State |> Map.containsKey r.StreamId |> not then
-              this.State |> Map.add r.StreamId actor.Aggregate.Zero
+              this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
             else
               this.State
           )
           |> Map.change
             r.StreamId
-            (Option.map(fun s ->
-              actor.Aggregate.Apply s r.Data
+            (Option.map(fun (h, s) ->
+              let nextState = actor.Aggregate.Apply s r.Data
+              let startHeight =
+                match r.Data with
+                | Swap.Event.NewLoopOutAdded(h, _)
+                | Swap.Event.NewLoopInAdded(h, _) -> h | _ -> h
+              (startHeight, nextState)
             ))
           // We don't hold finished swaps on-memory for the scalability.
-          |> Map.filter(fun _ -> function | Swap.State.Finished _ -> false | _ -> true)
+          |> Map.filter(fun _ (_, state) -> match state with | Swap.State.Finished _ -> false | _ -> true)
         log.LogTrace($"Publishing RecordedEvent {r}")
 
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
@@ -63,6 +67,10 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
           |> fun n -> checkpointDB.SetSwapStateCheckpoint(n, CancellationToken.None)
     }
 
+  let mutable catchupCompletion = TaskCompletionSource()
+  let onFinishCatchup _ =
+    catchupCompletion.SetResult()
+    ()
   let subscription =
     EventStoreDBSubscription(
       { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
@@ -70,16 +78,18 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator,
+      onFinishCatchup,
       conn)
 
   member this.State
-    with get(): Map<_,_> = _state
+    with get(): Map<_, StartHeight * Swap.State> = _state
     and set v =
       lock lockObj <| fun () ->
         _state <- v
 
   interface IOnGoingSwapStateProjection with
     member this.State = this.State
+    member this.FinishCatchup = catchupCompletion.Task
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let maybeCheckpoint = ValueNone
@@ -103,16 +113,18 @@ module ISwapStateProjectionExtensions =
   type IOnGoingSwapStateProjection with
     member this.OngoingLoopIns =
       this.State
-      |> Seq.choose(fun v ->
-                    match v.Value with
+      |> Seq.choose(fun kv ->
+                    let _, v = kv.Value
+                    match v with
                     | Swap.State.In (_height, o) -> Some o
                     | _ -> None
                     )
 
     member this.OngoingLoopOuts =
       this.State
-      |> Seq.choose(fun v ->
-                    match v.Value with
+      |> Seq.choose(fun kv ->
+                    let _, v = kv.Value
+                    match v with
                     | Swap.State.Out (_height, o) -> Some o
                     | _ -> None
                     )

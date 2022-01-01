@@ -9,22 +9,36 @@ open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Server.Options
+open NLoop.Server.Projections
 
 
-type BlockchainListeners(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFactory, getBlockchainClient, swapActor) =
+type BlockchainListeners(opts: IOptions<NLoopOptions>,
+                         loggerFactory: ILoggerFactory,
+                         getBlockchainClient,
+                         swapActor,
+                         swapState: IOnGoingSwapStateProjection) =
   let mutable listeners = ConcurrentDictionary()
   let logger = loggerFactory.CreateLogger<BlockchainListeners>()
 
-  let [<Literal>] backoffLimit = 6
+  member this.GetRewindLimit() =
+    let heights =
+      swapState.State
+      |> Seq.map(fun kv -> let startHeight, _ = kv.Value in startHeight)
+    if heights |> Seq.isEmpty then
+      Constants.MaxBlockRewind |> StartHeight.BlockHeight
+    else
+      heights |> Seq.min
+
   interface IHostedService with
     member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting blockchain listeners ..."
+      do! swapState.FinishCatchup
 
       let roundTrip cc = unitTask {
         let cOpts = opts.Value.ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
-            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, swapActor, cc)
+            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, this.GetRewindLimit, swapActor, cc)
           do! (rpcListener :> IHostedService).StartAsync(ct)
           match listeners.TryAdd(cc, rpcListener :> BlockchainListener) with
           | true -> ()
@@ -35,7 +49,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>, loggerFactory: ILoggerFac
         | None ->
           do! startRPCListener cc
         | Some addr ->
-          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, cc, swapActor)
+          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, swapActor, cc, this.GetRewindLimit)
           match! zmqListener.CheckConnection ct with
           | true ->
             do! (zmqListener :> IHostedService).StartAsync(ct)
