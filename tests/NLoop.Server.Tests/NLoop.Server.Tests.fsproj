@@ -11,7 +11,6 @@
     <Compile Include="Utils.fs" />
     <Compile Include="Helpers.fs" />
     <Compile Include="Extensions.fs" />
-    <Compile Include="UnitTests.fs" />
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="AutoLoopTest.fs" />
     <Compile Include="BlockListenerTest.fs" />
