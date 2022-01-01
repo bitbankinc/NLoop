@@ -120,12 +120,19 @@ module Helpers =
     return coins
   }
 
+  let feeRatesGen =
+    moneyGen |> Gen.map(FeeRate)
+
 type PrimitiveGenerator() =
   static member BitcoinWitScriptAddressGen(): Arbitrary<BitcoinWitScriptAddress> =
     bitcoinWitScriptAddressGen |> Arb.fromGen
 
   static member BitcoinWitPubKeyAddressGen() : Arbitrary<BitcoinWitPubKeyAddress> =
     bitcoinWitPubKeyAddressGen |> Arb.fromGen
+
+  static member BitcoinPubKeyGen(): Arbitrary<PubKey> =
+    gen { return (new Key()).PubKey }
+    |> Arb.fromGen
 
   static member NodeIdGen() : Arbitrary<NodeId> =
     nodeIdGen |> Arb.fromGen
@@ -244,4 +251,7 @@ type ResponseGenerator =
         SupportedCoins = { SupportedCoins.OffChain = offChain; OnChain = onChain } }
     }
     |> Arb.fromGen
+
+  static member FeeRate() : Arbitrary<FeeRate> =
+    feeRatesGen |> Arb.fromGen
 

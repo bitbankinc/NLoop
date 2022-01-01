@@ -4,6 +4,7 @@ open System
 open System.Net
 open System.Runtime.CompilerServices
 open System.Text.Json.Serialization
+open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Altcoins
 
@@ -64,92 +65,48 @@ module SupportedCryptoCode =
     | "LTC" -> SupportedCryptoCode.LTC |> Some
     | _ -> None
 
-type PairId = (struct (SupportedCryptoCode * SupportedCryptoCode))
+[<Struct>]
+type PairId =
+  PairId of (struct (SupportedCryptoCode * SupportedCryptoCode))
+  with
+  member this.Value =
+    match this with
+    | PairId(a, b) -> struct(a, b)
+
+  member this.Base = let struct (b, _)= this.Value in b
+  member this.Quote = let struct(_, q) = this.Value in q
 
 [<RequireQualifiedAccess>]
 module PairId =
-  let Default = struct (SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
+  let Default = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
 
-type SwapStatusType =
-  | SwapCreated = 0uy
-  | SwapExpired = 1uy
+  let toString (pairId: inref<PairId>) =
+    let struct (a, b)= pairId.Value
+    $"{a}/{b}"
 
-  | InvoiceSet = 10uy
-  | InvoicePayed = 11uy
-  | InvoicePending = 12uy
-  | InvoiceSettled = 13uy
-  | InvoiceFailedToPay = 14uy
-
-  | ChannelCreated = 20uy
-
-  | TxFailed = 30uy
-  | TxMempool = 31uy
-  | TxClaimed = 32uy
-  | TxRefunded = 33uy
-  | TxConfirmed = 34uy
-
-  | Unknown = 255uy
-
-[<RequireQualifiedAccess>]
-module SwapStatusType =
-  let FromString(s) =
-    match s with
-      | "swap.created" -> SwapStatusType.SwapCreated
-      | "swap.expired" -> SwapStatusType.SwapExpired
-
-      | "invoice.set" -> SwapStatusType.InvoiceSet
-      | "invoice.payed" -> SwapStatusType.InvoicePayed
-      | "invoice.pending" -> SwapStatusType.InvoicePending
-      | "invoice.settled" -> SwapStatusType.InvoiceSettled
-      | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
-
-      | "channel.created" -> SwapStatusType.ChannelCreated
-
-      | "transaction.failed" -> SwapStatusType.TxFailed
-      | "transaction.mempool" -> SwapStatusType.TxMempool
-      | "transaction.claimed" -> SwapStatusType.TxClaimed
-      | "transaction.refunded" -> SwapStatusType.TxRefunded
-      | "transaction.confirmed" -> SwapStatusType.TxConfirmed
-      | _ -> SwapStatusType.Unknown
-
-[<AbstractClass;Sealed;Extension>]
-type SwapStatusTypeExt() =
-
-  [<Extension>]
-  static member AsString(this: SwapStatusType) =
-    match this with
-    | SwapStatusType.SwapCreated ->
-      "swap.created"
-    | SwapStatusType.SwapExpired ->
-      "swap.expired"
-    | SwapStatusType.InvoiceSet ->
-      "invoice.set"
-    | SwapStatusType.InvoicePayed ->
-      "invoice.payed"
-    | SwapStatusType.InvoicePending ->
-      "invoice.pending"
-    | SwapStatusType.InvoiceSettled ->
-      "invoice.settled"
-    | SwapStatusType.InvoiceFailedToPay ->
-      "invoice.failedToPay"
-
-    | SwapStatusType.ChannelCreated ->
-      "channel.created"
-
-    | SwapStatusType.TxFailed ->
-      "transaction.failed"
-    | SwapStatusType.TxMempool ->
-      "transaction.mempool"
-    | SwapStatusType.TxClaimed ->
-      "transaction.claimed"
-    | SwapStatusType.TxRefunded ->
-      "transaction.refunded"
-    | SwapStatusType.TxConfirmed ->
-      "transaction.confirmed"
-    | _ -> "unknown"
+  let toStringFromVal(pairId: PairId) =
+    toString(&pairId)
 
 type SwapId = SwapId of string
   with
   member this.Value = let (SwapId v) = this in v
   override this.ToString() =
     this.Value
+
+[<StructuredFormatDisplay("{AsString}")>]
+type BlockWithHeight = {
+  Block: Block
+  Height: BlockHeight
+}
+  with
+  static member Genesis(n: Network) = {
+    Block = n.GetGenesis()
+    Height = BlockHeight.Zero
+  }
+  member this.Copy() = {
+    Block = this.Block.Clone()
+    Height = this.Height.Value |> BlockHeight
+  }
+
+  override this.ToString() = $"(height: {this.Height.Value}, block: {this.Block.Header.GetHash().ToString().[..7]}...)"
+  member this.AsString = this.ToString()

@@ -32,6 +32,7 @@ open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
@@ -64,6 +65,31 @@ module App =
             route "/history" >=> QueryHandlers.handleGetSwapHistory
             route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
             routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+        ])
+        subRoute "/auto" (choose [
+          GET >=>
+            routef "/suggest/%s/%s" (fun (b, q) ->
+              let b = SupportedCryptoCode.Parse(b)
+              let q = SupportedCryptoCode.Parse(q)
+              AutoLoopHandlers.suggestSwaps(Some (PairId(b, q)))
+            )
+        ])
+        subRoute "/liquidity" (choose [
+          route "/params" >=> choose [
+            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
+            GET >=> AutoLoopHandlers.getLiquidityParams None
+          ]
+          GET >=> routef "/params/%s/%s" (fun (b, q) ->
+            let b = SupportedCryptoCode.Parse(b)
+            let q = SupportedCryptoCode.Parse(q)
+            AutoLoopHandlers.getLiquidityParams(Some(PairId(b, q)))
+          )
+          POST >=> routef "/params/%s/%s" (fun (b, q) ->
+             let b = SupportedCryptoCode.Parse(b)
+             let q = SupportedCryptoCode.Parse(q)
+             bindJson<SetLiquidityParametersRequest>
+               (AutoLoopHandlers.setLiquidityParams(Some(PairId(b, q))))
+           )
         ])
       ])
       setStatusCode 404 >=> text "Not Found"
@@ -125,8 +151,6 @@ module App =
       if (env.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
         services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
-      else
-        ()
 
       services.AddCors()    |> ignore
 
@@ -210,7 +234,7 @@ module Main =
             |> ignore
       )
 
-  /// Mostly the same with `UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
+  /// Mostly the same with `CommandLineBuilder.UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
   /// We need this because we want to bind the CLI options into <see cref="NLoop.Server.NLoopOptions"/> with
   /// `BindCommandLine`, which requires `BindingContext` injected in a DI container.

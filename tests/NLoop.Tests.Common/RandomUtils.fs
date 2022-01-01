@@ -16,3 +16,10 @@ type TransactionBuilderExtensions() =
     this
       .AddCoins(coin)
       .AddKeys(key)
+
+
+[<RequireQualifiedAccess>]
+module List =
+  let shuffle l  =
+    let rnd = System.Random()
+    l |> List.sortBy(fun _ -> rnd.Next(1, 52))

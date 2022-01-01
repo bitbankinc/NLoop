@@ -87,7 +87,7 @@
         "tags": [
           "swap"
         ],
-        "description": "Get the full history of swaps.\n",
+        "description": "Get the full history of swas. This might take long if you have a lots of entries in a database.\n",
         "operationId": "history",
         "parameters": [
           {
@@ -137,7 +137,7 @@
     "/v1/loop/out": {
       "post": {
         "tags": [
-          "swap"
+          "loop"
         ],
         "operationId": "out",
         "requestBody": {
@@ -191,7 +191,7 @@
     "/v1/loop/in": {
       "post": {
         "tags": [
-          "swap"
+          "loop"
         ],
         "operationId": "in",
         "requestBody": {
@@ -213,6 +213,127 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "errors": {
+                      "type": "array",
+                      "description": "error message",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auto/suggest/{base}/{quote}": {
+      "get": {
+        "tags": [
+          "loop",
+          "autoloop"
+        ],
+        "description": "Get suggestion for the swaps.\n",
+        "operationId": "suggest",
+        "parameters": [
+          {
+            "name": "base",
+            "in": "path",
+            "required": true,
+            "description": "base currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          },
+          {
+            "name": "quote",
+            "in": "path",
+            "required": true,
+            "description": "quote currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestSwapsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/liquidity/params/{base}/{quote}": {
+      "get": {
+        "tags": [
+          "autoloop"
+        ],
+        "description": "Get the parameters that the daemon's liquidity manager is currently configured with. This may be nil if nothing is configured.\n",
+        "operationId": "params",
+        "parameters": [
+          {
+            "name": "base",
+            "in": "path",
+            "required": true,
+            "description": "base currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          },
+          {
+            "name": "quote",
+            "in": "path",
+            "required": true,
+            "description": "quote currency",
+            "schema": {
+              "$ref": "#/components/schemas/cryptoCode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquidityParameters"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Overwrites the current set of parameters for the daemon's liquidity manager.\n",
+        "operationId": "params2",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLiquidityParametersRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
           },
           "400": {
             "description": "invalid request",
@@ -259,7 +380,6 @@
       "PubKey": {
         "type": "string",
         "description": "Bitcoin public key in 33 bytes length",
-        "format": "binary",
         "maxLength": 33,
         "minLength": 33,
         "example": "03afbba930dc74d6412b71c31f72bfb8d4615121174dd4290cbbf83960961ba9ab"
@@ -303,6 +423,43 @@
       "swapId": {
         "type": "string"
       },
+      "HopHint": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "description": "The pubkey key of the node at the start of the channel",
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "chan_id": {
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "fee_base_msat": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fee_proportional_millionths": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cltv_expiry_delta": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RouteHint": {
+        "type": "object",
+        "properties": {
+          "hops": {
+            "type": "array",
+            "description": "< Route hints which will be included in the invoice. See bolt11 for the detail.",
+            "maxItems": 6,
+            "items": {
+              "$ref": "#/components/schemas/HopHint"
+            }
+          }
+        }
+      },
       "LoopOutRequest": {
         "type": "object",
         "required": [
@@ -310,9 +467,12 @@
         ],
         "properties": {
           "channel_id": {
+            "type": "array",
             "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
             "nullable": true,
-            "$ref": "#/components/schemas/ShortChannelId"
+            "items": {
+              "$ref": "#/components/schemas/ShortChannelId"
+            }
           },
           "pair_id": {
             "description": "< currency pair to perform the swap. Default is BTC/BTC.",
@@ -328,15 +488,50 @@
             "description": "< amount in satoshi.",
             "format": "int64"
           },
-          "conf_target": {
+          "swap_tx_conf_requirement": {
             "type": "integer",
-            "description": "< The number of confirmation before we make an off-chain offer.",
-            "default": "0",
+            "description": "< The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop. Default number depends on the asset type.",
             "nullable": true
           },
           "label": {
             "type": "string",
             "description": "< Additional label for this request.",
+            "nullable": true
+          },
+          "max_swap_routing_fee": {
+            "type": "integer",
+            "description": "< Maximum off-chain fee in sat that may be paied for swap payment to the server. This limit is applied during path finding.",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_prepay_routing_fee": {
+            "type": "integer",
+            "description": "< Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_swap_fee": {
+            "type": "integer",
+            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_prepay_amount": {
+            "type": "integer",
+            "description": "< Maximum amount of the (loop-out) swap fee that may be charged as a prepayment",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_miner_fee": {
+            "type": "integer",
+            "description": "< Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.",
+            "format": "int64",
+            "nullable": true
+          },
+          "sweep_conf_target": {
+            "type": "integer",
+            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "format": "int32",
             "nullable": true
           }
         }
@@ -366,6 +561,32 @@
             "type": "string",
             "description": "< Additional label for this request.",
             "nullable": true
+          },
+          "max_miner_fee": {
+            "type": "integer",
+            "description": "< Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_swap_fee": {
+            "type": "integer",
+            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
+            "format": "int64",
+            "nullable": true
+          },
+          "htlc_conf_target": {
+            "type": "integer",
+            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "format": "int32",
+            "nullable": true
+          },
+          "route_hints": {
+            "type": "array",
+            "description": "< route hints included in the invoice. Usually used in case of the private channel. But in NLoop, we also use it as a means of communication against the server, i.e. to tell them which channel do we want inbound liqidity for.",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/RouteHint"
+            }
           }
         }
       },
@@ -423,6 +644,9 @@
           "refund_txid": {
             "type": "string",
             "nullable": true
+          },
+          "cost": {
+            "$ref": "#/components/schemas/Cost"
           }
         }
       },
@@ -430,6 +654,27 @@
         "type": "object",
         "additionalProperties": {
           "$ref": "#/components/schemas/ShortSwapSummary"
+        }
+      },
+      "Cost": {
+        "type": "object",
+        "properties": {
+          "server_onchain": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "server_offchain": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "onchain": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "offchain": {
+            "type": "integer",
+            "format": "int64"
+          }
         }
       },
       "GetOngoingSwapResponse": {
@@ -464,6 +709,162 @@
           "address": {
             "description": "The address of the on-chain HTLC\n",
             "$ref": "#/components/schemas/P2WSH"
+          }
+        }
+      },
+      "LiquidityRuleType": {
+        "enum": [
+          "UNKNOWN",
+          "THRESHOLD"
+        ]
+      },
+      "LiquidityRule": {
+        "type": "object",
+        "properties": {
+          "incoming_threshold_percent": {
+            "type": "integer",
+            "description": "if the incoming liquidity (i.e. other party's share of the channel cap) has become less than this, we will dispatch the loop-out swap\n",
+            "format": "int16"
+          },
+          "outgoing_threshold_percent": {
+            "type": "integer",
+            "description": "if the outgoing liquidity (i. our share in the channel cap) has become less than this, we will dispatch the loop-in swap\n",
+            "format": "int16"
+          },
+          "pubkey": {
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "channel_id": {
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "type": {
+            "$ref": "#/components/schemas/LiquidityRuleType"
+          }
+        }
+      },
+      "LiquidityParameters": {
+        "type": "object",
+        "required": [
+          "rules",
+          "sweep_conf_target",
+          "failure_backoff_sec",
+          "autoloop",
+          "auto_max_in_flight"
+        ],
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LiquidityRule"
+            }
+          },
+          "fee_ppm": {
+            "type": "integer",
+            "description": "The parts per million of swap amount that is allowed to be allocated to swap fees. This valie is applied across swap categories and may not be set in conjunction with sweep fee rate, swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.\n",
+            "nullable": true
+          },
+          "sweep_fee_rate_sat_per_kvbyte": {
+            "type": "integer",
+            "description": "The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.\n",
+            "nullable": true
+          },
+          "max_swap_fee_ppm": {
+            "type": "integer",
+            "description": "The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.\n",
+            "nullable": true
+          },
+          "max_routing_fee_ppm": {
+            "type": "integer",
+            "nullable": true
+          },
+          "max_prepay_routing_fee_ppm": {
+            "type": "integer",
+            "nullable": true
+          },
+          "max_prepay_sat": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_miner_fee_sat": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "sweep_conf_target": {
+            "type": "integer",
+            "description": "The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within."
+          },
+          "failure_backoff_sec": {
+            "type": "integer",
+            "description": "The amount of time we require to pass since a channel was part of a failed swap due to off chain payment failure until it will be considered for swap suggestions again, expressed in seconds.\n"
+          },
+          "autoloop": {
+            "type": "boolean",
+            "description": "Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,\n"
+          },
+          "auto_max_in_flight": {
+            "type": "integer",
+            "description": "The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time."
+          },
+          "min_swap_amount": {
+            "type": "integer",
+            "description": "The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.\n",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_swap_amount": {
+            "type": "integer",
+            "description": "The maximum swap amount, expressed in satoshis.",
+            "format": "int64",
+            "nullable": true
+          }
+        }
+      },
+      "SetLiquidityParametersRequest": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "$ref": "#/components/schemas/LiquidityParameters"
+          }
+        }
+      },
+      "Disqualified": {
+        "type": "object",
+        "properties": {
+          "channel_id": {
+            "nullable": true,
+            "$ref": "#/components/schemas/ShortChannelId"
+          },
+          "pubkey": {
+            "nullable": true,
+            "$ref": "#/components/schemas/PubKey"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SuggestSwapsResponse": {
+        "type": "object",
+        "properties": {
+          "loop_out": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoopOutRequest"
+            }
+          },
+          "loop_in": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoopInRequest"
+            }
+          },
+          "disqualified": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Disqualified"
+            }
           }
         }
       }

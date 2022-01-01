@@ -1,4 +1,4 @@
-namespace NLoop.Server.Services
+namespace BoltzClient
 
 open System
 open FSharp.Control
@@ -13,10 +13,8 @@ open System.Threading.Tasks
 open System.Threading
 open DotNetLightning.Payment
 open FSharp.Control.Tasks
-open Microsoft.Extensions.Options
 open NBitcoin
 open System.Security.Cryptography.X509Certificates
-open NLoop.Server
 open NLoop.Domain.IO
 open NLoop.Domain
 
@@ -46,7 +44,6 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
     BoltzClient(Uri($"{host}:{port}"))
 
   member val HttpClient = httpClient with get
-  with
 
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
                                                parameters: obj, ct: CancellationToken) = task {
@@ -81,6 +78,9 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   member this.GetPairsAsync([<O;D(null)>] ct: CancellationToken): Task<GetPairsResponse> =
     this.SendCommandAsync<_>("getpairs", HttpMethod.Get, null, ct)
 
+  member this.GetTimeoutsAsync([<O;D(null)>] ct: CancellationToken) =
+    this.SendCommandAsync<GetTimeOutsResponse>("timeouts", HttpMethod.Get, null, ct)
+
   member this.GetNodesAsync([<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<GetNodesResponse>("getnodes", HttpMethod.Get, null, ct)
 
@@ -99,6 +99,10 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   member this.CreateSwapAsync(req: CreateSwapRequest, [<O;D(null)>]channel: ChannelOpenRequest, [<O;D(null)>] ct: CancellationToken) =
     let reqObj = {| req with Type = "submarine" |}
     let reqObj = if channel |> box |> isNull then reqObj |> box else {| reqObj with Channel = channel |} |> box
+    this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
+
+  member this.CreateSwapAsync(req: CreateSwapRequest, [<O;D(null)>] ct: CancellationToken) =
+    let reqObj = {| req with Type = "submarine" |}
     this.SendCommandAsync<CreateSwapResponse>("createswap", HttpMethod.Post, reqObj, ct)
 
   member this.CreateReverseSwapAsync(req: CreateReverseSwapRequest, [<O;D(null)>] ct: CancellationToken) =
@@ -123,4 +127,3 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
         let! msg = streamReader.ReadLineAsync() |> Async.AwaitTask
         yield JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
     }
-

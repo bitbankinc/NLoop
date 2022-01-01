@@ -63,9 +63,9 @@ module Helpers =
       this.AddOption(o)
       this
 
-    member this.AddConfTargetOption() =
-      let o = Option<int>([|"--conf-target"; "--confirmation"|], "Confirmation required for swap.")
-      o.Name <- "confirmation_target"
+    member this.AddConfRequirementOption() =
+      let o = Option<int>([|"--swap-tx-conf-requirement"; "--conf-requirement"|], "Confirmation required for swap.")
+      o.Name <- "confirmation_requirement"
       o.Argument <-
         let a = Argument<int>()
         a.Arity <- ArgumentArity.ZeroOrOne

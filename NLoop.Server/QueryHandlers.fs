@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System
+open EventStore.ClientAPI
 open Microsoft.AspNetCore.Http
 open Giraffe
 open FSharp.Control.Tasks.Affine
@@ -13,6 +14,7 @@ open NLoop.Server.DTOs
 open FSharp.Control.Reactive
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
+open NLoop.Domain
 
 module QueryHandlers =
 
@@ -31,7 +33,7 @@ module QueryHandlers =
       }
   let handleGetSwap (swapId: SwapId) =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
-      let handler = ctx.GetService<SwapActor>().Handler
+      let handler = ctx.GetService<ISwapActor>().Handler
       let! eventsR = handler.Replay swapId ObservationDate.Latest
       let stateR = eventsR |> Result.map handler.Reconstitute
       match stateR with
@@ -43,39 +45,41 @@ module QueryHandlers =
 
   let handleGetSwapHistory =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
-      let state = ctx.GetService<SwapStateProjection>().State
-      let resp: GetSwapHistoryResponse =
-        state
-        |> Map.toSeq
-        |> Seq.choose(fun (streamId, v) ->
-          let r =
-            match v with
+      let actor = ctx.GetService<ISwapActor>()
+      // todo: consider about cancellation
+      match! actor.GetAllEntities() with
+      | Error e ->
+        return! error503 $"Failed to read events from DB\n {e}" next ctx
+      | Ok entities ->
+        let resp: GetSwapHistoryResponse =
+          entities
+          |> Map.toSeq
+          |> Seq.choose(fun (streamId, v) ->
+            (match v with
             | Swap.State.HasNotStarted -> None
-            | Swap.State.Out(_height, _)
-            | Swap.State.In(_height, _) ->
-              (streamId.Value, ShortSwapSummary.OnGoing) |> Some
-            | Swap.State.Finished x ->
-              (streamId.Value, ShortSwapSummary.FromDomainState x) |> Some
-          r
-          |> Option.map(fun (streamId, s) ->
-            if (streamId.StartsWith("swap-", StringComparison.OrdinalIgnoreCase)) then
-              (streamId.Substring("swap-".Length), s)
-            else
-              (streamId, s)
+            | Swap.State.Out(_height, { Cost = cost })
+            | Swap.State.In(_height, { Cost = cost }) ->
+              (streamId.Value, ShortSwapSummary.OnGoing cost) |> Some
+            | Swap.State.Finished(cost, x) ->
+              (streamId.Value, ShortSwapSummary.FromDomainState cost x) |> Some
+            )
+            |> Option.map(fun (streamId, s) ->
+              if (streamId.StartsWith("swap-", StringComparison.OrdinalIgnoreCase)) then
+                (streamId.Substring("swap-".Length), s)
+              else
+                (streamId, s)
+            )
           )
-        )
-        |> Map.ofSeq
-      printfn $"Returning \n {resp} \nin json"
-      return! json resp next ctx
+          |> Map.ofSeq
+        return! json resp next ctx
     }
 
   let handleGetOngoingSwap =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
-      let state = ctx.GetService<SwapStateProjection>().State
       let resp: GetOngoingSwapResponse =
-        state
+        ctx.GetService<IOnGoingSwapStateProjection>().State
         |> Map.toList
-        |> List.choose(fun (_, v) ->
+        |> List.choose(fun (_, (_, v)) ->
           match v with
           | Swap.State.Finished _ | Swap.State.HasNotStarted -> None
           | x -> Some x)

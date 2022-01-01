@@ -13,6 +13,7 @@ open System.Reactive.Subjects
 open Microsoft.Extensions.Logging
 open NLoop.Server.DTOs
 type IEventAggregator =
+  inherit IDisposable
   abstract member Publish: 'T -> unit
   abstract member GetObservable: unit -> IObservable<'T>
 
@@ -29,7 +30,7 @@ type EventAggregatorExtensions() =
         | _ -> failwith "unreachable"
     )
 
-type ReactiveEventAggregator(_logger: ILogger<ReactiveEventAggregator>) =
+type ReactiveEventAggregator() =
   let _subject = new Subject<obj>()
 
   let mutable disposed = false
@@ -42,6 +43,6 @@ type ReactiveEventAggregator(_logger: ILogger<ReactiveEventAggregator>) =
 
   interface IDisposable with
     member this.Dispose() =
-      if (disposed) then () else
+      if disposed then () else
       _subject.Dispose()
       disposed <- true

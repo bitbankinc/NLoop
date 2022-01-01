@@ -49,6 +49,15 @@ type BlockHeightJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetUInt32() |> BlockHeight
 
+type BlockHeightOffsetJsonConverter() =
+  inherit JsonConverter<BlockHeightOffset32>()
+  override this.Write(writer, value, _options) =
+    value.Value
+    |> writer.WriteNumberValue
+  override this.Read(reader, _typeToConvert, _options) =
+    reader.GetUInt32() |> BlockHeightOffset32
+
+
 type UnixTimeJsonConverter() =
   inherit JsonConverter<DateTimeOffset>()
   override this.Write(writer, value, _options) =
@@ -117,15 +126,14 @@ type BitcoinAddressJsonConverter(n: Network) =
 type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
   override this.Write(writer, value, _options) =
-    let (struct (bid, ask)) = value
+    let (struct (bid, ask)) = value.Value
     $"{bid.ToString()}/{ask.ToString()}"
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
-
     let v = reader.GetString()
     let s = v.Split("/")
     if (s.Length <> 2) then raise <| JsonException() else
-    (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
+    PairId (SupportedCryptoCode.Parse s.[0], SupportedCryptoCode.Parse s.[1])
 
 type ScriptJsonConverter() =
   inherit JsonConverter<Script>()
@@ -148,14 +156,6 @@ type SwapIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> SwapId.SwapId
 
-type SwapStatusTypeJsonConverter() =
-  inherit JsonConverter<SwapStatusType>()
-
-  override this.Write(writer, value, _options) =
-    writer.WriteStringValue(value.AsString())
-  override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString() |> SwapStatusType.FromString
-
 
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
@@ -164,6 +164,7 @@ type Extensions() =
     this.Converters.Add(HexPubKeyJsonConverter())
     this.Converters.Add(PrivKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
+    this.Converters.Add(BlockHeightOffsetJsonConverter())
     this.Converters.Add(UInt256JsonConverter())
     this.Converters.Add(MoneyJsonConverter())
     this.Converters.Add(PaymentRequestJsonConverter())
@@ -175,7 +176,6 @@ type Extensions() =
       this.Converters.Add(HexTxConverter(n))
     )
 
-    this.Converters.Add(SwapStatusTypeJsonConverter())
     this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())

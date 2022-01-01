@@ -7,6 +7,7 @@ open NBitcoin
 open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
+open NBitcoin.DataEncoders
 
 [<RequireQualifiedAccess>]
 module Transactions =
@@ -24,6 +25,7 @@ module Transactions =
         """
     override this.ToString() = this.Message
 
+  /// We might bump the claim tx, so this returns an RBF enabled tx.
   let createClaimTx
     (output: BitcoinAddress)
     (key: Key)
@@ -47,6 +49,7 @@ module Transactions =
         txB
           .SendEstimatedFees(fee)
           .SendAllRemaining(output)
+          .SetOptInRBF(true)
           .BuildTransaction(false)
       let signature = tx.SignInput(key, sc)
       let witnessItems =
@@ -77,14 +80,38 @@ module Transactions =
     psbt.AddScripts(redeemScript)
     |> Ok
 
+  let dummySwapTx (feeRate) =
+    let coinBase = Network.RegTest.CreateTransaction()
+    coinBase.Outputs
+      .Add(TxOut(Money.Coins(1.1m), Scripts.pubkey1)) |> ignore
+    let dummyCoin =
+      coinBase.Outputs.AsCoins()
+      |> Seq.cast<ICoin>
+    let dummyChange = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
+    createSwapPSBT
+      dummyCoin
+      (Scripts.dummySwapScriptV1)
+      (Money.Coins(1m))
+      (feeRate)
+      (dummyChange)
+      Network.RegTest
+    |> Result.map(fun psbt ->
+      psbt
+        .AddTransactions(coinBase)
+        .SignWithKeys(Scripts.privKey1)
+        .Finalize()
+        .ExtractTransaction()
+      )
+    |> Result.valueOr(failwith)
+
   let createRefundTx
     (lockupTxHex: string)
     (redeemScript: Script)
-    (fee)
+    fee
     (refundAddress: IDestination)
     (refundKey: Key)
     (timeout: BlockHeight)
-    (n) =
+    n =
     let swapTx =
       lockupTxHex
       |> fun hex -> Transaction.Parse(hex, n)
@@ -116,3 +143,25 @@ module Transactions =
       tx.Inputs.[0].WitScript <- witnessItems
       tx
       |> Ok
+
+  let hex = HexEncoder()
+  let dummyRefundTx feeRate =
+    let prev = dummySwapTx feeRate
+    let refundKey =
+      "4141414141414141414141414141414141414141414141414141414141414141"
+      |> hex.DecodeData
+      |> fun h -> new Key(h)
+    let refundAddr = refundKey.PubKey.WitHash.GetAddress(Network.RegTest)
+    createRefundTx
+      (prev.ToHex())
+      Scripts.dummySwapScriptV1
+      feeRate
+      refundAddr
+      refundKey
+      BlockHeight.One
+      Network.RegTest
+    |> Result.valueOr(fun e -> failwith $"Failed create dummy fund tx: {e.Message}")
+  let dummyRefundTxFee feeRate =
+    let prev = dummySwapTx feeRate
+    dummyRefundTx feeRate
+    |> fun t -> t.GetFee(prev.Outputs.AsCoins() |> Seq.cast<_> |> Seq.toArray)

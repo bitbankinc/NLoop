@@ -1,9 +1,10 @@
 ﻿namespace LndClient
 
 open System
-open System.IO
-open System.Net.Http
+open System.Collections.Generic
 open System.Runtime.CompilerServices
+open System.Security.Cryptography.X509Certificates
+open FSharp.Control
 open Macaroons
 open NBitcoin.DataEncoders
 open System.Threading
@@ -11,7 +12,6 @@ open System.Threading.Tasks
 open NBitcoin
 open DotNetLightning.Utils
 open DotNetLightning.Payment
-open System.Net.Http.Headers
 
 [<RequireQualifiedAccess>]
 type MacaroonInfo =
@@ -24,35 +24,9 @@ type LndAuth=
   | MacaroonFile of string
   | Null
 
-[<AbstractClass;Sealed;Extension>]
-type HttpClientExtensions =
-
-  [<Extension>]
-  static member AddLndAuthentication(this: HttpRequestHeaders, lndAuth: LndAuth) =
-    match lndAuth with
-    | LndAuth.FixedMacaroon macaroon ->
-      let macaroonHex = macaroon.SerializeToBytes() |> Encoders.Hex.EncodeData
-      this.Add("Grpc-Metadata-macaroon", macaroonHex)
-    | LndAuth.MacaroonFile filePath ->
-      if not <| filePath.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) then
-        raise <| ArgumentException($"filePath ({filePath}) is not a macaroon file", nameof(filePath))
-      else
-        let macaroonHex = filePath |> File.ReadAllBytes |> Encoders.Hex.EncodeData
-        this.Add("Grpc-Metadata-macaroon", macaroonHex)
-    | LndAuth.Null -> ()
-
-  [<Extension>]
-  static member AddLndAuthentication(this: HttpClient, lndAuth: LndAuth) =
-    this.DefaultRequestHeaders.AddLndAuthentication(lndAuth)
-
-  [<Extension>]
-  static member AddLndAuthentication(httpRequestMessage: HttpRequestMessage, lndAuth) =
-    httpRequestMessage.Headers.AddLndAuthentication(lndAuth)
-
-open FsToolkit.ErrorHandling
-open System.Net
 [<AutoOpen>]
 module private Helpers =
+  do Environment.SetEnvironmentVariable("GRPC_SSL_CIPHER_SUITES", "HIGH+ECDSA");
   let parseUri str =
     match Uri.TryCreate(str, UriKind.Absolute) with
     | true, uri when uri.Scheme <> "http" && uri.Scheme <> "https" ->
@@ -63,6 +37,7 @@ module private Helpers =
       Error $"Failed to create Uri from {str}"
 
   let parseMacaroon (str: string) =
+    printfn $"parseMacaroon: {str}"
     try
       str
       |> Macaroon.Deserialize
@@ -71,69 +46,44 @@ module private Helpers =
     | ex ->
       Error($"{ex}")
 
+  let hex = HexEncoder()
 
-type LndRestSettings = internal {
-  Uri: Uri
-  MaybeCertificateThumbprint: byte[] option
-  Macaroon: MacaroonInfo
-  AllowInsecure: bool
+  let getHash (cert: X509Certificate2) =
+    use alg = System.Security.Cryptography.SHA256.Create()
+    alg.ComputeHash(cert.RawData)
+
+type ListChannelResponse = {
+  Id: ShortChannelId
+  Cap: Money
+  LocalBalance: Money
+  NodeId: PubKey
 }
-  with
-  static member Create(uriStr: string, certThumbPrintHex: string option, macaroon: string option, macaroonFile: string option, allowInsecure) = result {
-    let! uri = uriStr |> parseUri
-    let! macaroonInfo =
-      match macaroon, macaroonFile with
-      | Some _, Some _ ->
-        Error "You cannot specify both raw macaroon and macaroon file"
-      | Some x, _ ->
-        x
-        |> parseMacaroon
-        |> Result.map(MacaroonInfo.Raw)
-      | _, Some x ->
-        if x.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) |> not then
-          Error $"macaroon file must end with \".macaroon\", it was {x}"
-        else
-          MacaroonInfo.FilePath x
-          |> Ok
-      | None, None ->
-        Error "You must specify either macaroon itself or path to the macaroon file"
 
-    let! certThumbPrint =
-        match certThumbPrintHex with
-        | None ->
-          Ok None
-        | Some cert ->
-          try
-            cert.Replace(":", "")
-            |> Encoders.Hex.DecodeData
-            |> Some
-            |> Ok
-          with
-          | ex ->
-            sprintf "%A" ex
-            |> Error
+type GetChannelInfoResponse = {
+  Capacity: Money
+  Node1Policy: NodePolicy
+  Node2Policy: NodePolicy
+}
+and NodePolicy = {
+  Id: PubKey
+  TimeLockDelta: BlockHeightOffset16
+  MinHTLC: LNMoney
+  FeeBase: LNMoney
+  FeeProportionalMillionths: LNMoney
+  Disabled: bool
+}
 
-    return
-      { Uri = uri
-        MaybeCertificateThumbprint = certThumbPrint
-        AllowInsecure = allowInsecure
-        Macaroon = macaroonInfo }
-  }
+type ChannelEventUpdate =
+  | OpenChannel of ListChannelResponse
+  | PendingOpenChannel of OutPoint
+  | ClosedChannel of  {| Id: ShortChannelId; CloseTxHeight: BlockHeight; TxId: uint256 |}
+  | ActiveChannel of OutPoint
+  | InActiveChannel of OutPoint
+  | FullyResolvedChannel of OutPoint
 
-  member this.CreateLndAuth() =
-    match this.Macaroon with
-    | MacaroonInfo.Raw m ->
-      m
-      |> LndAuth.FixedMacaroon
-    | MacaroonInfo.FilePath m when m |> String.IsNullOrEmpty |> not ->
-      m
-      |> LndAuth.MacaroonFile
-    | _ ->
-      LndAuth.Null
-
-type ILightningInvoiceListener =
+type ILightningChannelEventsListener =
   inherit IDisposable
-  abstract member WaitInvoice: ct : CancellationToken -> Task<PaymentRequest>
+  abstract member WaitChannelChange: unit -> Task<ChannelEventUpdate>
 
 type LndOpenChannelRequest = {
   Private: bool option
@@ -146,30 +96,64 @@ type LndOpenChannelError = {
   StatusCode: int option
   Message: string
 }
-
-
-type ListChannelResponse = {
-  Id: ShortChannelId
-  Cap: Money
-  LocalBalance: Money
+type SendPaymentRequest = {
+  Invoice: PaymentRequest
+  MaxFee: Money
+  OutgoingChannelIds: ShortChannelId[]
 }
+
+type PaymentResult = {
+  PaymentPreimage: Primitives.PaymentPreimage
+  Fee: LNMoney
+}
+
+type InvoiceStateEnum =
+   | Open = 0
+   | Settled = 1
+   | Canceled = 2
+   | Accepted = 3
+
+type InvoiceSubscription = {
+  PaymentRequest: PaymentRequest
+  InvoiceState: InvoiceStateEnum
+  AmountPayed: Money
+}
+type RouteHint = {
+  Hops: HopHint []
+}
+and HopHint = {
+  NodeId: NodeId
+  ShortChannelId: ShortChannelId
+  FeeBase: LNMoney
+  FeeProportionalMillionths: uint32
+  CLTVExpiryDelta: BlockHeightOffset16
+}
+
 type INLoopLightningClient =
-  abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
+  abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
     paymentHash: Primitives.PaymentHash *
     value: LNMoney *
     expiry: TimeSpan *
-    memo: string
+    routeHints: RouteHint[] *
+    memo: string *
+    ?ct: CancellationToken
       -> Task<PaymentRequest>
   abstract member GetInvoice:
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
     expiry: TimeSpan *
-    memo: string -> Task<PaymentRequest>
-  abstract member Offer: invoice: PaymentRequest -> Task<Result<Primitives.PaymentPreimage, string>>
-  abstract member Listen: unit -> Task<ILightningInvoiceListener>
-  abstract member GetInfo: unit -> Task<obj>
-  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney -> Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest -> Task<Result<unit, LndOpenChannelError>>
-  abstract member ConnectPeer: nodeId: PubKey * host: string -> Task
-  abstract member ListChannels: unit -> Task<ListChannelResponse list>
+    routeHint: RouteHint[] *
+    memo: string *
+    ?ct: CancellationToken
+     -> Task<PaymentRequest>
+  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
+  abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
+  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?ct: CancellationToken -> Task<Route>
+  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>
+  abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
+  abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
+  abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
+  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
+  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
+

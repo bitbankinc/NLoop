@@ -12,6 +12,7 @@ open Microsoft.Extensions.Configuration
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server
+open NLoop.Server.Options
 
 module NLoopServerCommandLine =
   module Validators =
@@ -88,7 +89,8 @@ module NLoopServerCommandLine =
     ]
   let optionsForBothCliAndServer =
     seq [
-      let networkNames = Network.GetNetworks() |> Seq.map(fun n -> n.Name) |> Array.ofSeq
+      let networks = Network.GetNetworks()
+      let networkNames = networks |> Seq.map(fun n -> n.Name.ToLowerInvariant()) |> Array.ofSeq
       let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default: mainnet)")
       o.Argument <-
         let a = Argument<string>()
@@ -106,24 +108,31 @@ module NLoopServerCommandLine =
       yield! rpcOptions
     ]
 
-  let getChainOptions(c) =
-     let b = getChainOptionString (c)
+  let getChainOptions c (networks: Network list) =
+     let b = getChainOptionString c
+     let opts = c.GetDefaultOptions()
+     let nDefaults = networks |> List.map(fun n -> (n, c.GetDefaultOptions(n)))
      seq [
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCHost)),
-                              "RPC host name of the blockchain client")
+       let o =
+         let defaults =
+           nDefaults
+           |> List.fold(fun acc (n, o) -> $"{acc}{n.ToString().ToLowerInvariant()}: {o.RPCPort}, ") "defaults: ("
+           |> (+) <| ")"
+         Option<string>(b (nameof(opts.RPCHost)),
+                        $"RPC host name of the blockchain client. {defaults}")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o :> Option
-       let o = Option<int>(b (nameof(ChainOptions.Instance.RPCPort)),
+       let o = Option<int>(b (nameof(opts.RPCPort)),
                               "RPC port number of the blockchain client")
        o.Argument <-
          let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCUser)),
+       let o = Option<string>(b (nameof(opts.RPCUser)),
                               "RPC username of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -131,7 +140,7 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCPassword)),
+       let o = Option<string>(b (nameof(opts.RPCPassword)),
                               "RPC password of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
@@ -139,16 +148,32 @@ module NLoopServerCommandLine =
          a
        o
 
-       let o = Option<string>(b (nameof(ChainOptions.Instance.RPCCookieFile)),
+       let o = Option<string>(b (nameof(opts.RPCCookieFile)),
                               "RPC cookie file path of the blockchain client")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
+
+       let o = Option<string>(b (nameof(opts.ZmqHost)),
+                              $"optional: zeromq host address. It will fallback to rpc long-polling " +
+                              $"if it is unavailable (default: {opts.ZmqHost})")
+       o.Argument <-
+         let a = Argument<string>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
+       let o = Option<int>(b (nameof(opts.ZmqPort)), $"optional: zeromq port")
+       o.Argument <-
+         let a = Argument<int>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
      ]
 
   let getOptions(): Option seq =
+    let networks = Network.GetNetworks() |> Seq.toList
     seq [
       yield! optionsForBothCliAndServer
       let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.RPCCors).ToLowerInvariant()}",
@@ -166,18 +191,7 @@ module NLoopServerCommandLine =
         a
       o
 
-      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MaxAcceptableSwapFee).ToLowerInvariant()}")
-      o.Argument <-
-        let a = Argument<int64>()
-        a.Arity <- ArgumentArity.ZeroOrOne
-        a
-      o
-      let o = Option<int64>($"--{nameof(NLoopOptions.Instance.MinimumSwapAmountSatoshis).ToLowerInvariant()}", $"Minimum Swap amount we can perform. (default: {NLoopOptions.Instance.MinimumSwapAmountSatoshis})")
-      o.Argument <-
-        let a = Argument<int64>()
-        a.Arity <- ArgumentArity.ZeroOrOne
-        a
-      o
+
       let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
       o.Argument <-
         let a = Argument<bool>()
@@ -200,7 +214,7 @@ module NLoopServerCommandLine =
         a
       o
       for c in Enum.GetValues<SupportedCryptoCode>() do
-        yield! getChainOptions c
+        yield! getChainOptions c networks
 
       let o = Option<string>($"--boltzhost", $"Host name of your boltz server: (default: {Constants.DefaultBoltzServer})")
       o.Argument <-
@@ -230,8 +244,8 @@ module NLoopServerCommandLine =
       o
       // --- lnd ---
 
-      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCertThumbprint).ToLowerInvariant()}",
-                             "hex-encoded sha256 thumbnail of the lnd certificate")
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndCertThumbPrint).ToLowerInvariant()}",
+                             "Hex encoded sha256 thumbnail of the lnd certificate")
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ZeroOrOne
@@ -254,7 +268,7 @@ module NLoopServerCommandLine =
         a
       o
 
-      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndServer).ToLowerInvariant()}",
+      let o = Option<string>($"--{nameof(NLoopOptions.Instance.LndGrpcServer).ToLowerInvariant()}",
                              "Host Url for the lnd")
       o.Argument <-
         let a = Argument<string>()
@@ -262,7 +276,7 @@ module NLoopServerCommandLine =
         a
       o
 
-      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.LndAllowUnsafe).ToLowerInvariant()}",
+      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.LndAllowInsecure).ToLowerInvariant()}",
                              "Allow connection to the LND without ssl/tls (intended for test use)")
       o.Argument <-
         let a = Argument<bool>()

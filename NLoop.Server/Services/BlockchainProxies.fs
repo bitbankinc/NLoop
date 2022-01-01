@@ -14,17 +14,7 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.Actors
-
-type BoltzFeeEstimator(boltzClient: BoltzClient) =
-  interface IFeeEstimator with
-    member this.Estimate(cryptoCode) = task {
-      let! feeMap = boltzClient.GetFeeEstimation()
-      match feeMap.TryGetValue(cryptoCode.ToString()) with
-      | true, fee ->
-        return FeeRate(fee |> decimal)
-      | false, _ ->
-        return raise <| BoltzRPCException($"Boltz did not return feerate for cryptoCode {cryptoCode}! Supported CryptoCode was {feeMap |> Seq.map(fun k _ -> k) |> Seq.toList}")
-    }
+open NLoop.Server.SwapServerClient
 
 type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>, logger: ILogger<BitcoinRPCBroadcaster>) =
   interface IBroadcaster with
@@ -35,6 +25,13 @@ type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>, logger: ILogger<Bitcoin
       ()
     }
 
+type RPCFeeEstimator(opts: IOptions<NLoopOptions>) =
+  interface IFeeEstimator with
+    member this.Estimate target cc = task {
+      let! resp = opts.Value.GetRPCClient(cc).TryEstimateSmartFeeAsync(target.Value |> int)
+      return resp.FeeRate
+    }
+
 type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
 
   interface IUTXOProvider with
@@ -42,8 +39,13 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
       let cli = opts.Value.GetRPCClient(cryptoCode)
       let! us = cli.ListUnspentAsync()
       let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
-      if whatWeHave < amount then return Error (UTXOProviderError.InsufficientFunds(whatWeHave, amount)) else
-      return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
+      if whatWeHave < amount then
+        return
+          (cryptoCode, whatWeHave, amount)
+          |> UTXOProviderError.InsufficientFunds
+          |> Error
+      else
+        return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
     }
 
     member this.SignSwapTxPSBT(psbt, cryptoCode) = task {

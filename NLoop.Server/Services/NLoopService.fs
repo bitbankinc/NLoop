@@ -5,22 +5,33 @@ open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Channels
+open System.Threading.Tasks
+open BoltzClient
+open EventStore.ClientAPI
+open EventStore.ClientAPI
 open LndClient
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
+open Microsoft.Extensions.Options
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
+
+open NLoop.Server.Options
+open NLoop.Server.SwapServerClient
 open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
+
   [<Extension>]
   static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
       let test = defaultArg test false
@@ -29,11 +40,17 @@ type NLoopExtensions() =
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
           config.Bind(opts)
+          )
+        .BindCommandLine()
+        .Configure<IServiceProvider>(fun opts serviceProvider ->
+          let config = serviceProvider.GetService<IConfiguration>()
           let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
-            let cOpts = ChainOptions()
+            let cOpts =
+              let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
+              c.GetDefaultOptions(network)
             cOpts.CryptoCode <- c
-            for p in typeof<ChainOptions>.GetProperties() do
+            for p in typeof<IChainOptions>.GetProperties() do
               let op =
                 let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
                 bindingContext.ParseResult.ValueForOption(optsString)
@@ -43,39 +60,78 @@ type NLoopExtensions() =
             config.GetSection(c.ToString()).Bind(cOpts)
             opts.ChainOptions.Add(c, cOpts)
           )
-        .BindCommandLine()
         |> ignore
 
       if (not <| test) then
         this
-          .AddSingleton<ILightningClientProvider, LightningClientProvider>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
-          .AddSingleton<IRepositoryProvider, RepositoryProvider>()
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IRepositoryProvider>() :?> RepositoryProvider :> IHostedService
+            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
           )
-
-          .AddSingleton<ISwapEventListener, BoltzListener>()
-          .AddSingleton<ISwapEventListener, BlockchainListener>()
-          .AddHostedService<SwapEventListeners>()
-
-          .AddSingleton<SwapStateProjection>()
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<SwapStateProjection>() :> IHostedService
+            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<AutoLoopManager>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
           )
           |> ignore
+
       this
-        .AddHttpClient<BoltzClient>()
-        .ConfigureHttpClient(fun sp client ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
-          client.BaseAddress <-
-            let u = UriBuilder($"{opts.BoltzHost}:{opts.BoltzPort}")
-            u.Scheme <- if opts.BoltzHttps then "https" else "http"
-            u.Uri
+        .AddSingleton<IEventStoreConnection>(fun sp ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          let connSettings =
+            ConnectionSettings.Create().DisableTls().Build()
+          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
+          do conn.ConnectAsync().GetAwaiter().GetResult()
+          conn
         )
         |> ignore
+
+      this
+        .AddSingleton<AutoLoopManager>()
+        |> ignore
+
+      this
+        .AddSingleton<ISystemClock, SystemClock>()
+        .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
+        .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
+        .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+        .AddSingleton<BoltzListener>()
+        .AddSingleton<ISwapEventListener, BoltzListener>(fun sp -> sp.GetRequiredService<BoltzListener>())
+        |> ignore
+
+      this
+        .AddSingleton<ExchangeRateProvider>()
+        .AddSingleton<TryGetExchangeRate>(Func<IServiceProvider,_> (fun sp ->
+          sp.GetService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
+        ))
+        |> ignore
+      // Workaround to register one instance as a multiple interfaces.
+      // see: https://github.com/aspnet/DependencyInjection/issues/360
+      this.AddSingleton<BlockchainListeners>()
+        .AddSingleton<ISwapEventListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> ISwapEventListener)
+        .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
+        |> ignore
+      this
+        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient))
+        |> ignore
+      this
+        .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
+        .AddHttpClient<BoltzClient>()
+        .ConfigureHttpClient(fun sp client ->
+          client.BaseAddress <- sp.GetRequiredService<IOptions<NLoopOptions>>().Value.BoltzUrl
+        )
+        |> ignore
+
       this
         .AddSignalR()
         .AddJsonProtocol(fun opts ->
@@ -90,9 +146,10 @@ type NLoopExtensions() =
       this
         .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
-        .AddSingleton<IFeeEstimator, BoltzFeeEstimator>()
+        .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
+        .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
         .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
-        .AddSingleton<SwapActor>()
+        .AddSingleton<ISwapActor, SwapActor>()
 

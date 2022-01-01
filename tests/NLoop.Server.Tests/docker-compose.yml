@@ -37,6 +37,8 @@ services:
       - "28333" # ZMQ
     ports:
       - "${BITCOIND_RPC_PORT:?no_bitcoind_rpc_port_set}:43782" # RPC
+      - "${BITCOIND_ZMQ_BLOCK_PORT:?no_bitcoind_zmq_block_port_set}:28332"
+      - "${BITCOIND_ZMQ_TX_PORT:?no_bitcoind_zmq_tx_port_set}:28333"
     volumes:
       - "${DATA_PATH:?no_data_path}/bitcoin:/data"
   litecoind:
@@ -117,6 +119,7 @@ services:
       - litecoind
     ports:
       - "${LND_USER_REST_PORT:?no_lnd_user_rest_port_set}:32736"
+      - "${LND_USER_RPC_PORT:?no_lnd_user_rpc_port_set}:32777"
     volumes:
       - "${DATA_PATH}/lnd_user:/data"
       - "${DATA_PATH}/bitcoin:/deps/.bitcoin"

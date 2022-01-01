@@ -4,6 +4,7 @@ open System.Net.Http
 open FSharp.Control.Tasks
 
 open Microsoft.AspNetCore.TestHost
+open NLoop.Server.Tests
 open Xunit
 
 open NLoop.Domain
@@ -12,7 +13,7 @@ open NLoopClient
 [<Fact>]
 [<Trait("Docker", "Off")>]
 let ``ServerTest(getversion)`` () = task {
-  use server = new TestServer(Helpers.getTestHost())
+  use server = new TestServer(TestHelpers.GetTestHost())
   use httpClient = server.CreateClient()
   let! resp =
     new HttpRequestMessage(HttpMethod.Get, "/v1/version")

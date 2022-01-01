@@ -53,6 +53,25 @@ namespace NLoopClient
         /// <exception cref="ApiException">A server side error occurred.</exception>
         System.Threading.Tasks.Task<LoopInResponse> InAsync(LoopInRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+    
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+    
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        System.Threading.Tasks.Task Params2Async(SetLiquidityParametersRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+    
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NSwag", "13.10.8.0 (NJsonSchema v10.3.11.0 (Newtonsoft.Json v12.0.0.0))")]
@@ -595,6 +614,237 @@ namespace NLoopClient
             }
         }
     
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        {
+            if (@base == null)
+                throw new System.ArgumentNullException("@base");
+    
+            if (quote == null)
+                throw new System.ArgumentNullException("quote");
+    
+            var urlBuilder_ = new System.Text.StringBuilder();
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest/{base}/{quote}");
+            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
+    
+            var client_ = _httpClient;
+            var disposeClient_ = false;
+            try
+            {
+                using (var request_ = new System.Net.Http.HttpRequestMessage())
+                {
+                    request_.Method = new System.Net.Http.HttpMethod("GET");
+                    request_.Headers.Accept.Add(System.Net.Http.Headers.MediaTypeWithQualityHeaderValue.Parse("application/json"));
+    
+                    PrepareRequest(client_, request_, urlBuilder_);
+    
+                    var url_ = urlBuilder_.ToString();
+                    request_.RequestUri = new System.Uri(url_, System.UriKind.RelativeOrAbsolute);
+    
+                    PrepareRequest(client_, request_, url_);
+    
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var disposeResponse_ = true;
+                    try
+                    {
+                        var headers_ = System.Linq.Enumerable.ToDictionary(response_.Headers, h_ => h_.Key, h_ => h_.Value);
+                        if (response_.Content != null && response_.Content.Headers != null)
+                        {
+                            foreach (var item_ in response_.Content.Headers)
+                                headers_[item_.Key] = item_.Value;
+                        }
+    
+                        ProcessResponse(client_, response_);
+    
+                        var status_ = (int)response_.StatusCode;
+                        if (status_ == 200)
+                        {
+                            var objectResponse_ = await ReadObjectResponseAsync<SuggestSwapsResponse>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            if (objectResponse_.Object == null)
+                            {
+                                throw new ApiException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
+                            }
+                            return objectResponse_.Object;
+                        }
+                        else
+                        {
+                            var responseData_ = response_.Content == null ? null : await response_.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            throw new ApiException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
+                        }
+                    }
+                    finally
+                    {
+                        if (disposeResponse_)
+                            response_.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                if (disposeClient_)
+                    client_.Dispose();
+            }
+        }
+    
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <param name="@base">base currency</param>
+        /// <param name="quote">quote currency</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        {
+            if (@base == null)
+                throw new System.ArgumentNullException("@base");
+    
+            if (quote == null)
+                throw new System.ArgumentNullException("quote");
+    
+            var urlBuilder_ = new System.Text.StringBuilder();
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
+            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
+    
+            var client_ = _httpClient;
+            var disposeClient_ = false;
+            try
+            {
+                using (var request_ = new System.Net.Http.HttpRequestMessage())
+                {
+                    request_.Method = new System.Net.Http.HttpMethod("GET");
+                    request_.Headers.Accept.Add(System.Net.Http.Headers.MediaTypeWithQualityHeaderValue.Parse("application/json"));
+    
+                    PrepareRequest(client_, request_, urlBuilder_);
+    
+                    var url_ = urlBuilder_.ToString();
+                    request_.RequestUri = new System.Uri(url_, System.UriKind.RelativeOrAbsolute);
+    
+                    PrepareRequest(client_, request_, url_);
+    
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var disposeResponse_ = true;
+                    try
+                    {
+                        var headers_ = System.Linq.Enumerable.ToDictionary(response_.Headers, h_ => h_.Key, h_ => h_.Value);
+                        if (response_.Content != null && response_.Content.Headers != null)
+                        {
+                            foreach (var item_ in response_.Content.Headers)
+                                headers_[item_.Key] = item_.Value;
+                        }
+    
+                        ProcessResponse(client_, response_);
+    
+                        var status_ = (int)response_.StatusCode;
+                        if (status_ == 200)
+                        {
+                            var objectResponse_ = await ReadObjectResponseAsync<LiquidityParameters>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            if (objectResponse_.Object == null)
+                            {
+                                throw new ApiException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
+                            }
+                            return objectResponse_.Object;
+                        }
+                        else
+                        {
+                            var responseData_ = response_.Content == null ? null : await response_.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            throw new ApiException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
+                        }
+                    }
+                    finally
+                    {
+                        if (disposeResponse_)
+                            response_.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                if (disposeClient_)
+                    client_.Dispose();
+            }
+        }
+    
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
+        /// <returns>OK</returns>
+        /// <exception cref="ApiException">A server side error occurred.</exception>
+        public async System.Threading.Tasks.Task Params2Async(SetLiquidityParametersRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        {
+            if (body == null)
+                throw new System.ArgumentNullException("body");
+    
+            var urlBuilder_ = new System.Text.StringBuilder();
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
+    
+            var client_ = _httpClient;
+            var disposeClient_ = false;
+            try
+            {
+                using (var request_ = new System.Net.Http.HttpRequestMessage())
+                {
+                    var content_ = new System.Net.Http.StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(body, _settings.Value));
+                    content_.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("application/json");
+                    request_.Content = content_;
+                    request_.Method = new System.Net.Http.HttpMethod("POST");
+    
+                    PrepareRequest(client_, request_, urlBuilder_);
+    
+                    var url_ = urlBuilder_.ToString();
+                    request_.RequestUri = new System.Uri(url_, System.UriKind.RelativeOrAbsolute);
+    
+                    PrepareRequest(client_, request_, url_);
+    
+                    var response_ = await client_.SendAsync(request_, System.Net.Http.HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                    var disposeResponse_ = true;
+                    try
+                    {
+                        var headers_ = System.Linq.Enumerable.ToDictionary(response_.Headers, h_ => h_.Key, h_ => h_.Value);
+                        if (response_.Content != null && response_.Content.Headers != null)
+                        {
+                            foreach (var item_ in response_.Content.Headers)
+                                headers_[item_.Key] = item_.Value;
+                        }
+    
+                        ProcessResponse(client_, response_);
+    
+                        var status_ = (int)response_.StatusCode;
+                        if (status_ == 200)
+                        {
+                            return;
+                        }
+                        else
+                        if (status_ == 400)
+                        {
+                            var objectResponse_ = await ReadObjectResponseAsync<Response3>(response_, headers_, cancellationToken).ConfigureAwait(false);
+                            if (objectResponse_.Object == null)
+                            {
+                                throw new ApiException("Response was null which was not expected.", status_, objectResponse_.Text, headers_, null);
+                            }
+                            throw new ApiException<Response3>("invalid request", status_, objectResponse_.Text, headers_, objectResponse_.Object, null);
+                        }
+                        else
+                        {
+                            var responseData_ = response_.Content == null ? null : await response_.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            throw new ApiException("The HTTP status code of the response was not expected (" + status_ + ").", status_, responseData_, headers_, null);
+                        }
+                    }
+                    finally
+                    {
+                        if (disposeResponse_)
+                            response_.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                if (disposeClient_)
+                    client_.Dispose();
+            }
+        }
+    
         protected struct ObjectResponseResult<T>
         {
             public ObjectResponseResult(T responseObject, string responseText)
@@ -735,12 +985,82 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class HopHint 
+    {
+        /// <summary>The pubkey key of the node at the start of the channel</summary>
+        [Newtonsoft.Json.JsonProperty("node_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Node_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("chan_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
+        public string Chan_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("fee_base_msat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Fee_base_msat { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("fee_proportional_millionths", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Fee_proportional_millionths { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("cltv_expiry_delta", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Cltv_expiry_delta { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static HopHint FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<HopHint>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class RouteHint 
+    {
+        /// <summary>&lt; Route hints which will be included in the invoice. See bolt11 for the detail.</summary>
+        [Newtonsoft.Json.JsonProperty("hops", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.MaxLength(6)]
+        public System.Collections.Generic.ICollection<HopHint> Hops { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static RouteHint FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<RouteHint>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
         /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
-        public string Channel_id { get; set; }
+        public System.Collections.Generic.ICollection<string> Channel_id { get; set; }
     
         /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC.</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
@@ -753,13 +1073,37 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; The number of confirmation before we make an off-chain offer.</summary>
-        [Newtonsoft.Json.JsonProperty("conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int? Conf_target { get; set; } = 0;
+        /// <summary>&lt; The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop. Default number depends on the asset type.</summary>
+        [Newtonsoft.Json.JsonProperty("swap_tx_conf_requirement", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Swap_tx_conf_requirement { get; set; }
     
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
+    
+        /// <summary>&lt; Maximum off-chain fee in sat that may be paied for swap payment to the server. This limit is applied during path finding.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_routing_fee { get; set; }
+    
+        /// <summary>&lt; Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.</summary>
+        [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_routing_fee { get; set; }
+    
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_fee { get; set; }
+    
+        /// <summary>&lt; Maximum amount of the (loop-out) swap fee that may be charged as a prepayment</summary>
+        [Newtonsoft.Json.JsonProperty("max_prepay_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_amount { get; set; }
+    
+        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.</summary>
+        [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee { get; set; }
+    
+        /// <summary>&lt; Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)</summary>
+        [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Sweep_conf_target { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -801,6 +1145,22 @@ namespace NLoopClient
         /// <summary>&lt; Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
+    
+        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.</summary>
+        [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee { get; set; }
+    
+        /// <summary>&lt; Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_fee { get; set; }
+    
+        /// <summary>&lt; Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)</summary>
+        [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Htlc_conf_target { get; set; }
+    
+        /// <summary>&lt; route hints included in the invoice. Usually used in case of the private channel. But in NLoop, we also use it as a means of communication against the server, i.e. to tell them which channel do we want inbound liqidity for.</summary>
+        [Newtonsoft.Json.JsonProperty("route_hints", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.ICollection<RouteHint> Route_hints { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -893,6 +1253,9 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("refund_txid", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Refund_txid { get; set; }
     
+        [Newtonsoft.Json.JsonProperty("cost", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public Cost Cost { get; set; }
+    
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
         [Newtonsoft.Json.JsonExtensionData]
@@ -925,6 +1288,42 @@ namespace NLoopClient
         public static GetSwapHistoryResponse FromJson(string data)
         {
             return Newtonsoft.Json.JsonConvert.DeserializeObject<GetSwapHistoryResponse>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class Cost 
+    {
+        [Newtonsoft.Json.JsonProperty("server_onchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Server_onchain { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("server_offchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Server_offchain { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("onchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Onchain { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("offchain", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long Offchain { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static Cost FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<Cost>(data);
         }
     
     }
@@ -1018,6 +1417,239 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public enum LiquidityRuleType
+    {
+        [System.Runtime.Serialization.EnumMember(Value = @"UNKNOWN")]
+        UNKNOWN = 0,
+    
+        [System.Runtime.Serialization.EnumMember(Value = @"THRESHOLD")]
+        THRESHOLD = 1,
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class LiquidityRule 
+    {
+        /// <summary>if the incoming liquidity (i.e. other party's share of the channel cap) has become less than this, we will dispatch the loop-out swap
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("incoming_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int Incoming_threshold_percent { get; set; }
+    
+        /// <summary>if the outgoing liquidity (i. our share in the channel cap) has become less than this, we will dispatch the loop-in swap
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("outgoing_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int Outgoing_threshold_percent { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Pubkey { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
+        public string Channel_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("type", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public LiquidityRuleType Type { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static LiquidityRule FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<LiquidityRule>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class LiquidityParameters 
+    {
+        [Newtonsoft.Json.JsonProperty("rules", Required = Newtonsoft.Json.Required.Always)]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.ICollection<LiquidityRule> Rules { get; set; } = new System.Collections.ObjectModel.Collection<LiquidityRule>();
+    
+        /// <summary>The parts per million of swap amount that is allowed to be allocated to swap fees. This valie is applied across swap categories and may not be set in conjunction with sweep fee rate, swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Fee_ppm { get; set; }
+    
+        /// <summary>The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_kvbyte", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Sweep_fee_rate_sat_per_kvbyte { get; set; }
+    
+        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_swap_fee_ppm { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("max_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_routing_fee_ppm { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_prepay_routing_fee_ppm { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("max_prepay_sat", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_prepay_sat { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("max_miner_fee_sat", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_miner_fee_sat { get; set; }
+    
+        /// <summary>The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within.</summary>
+        [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Always)]
+        public int Sweep_conf_target { get; set; }
+    
+        /// <summary>The amount of time we require to pass since a channel was part of a failed swap due to off chain payment failure until it will be considered for swap suggestions again, expressed in seconds.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("failure_backoff_sec", Required = Newtonsoft.Json.Required.Always)]
+        public int Failure_backoff_sec { get; set; }
+    
+        /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("autoloop", Required = Newtonsoft.Json.Required.Always)]
+        public bool Autoloop { get; set; }
+    
+        /// <summary>The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.</summary>
+        [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.Always)]
+        public int Auto_max_in_flight { get; set; }
+    
+        /// <summary>The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("min_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Min_swap_amount { get; set; }
+    
+        /// <summary>The maximum swap amount, expressed in satoshis.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_amount { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static LiquidityParameters FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<LiquidityParameters>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class SetLiquidityParametersRequest 
+    {
+        [Newtonsoft.Json.JsonProperty("parameters", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public LiquidityParameters Parameters { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static SetLiquidityParametersRequest FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<SetLiquidityParametersRequest>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class Disqualified 
+    {
+        [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
+        public string Channel_id { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Pubkey { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("reason", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Reason { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static Disqualified FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<Disqualified>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class SuggestSwapsResponse 
+    {
+        [Newtonsoft.Json.JsonProperty("loop_out", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.ICollection<LoopOutRequest> Loop_out { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("loop_in", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.ICollection<LoopInRequest> Loop_in { get; set; }
+    
+        [Newtonsoft.Json.JsonProperty("disqualified", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.ICollection<Disqualified> Disqualified { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static SuggestSwapsResponse FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<SuggestSwapsResponse>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class Response 
     {
         /// <summary>error message</summary>
@@ -1071,6 +1703,35 @@ namespace NLoopClient
         public static Response2 FromJson(string data)
         {
             return Newtonsoft.Json.JsonConvert.DeserializeObject<Response2>(data);
+        }
+    
+    }
+    
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class Response3 
+    {
+        /// <summary>error message</summary>
+        [Newtonsoft.Json.JsonProperty("errors", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.MinLength(1)]
+        public System.Collections.Generic.ICollection<string> Errors { get; set; }
+    
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static Response3 FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<Response3>(data);
         }
     
     }

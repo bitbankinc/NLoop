@@ -1,5 +1,6 @@
 namespace NLoop.Domain.IO
 
+open System
 open System.Text.Json.Serialization
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -8,12 +9,54 @@ open Newtonsoft.Json
 open NLoop.Domain
 open NLoop.Domain.Utils
 
+
+/// SwapCost is a breakdown of the final swap costs.
+type SwapCost = {
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "server_onchain">]
+  ServerOnChain: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "server_offchain">]
+  ServerOffChain: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "onchain">]
+  OnChain: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "offchain">]
+  OffChain: Money
+}
+  with
+  member this.OnChainTotal =
+    this.ServerOnChain +  this.OnChain
+
+  member this.OffChainTotal =
+    this.ServerOffChain + this.OffChain
+
+  static member (+) (a: SwapCost, b: SwapCost) = {
+    OffChain = a.OffChain + b.OffChain
+    ServerOnChain = a.ServerOnChain + b.ServerOnChain
+    ServerOffChain = a.ServerOffChain + b.ServerOffChain
+    OnChain = a.OnChain + b.OnChain
+  }
+
+  static member Zero = {
+    ServerOnChain = Money.Zero
+    ServerOffChain = Money.Zero
+    OnChain = Money.Zero
+    OffChain = Money.Zero
+  }
 type LoopOut = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
-  Status: SwapStatusType
-  AcceptZeroConf: bool
+
+  OutgoingChanIds: ShortChannelId []
+
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  SwapTxConfRequirement: BlockHeightOffset32
+
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   ClaimKey: Key
   [<JsonConverter(typeof<PaymentPreimageJsonConverter>)>]
@@ -26,29 +69,61 @@ type LoopOut = {
   OnChainAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
-  LockupTransactionId: uint256 option
+
+  /// a.k.a. "swap tx", "htlc tx" created and published by the counter party
+  SwapTxHex: string option
+
+  /// The height at which Swap Tx is confirmed.
+  SwapTxHeight: BlockHeight option
+
   ClaimTransactionId: uint256 option
+  IsClaimTxConfirmed: bool
+  IsOffchainOfferResolved: bool
+
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  Label: string
+
+  PrepayInvoice: string
+
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  SweepConfTarget: BlockHeightOffset32
+
+  MaxMinerFee: Money
   ChainName: string
+  Cost: SwapCost
 }
   with
-  member this.OurNetwork =
-    let struct (cryptoCode, _) = this.PairId
+  member this.BaseAssetNetwork =
+    let struct (cryptoCode, _) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
-  member this.TheirNetwork =
-    let struct (_, cryptoCode) = this.PairId
+  member this.QuoteAssetNetwork =
+    let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.AcceptZeroConf =
+    this.SwapTxConfRequirement = BlockHeightOffset32.Zero
+  member this.IsSwapTxConfirmedEnough(currentHeight: BlockHeight) =
+    this.AcceptZeroConf ||
+      match this.SwapTxHeight with
+      | None -> false
+      | Some x ->
+        x + this.SwapTxConfRequirement - BlockHeightOffset32.One <= currentHeight
+  member this.SwapTx =
+    this.SwapTxHex
+    |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
 
   member this.Validate() =
-    if this.OnChainAmount <= Money.Zero then Error ("LoopOut has non-positive on chain amount") else
+    if this.OnChainAmount <= Money.Zero then Error "LoopOut has non-positive on chain amount" else
     Ok()
 
+type TxOutInfoHex = {
+  TxHex: string
+  N: uint
+}
 type LoopIn = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]
   Id: SwapId
-  [<JsonConverter(typeof<SwapStatusTypeJsonConverter>)>]
-  Status: SwapStatusType
 
   [<JsonConverter(typeof<PrivKeyJsonConverter>)>]
   RefundPrivateKey: Key
@@ -62,20 +137,46 @@ type LoopIn = {
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
 
-  LockupTransactionHex: string option
+  [<JsonConverter(typeof<BlockHeightOffsetJsonConverter>)>]
+  HTLCConfTarget: BlockHeightOffset32
+
+  SwapTxInfoHex: TxOutInfoHex option
   RefundTransactionId: uint256 option
+
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId
+  Label: string
   ChainName: string
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  MaxMinerFee: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  MaxSwapFee: Money
+
+  LastHop: PubKey option
+
+  IsOffChainPaymentReceived: bool
+  IsOurSuccessTxConfirmed: bool
+
+  Cost: SwapCost
 }
   with
-  member this.OurNetwork =
-    let struct (cryptoCode, _) = this.PairId
+  member this.BaseAssetNetwork =
+    let struct (cryptoCode, _) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
-  member this.TheirNetwork =
-    let struct (_, cryptoCode) = this.PairId
+  member this.QuoteAssetNetwork =
+    let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
 
+  member this.PaymentRequest =
+    PaymentRequest.Parse(this.Invoice)
+    |> ResultUtils.Result.deref
+
+  member this.SwapTxInfo =
+    this.SwapTxInfoHex
+    |> Option.map(fun info -> let tx = Transaction.Parse(info.TxHex, this.QuoteAssetNetwork) in (tx, info.N))
+
   member this.Validate() =
-    if this.ExpectedAmount <= Money.Zero then Error ($"LoopIn has non-positive expected amount {this.ExpectedAmount}") else
+    if this.ExpectedAmount <= Money.Zero then Error $"LoopIn has non-positive expected amount {this.ExpectedAmount}" else
     Ok()

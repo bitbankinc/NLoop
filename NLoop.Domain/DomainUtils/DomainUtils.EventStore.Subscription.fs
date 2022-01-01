@@ -43,12 +43,18 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
                               name: string,
                               streamId: SubscriptionTarget,
                               log: ILogger<EventStoreDBSubscription>,
-                              eventHandler: EventHandler) =
+                              eventHandler: EventHandler,
+                              ?onLiveProcessingStart: EventStoreCatchUpSubscription -> unit,
+                              ?conn: IEventStoreConnection) =
 
+  let onLiveProcessingStart = defaultArg onLiveProcessingStart (fun _ -> ())
   let conn: IEventStoreConnection =
+    conn |> Option.defaultWith (fun () ->
       let connSettings = ConnectionSettings.Create().DisableTls().Build()
-      EventStoreConnection.Create(connSettings, eventStoreConfig.Uri)
-  do conn.ConnectAsync().GetAwaiter().GetResult()
+      let conn = EventStoreConnection.Create(connSettings, eventStoreConfig.Uri)
+      do conn.ConnectAsync().GetAwaiter().GetResult()
+      conn
+    )
 
   let settings: CatchUpSubscriptionSettings =
     CatchUpSubscriptionSettings
@@ -88,6 +94,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
         conn.SubscribeToStreamFrom(
           settings = settings,
           stream = streamId.Value,
+          liveProcessingStarted = onLiveProcessingStart,
           lastCheckpoint = lastCheckpoint,
           eventAppeared = eventAppeared,
           subscriptionDropped = subscriptionDropped

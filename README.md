@@ -55,6 +55,10 @@ That is a WebSocket endpoint for listening to events.
 
 ## Why use NLoop?
 
+### Server side is open source.
+
+
+
 ### Event Sourcing
 
 * Immutable audit trail with WORM
