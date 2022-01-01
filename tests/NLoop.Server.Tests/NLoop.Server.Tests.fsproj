@@ -14,7 +14,6 @@
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="AutoLoopTest.fs" />
     <Compile Include="BlockListenerTest.fs" />
-    <Compile Include="ServerIntegrationTests.fs" />
     <Compile Include="Program.fs" />
     <Content Include="README.md" />
   </ItemGroup>
