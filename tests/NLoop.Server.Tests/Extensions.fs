@@ -36,7 +36,7 @@ module private Helpers =
   let getLNDClient (path) port  =
     let (uri, lndCertThumbprint, lndMacaroonPath) = getLndRestSettings path port
     let settings =
-      LndGrpcSettings.Create(uri, lndCertThumbprint |> Some, None, Some <| lndMacaroonPath, false)
+      LndGrpcSettings.Create(uri, None, Some <| lndMacaroonPath,lndCertThumbprint |> Some,  false)
       |> function | Ok x -> x | Error e -> failwith e
     NLoopLndGrpcClient(settings, Network.RegTest)
 
