@@ -10,14 +10,15 @@ We have a two binaries for you to work with.
 Download the latest binary from [the release page](https://github.com/joemphilips/NLoop/releases)
 and run with `--help` to see the possible configuration option
 
-`nloopd` requires following services to run alongside.
+`nloopd` must connect to following services to work correctly.
+
 1. [bitcoind](https://github.com/bitcoin/bitcoin)
   * or `litecoind` if you want to work with litecoin.
 2. [lnd](https://github.com/bitcoin/bitcoin)
 3. [EventStoreDB](https://www.eventstore.com/eventstoredb)
   * For saving the application's state.
 
-Probably the best way to check its behaviour is to run it in the test environment.
+Probably the best way to check its behaviour is to run it in the regtest.
 Check the following guide for how-to.
 
 ### How to build in master
@@ -38,6 +39,9 @@ Note that this requires .NET SDK with compatible version installed.
 cd tests/NLoop.Server.Tests
 source env.sh
 docker-compose up -d # Start dependencies such as bitcoind and lnd
+# Or if you need sudo, run with -E option to retain the environment variables.
+# `sudo -E docker-compose up -d`
+
 cd ../..
 ./scripts/start_with_local_docker.sh
 

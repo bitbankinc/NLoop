@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/aspnet:5.0-focal AS base
+FROM mcr.microsoft.com/dotnet/aspnet:5.0.3-focal AS base
 WORKDIR /app
 EXPOSE 5000
 
@@ -19,10 +19,13 @@ COPY [".config/dotnet-tools.json", ".config/dotnet-tools.json"]
 RUN dotnet tool restore
 
 # 2. restore dependencies
-COPY ["NLoop.Server/NLoop.Server.fsproj", "NLoop.Server/"]
+COPY ["BoltzClient/BoltzClient.fsproj", "BoltzClient/"]
+COPY ["LndGrpcClient/LndGrpcClient.csproj", "LndGrpcClient/"]
+COPY ["LndClient/LndClient.fsproj", "LndClient/"]
 COPY ["NLoop.OpenAPIClient/NLoop.OpenAPIClient.csproj", "NLoop.OpenAPIClient/"]
 COPY ["NLoop.Domain/NLoop.Domain.fsproj", "NLoop.Domain/"]
-COPY ["LndClient/LndClient.fsproj", "LndClient/"]
+COPY ["NLoop.Server/NLoop.Server.fsproj", "NLoop.Server/"]
+COPY ["NLoop.CLI/NLoop.CLI.fsproj", "NLoop.CLI/"]
 RUN dotnet restore "NLoop.Server/NLoop.Server.fsproj"
 
 # 3. Build
