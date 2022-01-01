@@ -768,9 +768,9 @@
             "description": "The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.\n",
             "nullable": true
           },
-          "max_swap_fee": {
+          "max_swap_fee_ppm": {
             "type": "integer",
-            "description": "The maximum fee paid to the server for facilitating the swap, expressed as satoshis.\n",
+            "description": "The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.\n",
             "nullable": true
           },
           "max_routing_fee_ppm": {

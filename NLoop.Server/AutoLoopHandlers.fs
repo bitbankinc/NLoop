@@ -35,7 +35,7 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
       LiquidityParameters.Rules = [||]
       FeePPM = ValueNone
       SweepFeeRateSatPerKVByte = ValueNone
-      MaxSwapFee = ValueNone
+      MaxSwapFeePpm = ValueNone
       MaxRoutingFeePpm = ValueNone
       MaxPrepayRoutingFeePpm = ValueNone
       MaxPrepay = ValueNone
@@ -61,7 +61,7 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
             with
             SweepFeeRateSatPerKVByte = f.SweepFeeRateLimit.FeePerK |> ValueSome
             MaxMinerFee = f.MaximumMinerFee |> ValueSome
-            MaxSwapFee = f.MaximumSwapFee |> ValueSome
+            MaxSwapFeePpm = f.MaximumSwapFeePPM |> ValueSome
             MaxRoutingFeePpm = f.MaximumRoutingFeePPM |> ValueSome
             MaxPrepayRoutingFeePpm = f.MaximumPrepayRoutingFeePPM |> ValueSome
             MaxPrepay = f.MaximumPrepay |> ValueSome
@@ -73,7 +73,7 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
 let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFeeLimit, _> =
   let isFeePPM = r.FeePPM.IsSome
   let isCategories =
-    r.MaxSwapFee.IsSome  ||
+    r.MaxSwapFeePpm.IsSome  ||
     r.MaxRoutingFeePpm.IsSome ||
     r.MaxPrepayRoutingFeePpm.IsSome ||
     r.MaxMinerFee.IsSome ||
@@ -88,9 +88,9 @@ let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFee
   elif isCategories then
     let p = pairId.DefaultLoopOutParameters
     {
-      FeeCategoryLimit.MaximumSwapFee =
-        r.MaxSwapFee
-        |> ValueOption.defaultValue(p.MaxSwapFee)
+      FeeCategoryLimit.MaximumSwapFeePPM =
+        r.MaxSwapFeePpm
+        |> ValueOption.defaultValue(p.MaxSwapFeePPM)
       MaximumPrepay =
         r.MaxPrepay
         |> ValueOption.defaultValue(p.MaxPrepay)

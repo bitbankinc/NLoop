@@ -1489,10 +1489,10 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_kvbyte", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Sweep_fee_rate_sat_per_kvbyte { get; set; }
     
-        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as satoshis.
+        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public int? Max_swap_fee { get; set; }
+        [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Max_swap_fee_ppm { get; set; }
     
         [Newtonsoft.Json.JsonProperty("max_routing_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Max_routing_fee_ppm { get; set; }

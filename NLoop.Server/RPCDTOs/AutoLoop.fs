@@ -64,8 +64,8 @@ type LiquidityParameters = {
 
   [<JsonPropertyName "sweep_fee_rate_sat_per_kvbyte">]
   SweepFeeRateSatPerKVByte: Money voption
-  [<JsonPropertyName "max_swap_fee">]
-  MaxSwapFee: Money voption
+  [<JsonPropertyName "max_swap_fee_ppm">]
+  MaxSwapFeePpm: int64<ppm> voption
   [<JsonPropertyName "max_routing_fee_ppm">]
   MaxRoutingFeePpm: int64<ppm> voption
   [<JsonPropertyName "max_prepay_routing_fee_ppm">]

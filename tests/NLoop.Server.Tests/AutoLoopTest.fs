@@ -674,7 +674,7 @@ type AutoLoopTests() =
           DisqualifiedChannels = Map.ofSeq [(chanId1, SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourLimit |}))]
       }
       ("insufficient miner fee", quote, expected)
-      let ourLimit = pairId.DefaultLoopOutParameters.MaxSwapFee
+      let ourLimit = ppmToSat(swapAmount, pairId.DefaultLoopOutParameters.MaxSwapFeePPM)
       let serverRequirement = ourLimit + Money.Satoshis(1L)
       let quote = {
         quoteBase
@@ -787,13 +787,13 @@ type AutoLoopTests() =
 
   [<Theory>]
   [<MemberData(nameof(AutoLoopTests.TestInFlightLimitTestData))>]
-  member this.TestInFlightLimit(name, maxInFlight, existingSwaps, rules: Rules, expected) =
+  member this.TestInFlightLimit(name, maxInFlight, existingSwaps: Swap.State seq, rules: Rules, expected) =
     let setup (services: IServiceCollection) =
       let swapState = {
         new IOnGoingSwapStateProjection with
           member this.State =
             existingSwaps
-            |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) t) Map.empty
+            |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
           member this.FinishCatchup = Task.CompletedTask
       }
       services
@@ -839,7 +839,7 @@ type AutoLoopTests() =
       ("minimum more than server, no swap", Some(8000L), None, [|serverTerms; serverTerms|], Ok expected)
 
       let clientMax = 7000L
-      let prepay, routing = pairId.DefaultLoopOutParameters.MaxSwapFee, 7000L |> Money.Satoshis
+      let prepay, routing =  testPPMFees(pairId.DefaultLoopOutParameters.MaxSwapFeePPM, testQuote, 7000L |> Money.Satoshis)
       let outSwap = {
         chan1Rec
           with
