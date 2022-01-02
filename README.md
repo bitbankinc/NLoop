@@ -60,6 +60,13 @@ cd ../..
 curl http://localhost:5000/v1/info
 ```
 
+To reset the state, you can just run
+```sh
+cd tests/NLoop.Server.Tests
+rm -rf data
+git checkout -- data
+```
+
 ## REST API
 
 Check out our [`openapi.yml`](./openapi.yml) for the REST API specification.
