@@ -10,8 +10,8 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 
 * Supports liquidity management with autoloop
 * Supports multi-asset swap.
-* The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS.
-* Immutable audit log with event-sourcing.
+* The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS. (Which is not the case for lightning loop.)
+* Complete immutable audit log with event-sourcing.
 * Minimum trust against the server.
 * Thorough validation
 * Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
