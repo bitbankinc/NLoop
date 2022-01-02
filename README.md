@@ -1,5 +1,11 @@
 # NLoop: Generic Lightning Loop
 
+## What is NLoop?
+
+It is a submarine swap client against the [boltz-backend](https://github.com/BoltzExchange/boltz-backend)
+
+Currently it imitates the api of the [lightning loop](https://github.com/lightninglabs/loop).
+
 ## Why use NLoop?
 
 * Supports liquidity management with autoloop
