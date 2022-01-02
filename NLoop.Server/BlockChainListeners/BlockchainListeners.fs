@@ -32,7 +32,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
   interface IHostedService with
     member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting blockchain listeners ..."
-      do! swapState.FinishCatchup
+      //do! swapState.FinishCatchup
 
       let roundTrip cc = unitTask {
         let cOpts = opts.Value.ChainOptions.[cc]
