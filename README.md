@@ -7,7 +7,8 @@
 * The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS.
 * Immutable audit log with event-sourcing.
 * Minimum trust against the server.
- * Thorough validation, Minimum direct interaction and instead get the information from the blockchain as much as possible.
+* Thorough validation
+* Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
 
 
 ## How to
