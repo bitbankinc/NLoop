@@ -256,7 +256,7 @@ module Swap =
   /// We use json serializer and record types to achieve this goal. json serializer
   /// will ignore the unknown field in the record when deserializing. and if the union case is unknown,
   /// it will deserialize as `UnknownTagEvent` and do not use for state-reconstruction.
-  /// So rule in thumb.
+  /// So the rule of thumb is
   /// 0. Union must always hold record types as its data.
   /// 1. You can add member to the field freely.
   /// 2. You cannot remove (or alter) the member from the field, you must create another union-case and treat it as a
@@ -325,7 +325,8 @@ module Swap =
       | UnknownTagEvent { Tag = t } -> t
 
     static member KnownTags = [|
-      0us; 1us; 2us; 3us; 4us; 5us; 6us; 7us; 8us
+      for i in 0us..8us do
+        i
       for i in 0us..5us do
         256us + i
       for i in 0us..1us do

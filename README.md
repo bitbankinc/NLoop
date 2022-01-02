@@ -2,10 +2,12 @@
 
 ## Why use NLoop?
 
-* Supports autoloop
+* Supports liquidity management with autoloop
 * Supports multi-asset swap.
 * The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS.
 * Immutable audit log with event-sourcing.
+* Minimum trust against the server.
+ * Thorough validation, Minimum direct interaction and instead get the information from the blockchain as much as possible.
 
 
 ## How to
@@ -68,6 +70,6 @@ That is a WebSocket endpoint for listening to events.
 
 ## Future plans
 
-* [] supports swap against lightning-loop-server
-* [] loop-in autoloop
+* [ ] supports swap against lightning-loop-server
+* [ ] loop-in autoloop
 
