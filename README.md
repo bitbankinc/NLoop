@@ -11,9 +11,9 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 * Supports liquidity management with autoloop
 * Supports multi-asset swap.
 * The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS. (Which is not the case for lightning loop.)
-* Complete immutable audit log with event-sourcing.
+* Complete immutable audit log with event-sourcing. Which enables you to easily audit how much you have paied as fee during swaps.
 * Minimum trust against the server.
-* Thorough validation
+* Thorough validation which makes swap more safe.
 * Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
 
 
@@ -86,4 +86,5 @@ That is a WebSocket endpoint for listening to events.
 
 * [ ] supports swap against lightning-loop-server
 * [ ] loop-in autoloop
+* [ ] grpc interface
 

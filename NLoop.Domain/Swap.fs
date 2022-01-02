@@ -251,11 +251,11 @@ module Swap =
     Data: byte[]
   }
 
-  /// in Event-Sourcing system, there is no migration.
+  /// in Event-Sourcing system, there is no DB migration.
   /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
   /// We use json serializer and record types to achieve this goal. json serializer
   /// will ignore the unknown field in the record when deserializing. and if the union case is unknown,
-  /// it will deserialize as `UnknownTagEvent` and do not use for state-reconstruction.
+  /// it will deserialize it as `UnknownTagEvent` and do not use for state-reconstruction.
   /// So the rule of thumb is
   /// 0. Union must always hold record types as its data.
   /// 1. You can add member to the field freely.
