@@ -65,13 +65,16 @@ module SwapDTO =
           |> Option.bind(fun invoice -> invoice.AmountValue)
           |> Option.defaultValue LNMoney.Zero
         if prepayAmount.Satoshi > maxPrepay.Satoshi then
-          Error $"The amount specified in invoice ({prepayAmount.Satoshi} sats) was larger than the max we can accept ({maxPrepay})"
+          Error $"The amount specified in invoice ({prepayAmount.Satoshi} sats) was larger than the max we can accept ({maxPrepay.Satoshi} sats)"
         else
         let swapServiceFee =
           decimal (offChainAmountWePay.Satoshi + prepayAmount.Satoshi) - (decimal(this.OnchainAmount.Satoshi) * rate)
           |> Money.Satoshis
         if maxSwapServiceFee < swapServiceFee then
-          Error $"What swap service claimed as their fee ({swapServiceFee}) is larger than our max acceptable fee rate ({maxSwapServiceFee})"
+          let msg =
+            $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable" +
+            $"fee rate ({maxSwapServiceFee.Satoshi} sats). you may want to set max_swap_fee in request."
+          Error msg
         elif maxPrepay.Satoshi < prepayAmount.Satoshi then
           Error $"The counterparty-specified amount for prepayment miner fee ({prepayAmount}) is larger than our maximum ({maxPrepay})"
         else
