@@ -250,6 +250,21 @@ module Swap =
     Tag: uint16
     Data: byte[]
   }
+
+  /// in Event-Sourcing system, there is no migration.
+  /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
+  /// We use json serializer and record types to achieve this goal. json serializer
+  /// will ignore the unknown field in the record when deserializing. and if the union case is unknown,
+  /// it will deserialize as `UnknownTagEvent` and do not use for state-reconstruction.
+  /// So rule in thumb.
+  /// 0. Union must always hold record types as its data.
+  /// 1. You can add member to the field freely.
+  /// 2. You cannot remove (or alter) the member from the field, you must create another union-case and treat it as a
+  ///    new type of an event in that case.
+  /// 3. If you add a new union-case, define the unique (and previously unused) two-bytes tag for it and add it to
+  ///    KnownTags.
+  ///
+  /// As a result, this is a pretty much the same versioning strategy with Protobuf.
   type Event =
     // -- loop out --
     | NewLoopOutAdded of NewLoopOutAddedData
