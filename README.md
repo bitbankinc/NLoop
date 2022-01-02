@@ -1,6 +1,15 @@
 # NLoop: Generic Lightning Loop
 
+## Why use NLoop?
+
+* Supports autoloop
+* Supports multi-asset swap.
+* The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS.
+* Immutable audit log with event-sourcing.
+
+
 ## How to
+
 ### Quick start
 
 We have a two binaries for you to work with.
@@ -57,15 +66,8 @@ There is a one endpoint which is not included in the spec.
 That is a WebSocket endpoint for listening to events.
 * `/v1/events`
 
-## Why use NLoop?
+## Future plans
 
-### Server side is open source.
+* [] supports swap against lightning-loop-server
+* [] loop-in autoloop
 
-
-
-### Event Sourcing
-
-* Immutable audit trail with WORM
-* Cache invalidation
-
-### Extensive tests
