@@ -8,6 +8,7 @@ open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
+open NLoop.Domain
 open NLoop.Server.Options
 open NLoop.Server.Projections
 
@@ -17,15 +18,24 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
                          getBlockchainClient,
                          swapActor,
                          swapState: IOnGoingSwapStateProjection) =
-  let mutable listeners = ConcurrentDictionary()
+  let mutable listeners = ConcurrentDictionary<SupportedCryptoCode, BlockchainListener>()
   let logger = loggerFactory.CreateLogger<BlockchainListeners>()
 
-  member this.GetRewindLimit() =
+  member this.CurrentHeight (cc: SupportedCryptoCode) =
+    listeners.[cc].CurrentTip.Height
+
+  member this.GetRewindLimit(cc: SupportedCryptoCode) =
     let heights =
       swapState.State
       |> Seq.map(fun kv -> let startHeight, _ = kv.Value in startHeight)
     if heights |> Seq.isEmpty then
-      Constants.MaxBlockRewind |> StartHeight.BlockHeight
+      let currentHeight = this.CurrentHeight(cc)
+      let v =
+        if currentHeight.Value < Constants.MaxBlockRewind.Value then
+          0u
+        else
+          (this.CurrentHeight(cc) - Constants.MaxBlockRewind).Value
+      v |> StartHeight.BlockHeight
     else
       heights |> Seq.min
 
@@ -38,7 +48,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         let cOpts = opts.Value.ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
-            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, this.GetRewindLimit, swapActor, cc)
+            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), swapActor, cc)
           do! (rpcListener :> IHostedService).StartAsync(ct)
           match listeners.TryAdd(cc, rpcListener :> BlockchainListener) with
           | true -> ()
@@ -49,7 +59,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         | None ->
           do! startRPCListener cc
         | Some addr ->
-          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, swapActor, cc, this.GetRewindLimit)
+          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, swapActor, cc, (fun () -> this.GetRewindLimit(cc)))
           match! zmqListener.CheckConnection ct with
           | true ->
             do! (zmqListener :> IHostedService).StartAsync(ct)
@@ -73,9 +83,8 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
     member this.StopAsync(cancellationToken) = unitTask {
       do! Task.WhenAll(listeners.Values |> Seq.cast<IHostedService> |> Seq.map(fun h -> h.StopAsync(cancellationToken)))
     }
-
   interface IBlockChainListener with
-    member this.CurrentHeight cc = listeners.[cc].CurrentTip.Height
+    member this.CurrentHeight cc = this.CurrentHeight cc
 
   interface ISwapEventListener with
     member this.RegisterSwap(swapId) =

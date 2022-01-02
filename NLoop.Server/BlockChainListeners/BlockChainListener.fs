@@ -41,10 +41,10 @@ module private BlockchainListenerHelpers =
         let oldHash = oldTip.Block.Header.GetHash()
         let newHash = newTip.Block.Header.GetHash()
         assert(oldHash <> newHash)
-        match getRewindLimit() with
-        | rewindLimit when newTip.Height <= rewindLimit ->
+        let rewindLimit = getRewindLimit()
+        if newTip.Height <= rewindLimit then
           return (newTip, blockDisconnected) |> Some
-        | _ ->
+        else
         if oldTip.Block.Header.HashPrevBlock = newTip.Block.Header.HashPrevBlock then
           let d = oldHash::blockDisconnected
           return (newTip, d) |> Some
