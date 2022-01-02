@@ -2,7 +2,7 @@ namespace NLoop.Server.ProcessManagers
 
 open System.Collections.Generic
 open System.Threading.Tasks
-open DotNetLightning.Utils.Primitives
+open DotNetLightning.Payment
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open LndClient
@@ -12,6 +12,7 @@ open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Domain
 open NLoop.Server.Actors
+open FsToolkit.ErrorHandling
 
 type SwapProcessManager(eventAggregator: IEventAggregator,
                         lightningClientProvider: ILightningClientProvider,
@@ -31,18 +32,20 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         obs
         |> Observable.choose(fun e ->
           match e.Data with
-          | Swap.Event.OffChainOfferStarted(swapId, pairId, invoice, paymentParams) -> Some(swapId, pairId, invoice, paymentParams)
+          | Swap.Event.OffChainOfferStarted d ->
+            Some d
           | _ -> None)
-        |> Observable.flatmapTask(fun (swapId, PairId(_, quoteAsset), invoice, paymentParams) ->
+        |> Observable.flatmapTask(fun ({ SwapId = swapId; PairId = pairId; Params = paymentParams } as data)->
           task {
             try
+              let invoice = data.Invoice |> ResultUtils.Result.deref
               let! pr =
                 let req = {
                   SendPaymentRequest.Invoice = invoice
                   MaxFee = paymentParams.MaxFee
                   OutgoingChannelIds = paymentParams.OutgoingChannelIds
                 }
-                lightningClientProvider.GetClient(quoteAsset).Offer(req).ConfigureAwait(false)
+                lightningClientProvider.GetClient(pairId.Quote).Offer(req).ConfigureAwait(false)
 
               match pr with
               | Ok s ->
@@ -62,8 +65,8 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         obs
         |> Observable.subscribe(fun e ->
           match e.Data with
-          | Swap.Event.NewLoopOutAdded(_, { Id = swapId })
-          | Swap.Event.NewLoopInAdded(_, { Id = swapId }) ->
+          | Swap.Event.NewLoopOutAdded { LoopOut = { Id = swapId } }
+          | Swap.Event.NewLoopInAdded { LoopIn = { Id = swapId } } ->
             // TODO: re-registering everything from start is not very performant nor scalable.
             // Ideally we should register only the one which is not finished.
             logger.LogDebug($"Registering new Swap {swapId}")
@@ -73,10 +76,10 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
             with
             | ex ->
               logger.LogError $"Failed to register swap (id: {swapId}) {ex}"
-          | Swap.Event.FinishedSuccessfully swapId
-          | Swap.Event.FinishedByRefund swapId
-          | Swap.Event.FinishedByTimeout(swapId, _)
-          | Swap.Event.FinishedByError (swapId, _) ->
+          | Swap.Event.FinishedSuccessfully { Id = swapId }
+          | Swap.Event.FinishedByRefund { Id = swapId }
+          | Swap.Event.FinishedByTimeout { Id = swapId }
+          | Swap.Event.FinishedByError { Id = swapId } ->
             logger.LogDebug($"Removing Finished Swap {swapId}")
             try
               for l in listeners do

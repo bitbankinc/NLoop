@@ -52,8 +52,9 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
               let nextState = actor.Aggregate.Apply s r.Data
               let startHeight =
                 match r.Data with
-                | Swap.Event.NewLoopOutAdded(h, _)
-                | Swap.Event.NewLoopInAdded(h, _) -> h | _ -> h
+                | Swap.Event.NewLoopOutAdded { Height = h }
+                | Swap.Event.NewLoopInAdded { Height = h } -> h
+                | _ -> h
               (startHeight, nextState)
             ))
           // We don't hold finished swaps on-memory for the scalability.

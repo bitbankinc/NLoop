@@ -52,7 +52,7 @@ module private Observable =
       obs
       |> Observable.choose(
         function
-        | Choice1Of2{ Event = Swap.Event.FinishedByError(_id, err) } -> err |> Error |> Some
+        | Choice1Of2{ Event = Swap.Event.FinishedByError { Error = err } } -> err |> Error |> Some
         | Choice2Of2{ Error = DomainError e } -> e.Msg |> Error |> Some
         | Choice2Of2{ Error = Store(StoreError e) } -> e |> Error |> Some
         | Choice1Of2{ Event = e } -> selector e |> Option.map(Ok)
@@ -230,7 +230,7 @@ type SwapActor(broadcaster: IBroadcaster,
           let! maybeClaimTxId =
             let chooser =
               if loopOut.AcceptZeroConf then
-                (function | Swap.Event.ClaimTxPublished txId  -> Some (Some txId) | _ -> None)
+                (function | Swap.Event.ClaimTxPublished { Txid = txId }  -> Some (Some txId) | _ -> None)
               else
                 (function | Swap.Event.NewLoopOutAdded _  -> Some (None) | _ -> None)
             obs

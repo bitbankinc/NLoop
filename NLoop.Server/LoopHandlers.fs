@@ -26,22 +26,6 @@ open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks
 open Giraffe
 
-[<RequireQualifiedAccess>]
-module private Observable =
-
-  let inline awaitFirstErrorOrAsync
-    (selector: Swap.Event -> _ option)
-    (obs: IObservable<Choice<Swap.EventWithId, Swap.ErrorWithId>>) =
-      obs
-      |> Observable.choose(
-        function
-        | Choice1Of2{ Event = Swap.Event.FinishedByError(_id, err) } -> err |> Error |> Some
-        | Choice2Of2{ Error = e } -> e.ToString() |> Error |> Some
-        | Choice1Of2{ Event = e } -> selector e |> Option.map(Ok)
-      )
-      |> Observable.catchWith(fun ex -> Observable.Return(Error $"Error while handling observable {ex}"))
-      |> fun o -> o.FirstAsync().GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
-
 
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->

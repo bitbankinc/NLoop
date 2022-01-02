@@ -49,7 +49,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
     | Error _ -> ()
     | Ok r ->
       match r.Data with
-      | Swap.Event.NewLoopOutAdded(_h, o) ->
+      | Swap.Event.NewLoopOutAdded { LoopOut = o } ->
         this.FailedLoopOutSwapState <-
           this.FailedLoopOutSwapState
           |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
@@ -60,7 +60,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
           this.FailedLoopOutSwapState <-
             this.FailedLoopOutSwapState
             |> dropOldest
-      | Swap.Event.NewLoopInAdded(_h, i) ->
+      | Swap.Event.NewLoopInAdded { LoopIn = i } ->
         i.LastHop
         |> Option.iter(fun lastHop ->
           this.FailedLoopInSwapState <-
