@@ -24,6 +24,8 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
 open LndClient
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NBitcoin
@@ -37,6 +39,8 @@ open Microsoft.AspNetCore.TestHost
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.Actors
+open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
 open NLoop.Server.Projections
 open NLoop.Server.Services
@@ -102,15 +106,20 @@ module Helpers =
 
 type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
+  QueryRoutes: PubKey -> LNMoney -> Route
 }
   with
   static member Default = {
     ListChannels = []
+    QueryRoutes = fun _ _ -> Route[]
   }
 
 type DummySwapServerClientParameters = {
   LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> SwapDTO.LoopOutQuote
   LoopOutTerms: SwapDTO.OutTermsRequest -> SwapDTO.OutTermsResponse
+  GetNodes: unit -> SwapDTO.GetNodesResponse
+  LoopOut: SwapDTO.LoopOutRequest -> SwapDTO.LoopOutResponse
+  LoopIn: SwapDTO.LoopInRequest -> SwapDTO.LoopInResponse
 }
   with
   static member Default = {
@@ -126,6 +135,11 @@ type DummySwapServerClientParameters = {
       SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
       SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
     }
+    GetNodes = fun () -> {
+      SwapDTO.GetNodesResponse.Nodes = Map.empty
+    }
+    LoopOut = fun _ -> failwith "todo"
+    LoopIn = fun _ -> failwith "todo"
   }
 
 type DummySwapActorParameters = {
@@ -140,12 +154,14 @@ type DummyBlockChainClientParameters = {
   GetBlock: uint256 -> BlockWithHeight
   GetBlockHash: BlockHeight -> uint256
   GetBestBlockHash: unit -> uint256
+  GetBlockchainInfo: unit -> BlockChainInfo
 }
   with
   static member Default = {
     GetBlock = fun _hash -> failwith "todo"
     GetBlockHash = fun _height -> failwith "todo"
     GetBestBlockHash = fun () -> failwith "todo"
+    GetBlockchainInfo = fun () -> failwith "todo"
   }
 
 type TestHelpers =
@@ -187,7 +203,9 @@ type TestHelpers =
         Task.FromResult(obj())
 
       member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?ct: CancellationToken): Task<Route> =
-        failwith "todo"
+        parameters.QueryRoutes nodeId amount
+        |> Task.FromResult
+
       member this.OpenChannel(request: LndOpenChannelRequest, ?ct: CancellationToken): Task<Result<OutPoint, LndOpenChannelError>> =
         failwith "todo"
       member this.ConnectPeer(nodeId: PubKey, host: string, ?ct: CancellationToken): Task =
@@ -238,11 +256,14 @@ type TestHelpers =
     {
       new ISwapServerClient with
         member this.LoopOut(request: SwapDTO.LoopOutRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutResponse> =
-          failwith "todo"
+          parameters.LoopOut request
+          |> Task.FromResult
         member this.LoopIn(request: SwapDTO.LoopInRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInResponse> =
-          failwith "todo"
+          parameters.LoopIn request
+          |> Task.FromResult
         member this.GetNodes(?ct: CancellationToken): Task<SwapDTO.GetNodesResponse> =
-          failwith "todo"
+          parameters.GetNodes()
+          |> Task.FromResult
 
         member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
           parameters.LoopOutQuote request
@@ -267,10 +288,6 @@ type TestHelpers =
     let p = defaultArg parameters DummySwapActorParameters.Default
     {
       new ISwapActor with
-        member this.ExecNewLoopOut(req, currentHeight, source, ct) =
-          failwith "todo"
-        member this.ExecNewLoopIn(req, currentHeight, source, ct) =
-          failwith "todo"
         member this.Handler =
           failwith "todo"
         member this.Aggregate =
@@ -278,6 +295,15 @@ type TestHelpers =
         member this.Execute(swapId, msg, source) =
           p.Execute(swapId, msg, source); Task.CompletedTask
         member this.GetAllEntities ct =
+          failwith "todo"
+    }
+
+  static member GetDummySwapExecutor(?parameters) =
+    {
+      new ISwapExecutor with
+        member this.ExecNewLoopOut(req, height, source, ct) =
+          failwith "todo"
+        member this.ExecNewLoopIn(req, height, source, ct) =
           failwith "todo"
     }
 
@@ -289,7 +315,8 @@ type TestHelpers =
           p.GetBlock blockHash
           |> Task.FromResult
         member this.GetBlockChainInfo(_) =
-          failwith "todo"
+          p.GetBlockchainInfo()
+          |> Task.FromResult
         member this.GetBlockHash(height, _) =
           p.GetBlockHash height
           |> Task.FromResult
@@ -297,6 +324,13 @@ type TestHelpers =
           failwith "todo"
         member this.GetBestBlockHash(ct) =
           p.GetBestBlockHash()
+          |> Task.FromResult
+
+        member this.SendRawTransaction(tx, _) =
+          Task.FromResult(tx.GetHash())
+
+        member this.EstimateFee(_target, _) =
+          FeeRate(1000m)
           |> Task.FromResult
     }
 
@@ -335,6 +369,8 @@ type TestHelpers =
           .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
           .AddSingleton<ICheckpointDB>(Helpers.mockCheckpointDB)
           .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
+          .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
+          .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
           |> ignore
 
         configureServices |> Option.iter(fun c -> c services)

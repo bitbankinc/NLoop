@@ -58,7 +58,7 @@ module SwapDTO =
       else if this.Invoice.PaymentHash <> PaymentHash(preimageHash) then
         Error "Payment Hash in invoice does not match preimage hash we specified in request"
       else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
-        Error $"What they requested in invoice {this.Invoice.AmountValue.Value} does not match the amount we are expecting to pay ({offChainAmountWePay})."
+        Error $"What they requested in invoice ({this.Invoice.AmountValue.Value.Satoshi} sats) does not match the amount we are expecting to pay ({offChainAmountWePay.Satoshi} sats)."
       else
         let prepayAmount =
           this.MinerFeeInvoice

@@ -19,6 +19,7 @@ open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
+open NLoop.Server.Actors
 open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.Projections
@@ -511,7 +512,7 @@ type Config = {
   SwapServerClient: ISwapServerClient
   Restrictions: Swap.Category -> Task<Result<ServerRestrictions, exn>>
   Lnd: INLoopLightningClient
-  SwapActor: ISwapActor
+  SwapExecutor: ISwapExecutor
 }
 
 type SuggestSwapError =
@@ -657,7 +658,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      recentSwapFailureProjection: IRecentSwapFailureProjection,
                      swapServerClient: ISwapServerClient,
                      blockChainListener: IBlockChainListener,
-                     swapActor: ISwapActor,
+                     swapActor: ISwapExecutor,
                      feeEstimator: IFeeEstimator,
                      systemClock: ISystemClock,
                      serviceProvider: IServiceProvider,
@@ -688,7 +689,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       EstimateFee = feeEstimator
       SwapServerClient = swapServerClient
       Lnd = _lightningClientProvider.GetClient g.OffChainAsset
-      SwapActor = swapActor
+      SwapExecutor = swapActor
     }
 
   member this.Builder g =

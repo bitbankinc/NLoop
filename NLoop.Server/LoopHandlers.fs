@@ -31,7 +31,7 @@ let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
       let height = ctx.GetBlockHeight(req.PairIdValue.Base)
-      let actor = ctx.GetService<ISwapActor>()
+      let actor = ctx.GetService<ISwapExecutor>()
       match! actor.ExecNewLoopOut(req, height) with
       | Error e ->
         return! (error503 e) next ctx
@@ -59,7 +59,7 @@ let handleLoopOut (req: LoopOutRequest) =
 
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let actor = ctx.GetService<ISwapActor>()
+    let actor = ctx.GetService<ISwapExecutor>()
     let height =
       let struct(_, quoteAsset) =
         loopIn.PairIdValue.Value

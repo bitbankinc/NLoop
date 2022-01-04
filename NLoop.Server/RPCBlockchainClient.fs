@@ -33,3 +33,18 @@ type RPCBlockchainClient(rpc: RPCClient) =
     member this.GetBestBlockHash(_ct) =
       rpc.GetBestBlockHashAsync()
 
+    member this.EstimateFee(target, ct) = task {
+      let! resp = rpc.EstimateSmartFeeAsync(target.Value |> int)
+      return resp.FeeRate
+    }
+    member this.SendRawTransaction(tx, ct) =
+      rpc.SendRawTransactionAsync(tx)
+
+
+type BitcoindWalletClient(rpc: RPCClient) =
+  interface IWalletClient with
+    member this.ListUnspent() = rpc.ListUnspentAsync()
+    member this.SignSwapTxPSBT(psbt) = task {
+      let! resp = rpc.WalletProcessPSBTAsync(psbt, sign=true)
+      return resp.PSBT
+    }

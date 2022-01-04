@@ -98,9 +98,8 @@ module private Constants =
       ChannelIds = [| chanId2 |] |> ValueSome
   }
 
-  let getDummyTestInvoice(network: Network) =
+  let getDummyTestInvoice (paymentPreimage: PaymentPreimage) (network: Network) =
     assert(network <> null)
-    let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
     let paymentHash = paymentPreimage.Hash
     let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
     PaymentRequest.TryCreate(network, Some(LNMoney.Satoshis(100000L)), DateTimeOffset.UtcNow, fields, new Key())
@@ -145,7 +144,9 @@ module private Constants =
       IsOffchainOfferResolved = false
       PairId = pairId
       Label = String.Empty
-      PrepayInvoice = getDummyTestInvoice(quoteN)
+      PrepayInvoice =
+        let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+        getDummyTestInvoice paymentPreimage (quoteN)
       SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
       MaxMinerFee = pairId.DefaultLoopOutParameters.MaxMinerFee
       ChainName = chainName.ToString()
@@ -292,7 +293,8 @@ type AutoLoopTests() =
       let dummyLnClientProvider =
         TestHelpers.GetDummyLightningClientProvider
           {
-            DummyLnClientParameters.ListChannels = channels
+            DummyLnClientParameters.Default with
+              ListChannels = channels
           }
       let f = {
         new IFeeEstimator

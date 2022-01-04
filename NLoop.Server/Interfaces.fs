@@ -11,6 +11,7 @@ open DotNetLightning.Utils.Primitives
 open LndClient
 open NBitcoin
 open FSharp.Control.Tasks
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -64,21 +65,6 @@ type ILightningInvoiceProvider =
 
 type ISwapActor =
   inherit IActor<Swap.State, Swap.Command,Swap. Event, Swap.Error, SwapId, uint16 * DateTime>
-  abstract member
-    ExecNewLoopOut:
-    req: LoopOutRequest *
-    currentHeight: BlockHeight *
-    ?source: string *
-    ?ct: CancellationToken
-      -> Task<Result<LoopOutResponse, string>>
-
-  abstract member
-    ExecNewLoopIn:
-    req: LoopInRequest *
-    currentHeight: BlockHeight *
-    ?source: string *
-    ?ct: CancellationToken
-      -> Task<Result<LoopInResponse, string>>
 
 type BlockChainInfo = {
   Progress: float32
@@ -92,7 +78,21 @@ type IBlockChainClient =
   abstract member GetBlockHash: height: BlockHeight * ?ct: CancellationToken -> Task<uint256>
   abstract member GetRawTransaction: id: TxId * ?ct: CancellationToken -> Task<Transaction>
   abstract member GetBestBlockHash: ?ct: CancellationToken -> Task<uint256>
+  abstract member SendRawTransaction: tx: Transaction * ?ct: CancellationToken -> Task<uint256>
 
+  abstract member EstimateFee: target: BlockHeightOffset32 * ?ct: CancellationToken -> Task<FeeRate>
+
+
+type GetBlockchainClient = SupportedCryptoCode -> IBlockChainClient
+
+type GetSwapKey = unit -> Task<Key>
+type GetSwapPreimage = unit -> Task<PaymentPreimage>
+
+type IWalletClient =
+  abstract member ListUnspent: unit -> Task<UnspentCoin[]>
+  abstract member SignSwapTxPSBT: psbt: PSBT -> Task<PSBT>
+
+type GetWalletClient = SupportedCryptoCode -> IWalletClient
 
 [<AbstractClass;Sealed;Extension>]
 type IBlockChainClientExtensions =
@@ -113,7 +113,8 @@ type IBlockChainClientExtensions =
     return! this.GetBlock(hash, ct)
   }
 
-type GetBlockchainClient = SupportedCryptoCode -> IBlockChainClient
-
 type ExchangeRate = decimal
 type TryGetExchangeRate = PairId * CancellationToken -> Task<ExchangeRate option>
+
+type GetAllEvents<'T> =
+  CancellationToken -> Task<Result<RecordedEvent<'T> list, StoreError>>

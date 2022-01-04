@@ -65,8 +65,10 @@ module Scripts =
 
   let validateReverseSwapScript (preimageHash: uint256) (claimPubKey: PubKey) (BlockHeight timeout) (script: Script) =
     let os = script.ToOps() |> Seq.toArray
+    if os.Length <> 16 then Error $"Invalid length for ReverseSwapScript, it must be 16, but it was {os.Length}.\n Script: {script}" else
     let checkOpcode = checkOpcode os
     let checkPushData = checkPushData os
+
     result {
       do! checkOpcode 0 OpcodeType.OP_SIZE
       do! checkPushData 1 (Op.GetPushOp(int64 32).PushData)
@@ -89,6 +91,7 @@ module Scripts =
 
   let validateSwapScript (preimageHash: uint256) (refundKey: PubKey) (BlockHeight timeout) (script: Script) =
     let os = script.ToOps() |> Seq.toArray
+    if os.Length <> 12 then Error $"Invalid length for SwapScript, it must be 12, but it was {os.Length}.\n Script: {script}" else
     let checkOpcode = checkOpcode os
     let checkPushData = checkPushData os
     result {

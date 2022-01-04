@@ -25,7 +25,7 @@ type SwapBuilderTests() =
       SwapServerClient = TestHelpers.GetDummySwapServerClient()
       Restrictions = fun (cat: Swap.Category) -> failwith "todo"
       Lnd = TestHelpers.GetDummyLightningClient()
-      SwapActor = TestHelpers.GetDummySwapActor()
+      SwapExecutor = TestHelpers.GetDummySwapExecutor()
     }
 
   static member TestLoopInUseData =

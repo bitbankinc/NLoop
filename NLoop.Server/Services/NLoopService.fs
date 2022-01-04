@@ -7,6 +7,7 @@ open System.CommandLine.Hosting
 open System.Threading.Channels
 open System.Threading.Tasks
 open BoltzClient
+open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
 open EventStore.ClientAPI
 open LndClient
@@ -15,9 +16,11 @@ open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
+open NBitcoin
 open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
+open NLoop.Domain.Utils
 open NLoop.Server
 open System.Runtime.CompilerServices
 open Microsoft.Extensions.Configuration
@@ -107,6 +110,17 @@ type NLoopExtensions() =
         .AddSingleton<ILightningClientProvider, LightningClientProvider>()
         .AddSingleton<BoltzListener>()
         .AddSingleton<ISwapEventListener, BoltzListener>(fun sp -> sp.GetRequiredService<BoltzListener>())
+        .AddSingleton<GetSwapKey>(Func<IServiceProvider, GetSwapKey>(fun _ () -> new Key() |> Task.FromResult))
+        .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, GetSwapPreimage>(fun _ () ->
+            RandomUtils.GetBytes 32 |> PaymentPreimage.Create |> Task.FromResult
+          )
+
+        )
+        .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp ct ->
+            let conn = sp.GetRequiredService<IEventStoreConnection>()
+            conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+          )
+        )
         |> ignore
 
       this
@@ -123,6 +137,7 @@ type NLoopExtensions() =
         |> ignore
       this
         .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient))
+        .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetWalletClient))
         |> ignore
       this
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
@@ -152,4 +167,5 @@ type NLoopExtensions() =
         .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<ISwapActor, SwapActor>()
+        .AddSingleton<ISwapExecutor, SwapExecutor>()
 
