@@ -30,9 +30,7 @@ open Giraffe
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
-      let struct(baseCryptoCode, _quoteCryptoCode) =
-        req.PairIdValue.Value
-      let height = ctx.GetBlockHeight(baseCryptoCode)
+      let height = ctx.GetBlockHeight(req.PairIdValue.Base)
       let actor = ctx.GetService<ISwapActor>()
       match! actor.ExecNewLoopOut(req, height) with
       | Error e ->

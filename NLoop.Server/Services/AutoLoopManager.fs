@@ -608,7 +608,7 @@ type SwapBuilder = {
     {
       VerifyTargetIsNotInUse = fun (traffic: SwapTraffic) ({ Channels = channels; Peer = peer }: TargetPeerOrChannel) -> result {
         for chanId in channels do
-          if traffic.FailedLoopOut |> Map.containsKey(chanId) then
+          if traffic.OngoingLoopOut |> Seq.contains(chanId) then
             logger.LogDebug($"Channel: {chanId} ({chanId.ToUInt64()}) not eligible for suggestions, ongoing loop out utilizing channel.")
             return! (Error(SwapDisqualifiedReason.LoopOutAlreadyInTheChannel))
 

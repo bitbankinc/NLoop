@@ -84,82 +84,6 @@ module Helpers =
   let findEmptyPort(ports: int[]) =
     findEmptyPortUInt(ports |> Array.map(uint))
 
-  let dummyLnClient = {
-    new INLoopLightningClient with
-      member this.GetDepositAddress(?ct) =
-        let k = new Key()
-        Task.FromResult(k.PubKey.WitHash.GetAddress(Network.RegTest))
-      member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
-                                 value: LNMoney,
-                                 expiry: TimeSpan,
-                                 routeHints: RouteHint[],
-                                 memo: string,
-                                 ?ct: CancellationToken) =
-          Task.FromResult(failwith "todo")
-      member this.GetInvoice(paymentPreimage: PaymentPreimage,
-                             amount: LNMoney,
-                             expiry: TimeSpan,
-                             routeHint: RouteHint[],
-                             memo: string,
-                             ?ct: CancellationToken): Task<PaymentRequest> =
-        let tags: TaggedFields = {
-          Fields = [ TaggedField.DescriptionTaggedField(memo) ]
-        }
-        let deadline = DateTimeOffset.UtcNow + expiry
-        PaymentRequest.TryCreate(Network.RegTest, amount |> Some, deadline, tags, (new Key()))
-        |> ResultUtils.Result.deref
-        |> Task.FromResult
-      member this.Offer(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
-        TaskResult.retn {
-          PaymentPreimage = PaymentPreimage.Create(Array.zeroCreate 32)
-          Fee = req.MaxFee.ToLNMoney()
-        }
-
-      member this.GetInfo(?ct: CancellationToken): Task<obj> =
-        Task.FromResult(obj())
-
-      member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?ct: CancellationToken): Task<Route> =
-        failwith "todo"
-      member this.OpenChannel(request: LndOpenChannelRequest, ?ct: CancellationToken): Task<Result<OutPoint, LndOpenChannelError>> =
-        failwith "todo"
-      member this.ConnectPeer(nodeId: PubKey, host: string, ?ct: CancellationToken): Task =
-        Task.FromResult() :> Task
-      member this.ListChannels(?ct: CancellationToken): Task<ListChannelResponse list> =
-        Task.FromResult []
-      member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
-        failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<InvoiceSubscription> =
-        failwith "todo"
-      member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
-        {
-          Capacity = Money.Satoshis(10000m)
-          Node1Policy = {
-            Id = (new Key()).PubKey
-            TimeLockDelta = BlockHeightOffset16(10us)
-            MinHTLC = LNMoney.Satoshis(10)
-            FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
-            Disabled = false
-          }
-          Node2Policy = {
-            Id = (new Key()).PubKey
-            TimeLockDelta = BlockHeightOffset16(10us)
-            MinHTLC = LNMoney.Satoshis(10)
-            FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
-            Disabled = false
-          }
-        }
-        |> Task.FromResult
-  }
-  let getDummyLightningClientProvider() =
-    { new ILightningClientProvider with
-        member this.TryGetClient(cryptoCode) =
-          dummyLnClient |> Some
-        member this.GetAllClients() =
-          seq [dummyLnClient]
-        }
-
   let mockCheckpointDB = {
     new ICheckpointDB
       with
@@ -167,14 +91,6 @@ module Helpers =
         ValueTask.FromResult(ValueNone)
       member this.SetSwapStateCheckpoint(checkpoint: int64, ct:CancellationToken): ValueTask =
         ValueTask()
-  }
-
-  let mockFeeEstimator = {
-    new IFeeEstimator
-      with
-      member this.Estimate _target _cc =
-        FeeRate(1000m)
-        |> Task.FromResult
   }
 
   type TestStartup(env) =
@@ -233,42 +149,10 @@ type DummyBlockChainClientParameters = {
   }
 
 type TestHelpers =
-  static member GetTestHost(?configureServices: IServiceCollection -> unit) =
-    WebHostBuilder()
-      .UseContentRoot(Directory.GetCurrentDirectory())
-      .ConfigureAppConfiguration(fun configBuilder ->
-        configBuilder.AddJsonFile("appsettings.test.json") |> ignore
-        )
-      .UseStartup<Helpers.TestStartup>()
-      .ConfigureLogging(Main.configureLogging)
-      .ConfigureTestServices(fun (services: IServiceCollection) ->
-        let rc = NLoopServerCommandLine.getRootCommand()
-        let p =
-          CommandLineBuilder(rc)
-            .UseMiddleware(Main.useWebHostMiddleware)
-            .Build()
-        services
-          .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
-          .AddHttpClient<BoltzClient>()
-          .ConfigureHttpClient(fun _sp _client ->
-            () // TODO: Inject Mock ?
-            )
-          |> ignore
-        services
-          .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
-          .AddSingleton<ILightningClientProvider>(Helpers.getDummyLightningClientProvider())
-          .AddSingleton<ICheckpointDB>(Helpers.mockCheckpointDB)
-          .AddSingleton<IFeeEstimator>(Helpers.mockFeeEstimator)
-          |> ignore
 
-        configureServices |> Option.iter(fun c -> c services)
-      )
-      .UseTestServer()
-
-
-  static member GetDummyLightningClientProvider(?parameters) =
+  static member GetDummyLightningClient(?parameters) =
     let parameters = defaultArg parameters DummyLnClientParameters.Default
-    let dummyLnClient = {
+    {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
         let k = new Key()
@@ -336,6 +220,10 @@ type TestHelpers =
         }
         |> Task.FromResult
     }
+
+  static member GetDummyLightningClientProvider(?parameters) =
+    let parameters = defaultArg parameters DummyLnClientParameters.Default
+    let dummyLnClient = TestHelpers.GetDummyLightningClient parameters
     {
       new ILightningClientProvider with
         member this.TryGetClient(cryptoCode) =
@@ -411,3 +299,45 @@ type TestHelpers =
           p.GetBestBlockHash()
           |> Task.FromResult
     }
+
+  static member GetDummyFeeEstimator() =
+    {
+      new IFeeEstimator
+        with
+        member this.Estimate _target _cc =
+          FeeRate(1000m)
+          |> Task.FromResult
+    }
+
+  static member GetTestHost(?configureServices: IServiceCollection -> unit) =
+    WebHostBuilder()
+      .UseContentRoot(Directory.GetCurrentDirectory())
+      .ConfigureAppConfiguration(fun configBuilder ->
+        configBuilder.AddJsonFile("appsettings.test.json") |> ignore
+        )
+      .UseStartup<Helpers.TestStartup>()
+      .ConfigureLogging(Main.configureLogging)
+      .ConfigureTestServices(fun (services: IServiceCollection) ->
+        let rc = NLoopServerCommandLine.getRootCommand()
+        let p =
+          CommandLineBuilder(rc)
+            .UseMiddleware(Main.useWebHostMiddleware)
+            .Build()
+        services
+          .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
+          .AddHttpClient<BoltzClient>()
+          .ConfigureHttpClient(fun _sp _client ->
+            () // TODO: Inject Mock ?
+            )
+          |> ignore
+        services
+          .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
+          .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
+          .AddSingleton<ICheckpointDB>(Helpers.mockCheckpointDB)
+          .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
+          |> ignore
+
+        configureServices |> Option.iter(fun c -> c services)
+      )
+      .UseTestServer()
+
