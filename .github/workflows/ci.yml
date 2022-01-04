@@ -5,8 +5,6 @@ on:
   workflow_dispatch:
 env:
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
-  DOCKER_BUILDKIT: 1
 jobs:
   build_and_test:
     name: "Build and Test on os: ${{ matrix.os }}. dotnet SDK version: ${{ matrix.dotnet }}"
@@ -43,27 +41,4 @@ jobs:
         run: dotnet run --project tests/NLoop.Server.PropertyTests
 
       - name: Run unit tests for the server
-        run: dotnet test tests/NLoop.Server.Tests --filter="Docker=Off"
-
-      - name: Log in to docker hub (For docker image caching)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: echo ${{ secrets.REGISTRY_PASS }} | docker login -u ${{ secrets.REGISTRY_USER }} --password-stdin
-
-      - name: Prepare docker images for integration tests.
-        if: startsWith(matrix.os, 'ubuntu')
-        run: cd tests/NLoop.Server.Tests && source env.sh && docker-compose build --build-arg BUILDKIT_INLINE_CACHE=1
-
-      - name: Push docker images.
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          docker push nloop/bitcoind:latest
-          docker push nloop/litecoind:latest
-          docker push nloop/lnd:latest
-          docker push nloop/boltz:latest
-          docker push nloop/esdb:latest
-
-      - name: Run integration tests in ${{ matrix.os }}
-        if: startsWith(matrix.os, 'ubuntu')
-        run: sudo dotnet test tests/NLoop.Server.Tests -- RunConfiguration.TestSessionTimeout=300000
-        # We need sudo since lnd creates admin.macaroon with permission `-rw-------` and the owner will be root
-        # in case of docker in CI.
+        run: dotnet test tests/NLoop.Server.Tests
