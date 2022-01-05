@@ -3,21 +3,22 @@ namespace NLoop.Server.Tests
 open System
 open System.Net
 open System.Net.Http
-open System.Net.Http.Headers
 open System.Net.Http.Json
-open System.Net.Sockets
 open System.Text.Json
 open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
+open FSharp.Control
 open FSharp.Control.Tasks
 
 open LndClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Logging
 open NBitcoin
 open NBitcoin.DataEncoders
 open NLoop.Server
+open NLoop.Server.SwapServerClient
 open NLoop.Server.SwapServerClient
 open Xunit
 
@@ -50,16 +51,27 @@ module private ServerAPITestHelpers =
       SweepConfTarget = ValueNone
     }
 
+  let loopInReq =
+    {
+      LoopInRequest.Amount = swapAmount
+      ChannelId = chanId1 |> Some
+      Label = None
+      PairId = None
+      MaxMinerFee = ValueNone
+      MaxSwapFee = ValueNone
+      HtlcConfTarget = ValueNone
+      RouteHints = ValueNone
+    }
 
   let channel1 = {
-    LndClient.ListChannelResponse.Id = chanId1
+    ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     NodeId = peer1
   }
 
   let channel2 = {
-    LndClient.ListChannelResponse.Id = chanId2
+    ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     NodeId = peer1
@@ -79,14 +91,26 @@ module private ServerAPITestHelpers =
     }
     (peer1 |> NodeId, Route([hop1]))
 
-  let testQuote = {
+  let testBlockchainInfo = {
+    BlockChainInfo.Height = BlockHeight.Zero
+    Progress = 1.0f
+    BestBlockHash = Network.RegTest.GenesisHash
+  }
+  let testLoopOutQuote = {
     SwapDTO.LoopOutQuote.SwapFee = Money.Satoshis(5L)
     SwapDTO.LoopOutQuote.SweepMinerFee = Money.Satoshis(1L)
     SwapDTO.LoopOutQuote.SwapPaymentDest = peer1
     SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
-    SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(50L) }
+    SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(50L)
+  }
+
+  let testLoopInQuote = {
+    SwapDTO.LoopInQuote.MinerFee = Money.Satoshis(5L)
+    SwapDTO.LoopInQuote.SwapFee = Money.Satoshis(1L)
+  }
+
   let hex = HexEncoder()
-  let getDummyTestInvoice (maybeAmount) (paymentPreimage: PaymentPreimage) (network: Network) =
+  let getDummyTestInvoice maybeAmount (paymentPreimage: PaymentPreimage) (network: Network) =
     assert(network <> null)
     let paymentHash = paymentPreimage.Hash
     let fields = { TaggedFields.Fields = [ PaymentHashTaggedField paymentHash; DescriptionTaggedField "test" ] }
@@ -99,17 +123,30 @@ module private ServerAPITestHelpers =
   let getReverseSwapScript (preimageHash: PaymentHash) (claimPubKey: PubKey)  =
     $"OP_SIZE 20 OP_EQUAL OP_IF OP_HASH160 %s{preimageHash.GetRIPEMD160() |> hex.EncodeData} OP_EQUALVERIFY {claimPubKey.ToHex()} OP_ELSE OP_DROP 1e OP_CLTV OP_DROP 030ae596d7be77f8c4dca8c9aa53fe4a67469b1977f17a475803c2cf76256dccbd OP_ENDIF OP_CHECKSIG"
     |> Script
-  let redeem = getReverseSwapScript preimage.Hash claimKey.PubKey
+  let reverseSwapRedeem = getReverseSwapScript preimage.Hash claimKey.PubKey
   let loopOutResp1 =
     {
       SwapDTO.LoopOutResponse.Id = swapId
-      SwapDTO.LoopOutResponse.LockupAddress = redeem.WitHash.GetAddress(Network.RegTest).ToString()
+      SwapDTO.LoopOutResponse.LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Network.RegTest).ToString()
       SwapDTO.LoopOutResponse.Invoice =
         invoice
       SwapDTO.LoopOutResponse.TimeoutBlockHeight = BlockHeight(30u)
       SwapDTO.LoopOutResponse.OnchainAmount = swapAmount
-      SwapDTO.LoopOutResponse.RedeemScript = redeem
+      SwapDTO.LoopOutResponse.RedeemScript = reverseSwapRedeem
       SwapDTO.LoopOutResponse.MinerFeeInvoice = None
+    }
+
+  let refundKey = new Key()
+  let theirClaimKey = new Key()
+  let swapRedeem = Scripts.swapScriptV1 preimage.Hash theirClaimKey.PubKey refundKey.PubKey (BlockHeight 30u)
+  let loopInResp1 =
+    {
+      SwapDTO.LoopInResponse.Id = swapId
+      SwapDTO.LoopInResponse.Address = swapRedeem.WitHash.GetAddress(Network.RegTest).ToString()
+      SwapDTO.LoopInResponse.RedeemScript = swapRedeem
+      SwapDTO.LoopInResponse.AcceptZeroConf = false
+      SwapDTO.LoopInResponse.ExpectedAmount = swapAmount
+      SwapDTO.LoopInResponse.TimeoutBlockHeight = BlockHeight(30u)
     }
   type IEventAggregator with
     member this.KeepPublishDummyLoopOutEvent() =
@@ -119,6 +156,15 @@ module private ServerAPITestHelpers =
           this.Publish({
             Swap.EventWithId.Id = SwapId.SwapId(swapId)
             Swap.EventWithId.Event = Swap.Event.NewLoopOutAdded(Unchecked.defaultof<_>)
+          })
+      }
+    member this.KeepPublishDummyLoopInEvent() =
+      task {
+        while true do
+          do! Task.Delay(10)
+          this.Publish({
+            Swap.EventWithId.Id = SwapId.SwapId(swapId)
+            Swap.EventWithId.Event = Swap.Event.NewLoopInAdded(Unchecked.defaultof<_>)
           })
       }
 type ServerAPITest() =
@@ -143,45 +189,90 @@ type ServerAPITest() =
 
   static member TestValidateLoopOutData =
     [
-      ("mainnet address with mainnet backend", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, HttpStatusCode.OK, None)
-      ("no connected nodes", [channel1], chan1Rec, Map.empty, Map.empty, loopOutResp1, HttpStatusCode.ServiceUnavailable, Some(""))
-      ("no routes to the nodes", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.empty, loopOutResp1, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("valid request", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      let inprogressBlockchainInfo = {
+        testBlockchainInfo
+          with
+            Progress = 0.99f
+      }
+      ("Blockchain is not synced yet", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
+      ("no connected nodes", [channel1], chan1Rec, Map.empty, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no routes to the nodes", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+
+      let quote = {
+        testLoopOutQuote
+          with
+          SwapFee = Money.Satoshis(10000L)
+      }
+      let req = {
+        chan1Rec
+          with
+          MaxSwapFee = ValueSome <| Money.Satoshis(9999L)
+      }
+      ("They required expensive swap fee in loop-out quote", [channel1], req, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("Swap fee specified by the server is too high"))
+      let quote = {
+        testLoopOutQuote
+          with
+            PrepayAmount = Money.Satoshis(100L)
+      }
+      let req = {
+        chan1Rec
+          with
+          MaxPrepayAmount = ValueSome <| Money.Satoshis(99L)
+      }
+      ("prepay miner fee too expensive", [channel1], req, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
 
       let resp = {
         loopOutResp1
           with
           LockupAddress = "foo"
       }
-      ("Invalid address", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address (bogus)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      let resp = {
+        loopOutResp1
+          with
+          LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Network.Main).ToString()
+      }
+      ("Invalid address (network mismatch)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      let resp = {
+        loopOutResp1
+          with
+          LockupAddress = reverseSwapRedeem.WitHash.GetAddress(NBitcoin.Altcoins.Litecoin.Instance.Regtest).ToString()
+      }
+      ("Invalid address (cryptocode mismatch)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
 
       let err = "Payment Hash in invoice does not match preimage hash we specified in request"
       let resp = {
         loopOutResp1
           with
-          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice (swapAmount.Satoshi |> LNMoney.Satoshis |> Some) (PaymentPreimage.Create(Array.zeroCreate 32)) (Network.RegTest)
+          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice (swapAmount.Satoshi |> LNMoney.Satoshis |> Some) (PaymentPreimage.Create(Array.zeroCreate 32)) Network.RegTest
       }
-      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, HttpStatusCode.ServiceUnavailable, Some(err))
+      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(err))
       let resp = {
         loopOutResp1
           with
-          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice ((swapAmount.Satoshi - 1L) |> LNMoney.Satoshis |> Some) (preimage) (Network.RegTest)
+          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice ((swapAmount.Satoshi - 1L) |> LNMoney.Satoshis |> Some) preimage Network.RegTest
       }
-      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, HttpStatusCode.ServiceUnavailable, None)
+      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, None)
       let resp = {
         loopOutResp1
           with
-          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice (None) (preimage) (Network.RegTest)
+          SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice None preimage Network.RegTest
       }
-      ("Valid payment request (no amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, HttpStatusCode.OK, None)
+      ("Valid payment request (no amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ()
     ]
     |> Seq.map(fun (name,
-                    channels,
-                    req,
+                    channels: ListChannelResponse list,
+                    req: LoopOutRequest,
                     swapServerNodes: Map<string, SwapDTO.NodeInfo>,
                     routesToNodes: Map<NodeId, Route>,
                     responseFromServer: SwapDTO.LoopOutResponse,
-                    expectedStatusCode,
+                    blockchainInfo: BlockChainInfo,
+                    quote: SwapDTO.LoopOutQuote,
+                    expectedStatusCode: HttpStatusCode,
                     expectedErrorMsg: string option) -> [|
       name |> box
       channels |> box
@@ -189,6 +280,8 @@ type ServerAPITest() =
       swapServerNodes |> box
       routesToNodes |> box
       responseFromServer |> box
+      blockchainInfo |> box
+      quote |> box
       expectedStatusCode |> box
       expectedErrorMsg |> box
     |])
@@ -201,23 +294,22 @@ type ServerAPITest() =
                                   swapServerNodes: Map<string, SwapDTO.NodeInfo>,
                                   routesToNodes: Map<NodeId, Route>,
                                   responseFromServer: SwapDTO.LoopOutResponse,
+                                  blockchainInfo,
+                                  quote,
                                   expectedStatusCode: HttpStatusCode,
                                   expectedErrorMsg: string option) = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
         let lnClientParam = {
-          DummyLnClientParameters.ListChannels = channels
-          QueryRoutes = fun pk _amount -> routesToNodes.[pk |> NodeId]
+          DummyLnClientParameters.Default
+            with
+            ListChannels = channels
+            QueryRoutes = fun pk _amount -> routesToNodes.[pk |> NodeId]
         }
         sp
           .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
           .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
           .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
-          .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp cc ->
-            let blockchainInfo = {
-              BlockChainInfo.Height = BlockHeight.Zero
-              Progress = 1.0f
-              BestBlockHash = Network.RegTest.GenesisHash
-            }
+          .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp _cc ->
             TestHelpers.GetDummyBlockchainClient( {
               DummyBlockChainClientParameters.Default with GetBlockchainInfo = fun () -> blockchainInfo
             })
@@ -227,24 +319,112 @@ type ServerAPITest() =
           .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
             DummySwapServerClientParameters.Default
               with
-                LoopOutQuote =  fun req -> testQuote
+                LoopOutQuote =  fun _req -> quote
                 GetNodes = fun () -> { Nodes = swapServerNodes }
                 LoopOut = fun _req -> responseFromServer
           }))
           |> ignore
       ))
 
-    let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-    opts.AddNLoopJsonConverters(Network.RegTest)
+    let opts =
+      let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+      o.AddNLoopJsonConverters(Network.RegTest)
+      o
     let client = server.CreateClient()
-    let _ =
-      server.Services.GetRequiredService<IEventAggregator>().KeepPublishDummyLoopOutEvent()
-    let respT =
+    use e =
+      server.Services.GetRequiredService<IEventAggregator>()
+    let _ = e.KeepPublishDummyLoopOutEvent()
+    let! resp =
       let content = JsonContent.Create(loopOutReq, Unchecked.defaultof<_>, opts)
       client.PostAsync("/v1/loop/out", content)
-    let! resp = respT
-    let! msg = resp.Content.ReadAsStringAsync()
     Assert.Equal(expectedStatusCode, resp.StatusCode)
+    let! msg = resp.Content.ReadAsStringAsync()
     expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
     ()
   }
+
+  static member TestValidateLoopInData =
+    seq [
+      ("loop in success", loopInReq, testLoopInQuote, loopInResp1, testBlockchainInfo, HttpStatusCode.OK, None)
+      ("blockchain not synced", loopInReq, testLoopInQuote, loopInResp1, { testBlockchainInfo with Progress = 0.999f }, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
+    ]
+    |> Seq.map(fun (name,
+                    req,
+                    quote: SwapDTO.LoopInQuote,
+                    responseFromServer: SwapDTO.LoopInResponse,
+                    blockchainInfo,
+                    expectedStatusCode: HttpStatusCode,
+                    expectedErrorMsg: string option
+                    ) ->
+    [|
+      name |> box
+      req |> box
+      quote |> box
+      responseFromServer |> box
+      blockchainInfo |> box
+      expectedStatusCode |> box
+      expectedErrorMsg |> box
+    |])
+
+  [<Theory>]
+  [<MemberData(nameof(ServerAPITest.TestValidateLoopInData))>]
+  member this.TestValidateLoopIn(_name: string,
+                                 req: LoopInRequest,
+                                 quote: SwapDTO.LoopInQuote,
+                                 responseFromServer: SwapDTO.LoopInResponse,
+                                 blockchainInfo: BlockChainInfo,
+                                 expectedStatusCode: HttpStatusCode,
+                                 expectedErrorMsg: string option
+                                 ) =
+    task {
+      use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
+        let lnClientParam =
+          let invoice = getDummyTestInvoice (Some (swapAmount.ToLNMoney())) preimage Network.RegTest
+          {
+            DummyLnClientParameters.Default
+              with
+              GetInvoice = fun preimage amt _ _ _ -> invoice
+              SubscribeSingleInvoice = fun _hash -> asyncSeq {
+                {
+                  PaymentRequest = invoice
+                  AmountPayed = swapAmount
+                  InvoiceState = InvoiceStateEnum.Settled
+                }
+              }
+          }
+        sp
+          .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+          .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
+          .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
+            .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+            .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp _cc ->
+              TestHelpers.GetDummyBlockchainClient( {
+                DummyBlockChainClientParameters.Default with GetBlockchainInfo = fun () -> blockchainInfo
+              })
+            ))
+            .AddSingleton<GetSwapKey>(Func<IServiceProvider, _> (fun _ () -> refundKey |> Task.FromResult))
+            .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, _> (fun _ () -> preimage |> Task.FromResult))
+            .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
+              DummySwapServerClientParameters.Default
+                with
+                  LoopInQuote =  fun _req -> quote
+                  LoopIn = fun _req -> responseFromServer
+            }))
+            |> ignore
+        ))
+
+      let opts =
+        let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+        o.AddNLoopJsonConverters(Network.RegTest)
+        o
+      let client = server.CreateClient()
+      use e =
+        server.Services.GetRequiredService<IEventAggregator>()
+      let _ = e.KeepPublishDummyLoopInEvent()
+      let! resp =
+        let content = JsonContent.Create(req, Unchecked.defaultof<_>, opts)
+        client.PostAsync("/v1/loop/in", content)
+      let! msg = resp.Content.ReadAsStringAsync()
+      Assert.Equal(expectedStatusCode, resp.StatusCode)
+      expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
+    }

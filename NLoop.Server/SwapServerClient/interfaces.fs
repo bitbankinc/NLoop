@@ -135,16 +135,19 @@ module SwapDTO =
 
   [<RequireQualifiedAccess>]
   type UnAcceptableQuoteError =
-    | SweepFeeTooHigh of ourMax: Money * actual: Money
-    | MinerFeeTooHigh of ourMax: Money * actual: Money
+    | SwapFeeTooExpensive of ourMax: Money * actual: Money
+    | MinerFeeTooExpensive of ourMax: Money * actual: Money
+    | PrepayTooExpensive of ourMax: Money * actual: Money
     | CLTVDeltaTooShort of ourMax: BlockHeightOffset32 * actual: BlockHeightOffset32
     with
     member this.Message =
       match this with
-      | SweepFeeTooHigh(ourMax, actual) ->
-        $"Sweep fee specified by the server is too high (ourMax: {ourMax}, The amount they specified: {actual}) "
-      | MinerFeeTooHigh(ourMax, actual) ->
-        $"Miner fee specified by the server is too high (ourMax: {ourMax}, The amount they specified {actual})"
+      | SwapFeeTooExpensive(ourMax, actual) ->
+        $"Swap fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified: {actual.Satoshi} sats) "
+      | MinerFeeTooExpensive(ourMax, actual) ->
+        $"Miner fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified {actual.Satoshi} sats)"
+      | PrepayTooExpensive(ourMax, actual) ->
+        $"prepay fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified {actual.Satoshi} sats)"
       | CLTVDeltaTooShort(ourMax, actual) ->
         "CLTVDelta they say they want to specify for their invoice is too short for our HTLCConfirmation parameter. " +
         $"(our acceptable max is {ourMax}, actual value is {actual})" +
@@ -173,9 +176,11 @@ module SwapDTO =
     with
     member this.Validate(limits: LoopOutLimits) =
       if this.SwapFee > limits.MaxSwapFee then
-        (limits.MaxSwapFee, this.SwapFee) |> UnAcceptableQuoteError.SweepFeeTooHigh |> Error
+        (limits.MaxSwapFee, this.SwapFee) |> UnAcceptableQuoteError.SwapFeeTooExpensive |> Error
       elif this.SweepMinerFee > limits.MaxMinerFee then
-        (limits.MaxMinerFee, this.SweepMinerFee) |> UnAcceptableQuoteError.MinerFeeTooHigh |> Error
+        (limits.MaxMinerFee, this.SweepMinerFee) |> UnAcceptableQuoteError.MinerFeeTooExpensive |> Error
+      elif this.PrepayAmount > limits.MaxPrepay then
+        (limits.MaxPrepay, this.PrepayAmount) |> UnAcceptableQuoteError.PrepayTooExpensive |> Error
       else
         let ourAcceptableMaxCLTVDelta =
           limits.SwapTxConfRequirement
@@ -201,9 +206,9 @@ module SwapDTO =
     with
     member this.Validate(feeLimit: LoopInLimits) =
       if this.SwapFee > feeLimit.MaxSwapFee then
-        (feeLimit.MaxSwapFee, this.SwapFee) |> UnAcceptableQuoteError.SweepFeeTooHigh |> Error
+        (feeLimit.MaxSwapFee, this.SwapFee) |> UnAcceptableQuoteError.SwapFeeTooExpensive |> Error
       elif this.MinerFee > feeLimit.MaxMinerFee then
-        (feeLimit.MaxMinerFee, this.MinerFee) |> UnAcceptableQuoteError.MinerFeeTooHigh |> Error
+        (feeLimit.MaxMinerFee, this.MinerFee) |> UnAcceptableQuoteError.MinerFeeTooExpensive |> Error
       else
         Ok ()
 

@@ -661,7 +661,6 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                      swapActor: ISwapExecutor,
                      feeEstimator: IFeeEstimator,
                      systemClock: ISystemClock,
-                     serviceProvider: IServiceProvider,
                      _lightningClientProvider: ILightningClientProvider) =
 
   inherit BackgroundService()

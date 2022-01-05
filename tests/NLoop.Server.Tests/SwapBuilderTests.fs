@@ -23,7 +23,7 @@ type SwapBuilderTests() =
     {
       EstimateFee = TestHelpers.GetDummyFeeEstimator()
       SwapServerClient = TestHelpers.GetDummySwapServerClient()
-      Restrictions = fun (cat: Swap.Category) -> failwith "todo"
+      Restrictions = fun (_cat: Swap.Category) -> failwith "todo"
       Lnd = TestHelpers.GetDummyLightningClient()
       SwapExecutor = TestHelpers.GetDummySwapExecutor()
     }
@@ -45,7 +45,7 @@ type SwapBuilderTests() =
 
   [<Theory>]
   [<MemberData(nameof(SwapBuilderTests.TestLoopInUseData))>]
-  member this.TestLoopInUse(name: string,
+  member this.TestLoopInUse(_name: string,
                             ongoingLoopIn: NodeId list,
                             ongoingLoopOut: ShortChannelId list,
                             failedLoopIn: NodeId list,

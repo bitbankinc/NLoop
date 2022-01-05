@@ -52,7 +52,7 @@ let handleLoopOut (req: LoopOutRequest) =
     let opts = ctx.GetService<IOptions<NLoopOptions>>()
     (validateLoopOutRequest opts.Value req
      >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
-     >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount
+     >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount req.OutgoingChannelIds
      >=> validateFeeLimitAgainstServerQuote req
      >=> handleLoopOutCore req)
       next ctx
@@ -61,9 +61,7 @@ let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     let actor = ctx.GetService<ISwapExecutor>()
     let height =
-      let struct(_, quoteAsset) =
-        loopIn.PairIdValue.Value
-      ctx.GetBlockHeight quoteAsset
+      ctx.GetBlockHeight loopIn.PairIdValue.Quote
     task {
       match! actor.ExecNewLoopIn(loopIn, height) with
       | Ok resp ->

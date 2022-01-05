@@ -30,7 +30,7 @@ module Scripts =
   let swapScriptV1 (preimageHash: PaymentHash) (claimPubKey: PubKey) (refundPubKey: PubKey) (timeout: BlockHeight)  =
     let l = List<Op>()
     l.Add(Op.op_Implicit OpcodeType.OP_HASH160)
-    l.Add(Op.GetPushOp(preimageHash.Value.ToBytes() |> Hashes.RIPEMD160))
+    l.Add(Op.GetPushOp(preimageHash.GetRIPEMD160()))
     l.Add(Op.op_Implicit OpcodeType.OP_EQUAL)
     l.Add(Op.op_Implicit OpcodeType.OP_IF)
     l.Add(Op.GetPushOp(claimPubKey.ToBytes()))

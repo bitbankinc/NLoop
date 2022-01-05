@@ -263,7 +263,7 @@ type SwapExecutor(
               if loopOut.AcceptZeroConf then
                 (function | Swap.Event.ClaimTxPublished { Txid = txId }  -> Some (Some txId) | _ -> None)
               else
-                (function | Swap.Event.NewLoopOutAdded _  -> Some (None) | _ -> None)
+                (function | Swap.Event.NewLoopOutAdded _  -> Some None | _ -> None)
             obs
             |> Observable.chooseOrError chooser
           return
@@ -278,9 +278,7 @@ type SwapExecutor(
         let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let struct(baseCryptoCode, quoteCryptoCode) =
-          pairId.Value
-        let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
+        let onChainNetwork = opts.Value.GetNetwork(pairId.Quote)
 
         let! refundKey = getSwapKey()
         let! preimage = getSwapPreimage()
@@ -306,7 +304,7 @@ type SwapExecutor(
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
           invoiceProvider.GetAndListenToInvoice(
-            baseCryptoCode,
+            pairId.Base,
             preimage,
             amt,
             loopIn.Label |> Option.defaultValue(String.Empty),
@@ -354,7 +352,7 @@ type SwapExecutor(
               HTLCConfTarget =
                 loopIn.HtlcConfTarget
                 |> ValueOption.map(uint >> BlockHeightOffset32)
-                |> ValueOption.defaultValue (pairId.DefaultLoopInParameters.HTLCConfTarget)
+                |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
               Cost = SwapCost.Zero
               MaxMinerFee =
                 loopIn.Limits.MaxMinerFee

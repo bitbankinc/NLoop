@@ -1,13 +1,9 @@
 namespace NLoop.Server.Tests
 
 open System
-open System.Collections.Concurrent
-open System.Collections.Generic
 open System.Net
 open System.Net.Http
 open System.Net.Sockets
-open System.Text
-open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
 open System.IO
@@ -18,7 +14,6 @@ open System.CommandLine.Builder
 open System.CommandLine.Parsing
 
 open BoltzClient
-open DotNetLightning.Chain
 open FSharp.Control
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -26,10 +21,8 @@ open FsToolkit.ErrorHandling
 open LndClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
-open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NBitcoin
-open NBitcoin.Crypto
 
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.DependencyInjection
@@ -40,12 +33,8 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.Actors
-open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
 open NLoop.Server.Projections
-open NLoop.Server.Services
-open NLoop.Server.SwapServerClient
-
 
 
 module Helpers =
@@ -63,7 +52,7 @@ module Helpers =
   let hex = HexEncoder()
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
-  let private checkConnection(port) =
+  let private checkConnection port =
     let l = TcpListener(IPAddress.Loopback, port)
     try
       l.Start()
@@ -78,7 +67,7 @@ module Helpers =
       let mutable port = RandomUtils.GetUInt32() % 4000u
       port <- port + 10000u
       if (ports |> Seq.exists((=)port)) then () else
-      match checkConnection((int)port) with
+      match checkConnection(int port) with
       | Ok _ ->
         ports.[i] <- port
         i <- i + 1
@@ -107,15 +96,27 @@ module Helpers =
 type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> Route
+  GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
+  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
 }
   with
   static member Default = {
     ListChannels = []
     QueryRoutes = fun _ _ -> Route[]
+    GetInvoice = fun preimage amount expiry memo hint ->
+      let tags: TaggedFields = {
+        Fields = [ TaggedField.DescriptionTaggedField(memo) ]
+      }
+      let deadline = DateTimeOffset.UtcNow + expiry
+      PaymentRequest.TryCreate(Network.RegTest, amount |> Some, deadline, tags, (new Key()))
+      |> ResultUtils.Result.deref
+
+    SubscribeSingleInvoice = fun _hash -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
   LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> SwapDTO.LoopOutQuote
+  LoopInQuote: SwapDTO.LoopInQuoteRequest -> SwapDTO.LoopInQuote
   LoopOutTerms: SwapDTO.OutTermsRequest -> SwapDTO.OutTermsResponse
   GetNodes: unit -> SwapDTO.GetNodesResponse
   LoopOut: SwapDTO.LoopOutRequest -> SwapDTO.LoopOutResponse
@@ -131,6 +132,7 @@ type DummySwapServerClientParameters = {
         SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
         SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(10L)
       }
+    LoopInQuote = fun _ -> failwith "todo"
     LoopOutTerms = fun _ -> {
       SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
       SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
@@ -176,22 +178,17 @@ type TestHelpers =
       member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
                                  value: LNMoney,
                                  expiry: TimeSpan,
-                                 routeHints: LndClient.RouteHint[],
+                                 routeHints: RouteHint[],
                                  memo: string,
                                  ?ct: CancellationToken) =
           Task.FromResult(failwith "todo")
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,
-                             routeHint: LndClient.RouteHint[],
+                             routeHint: RouteHint[],
                              memo: string,
                              ?ct: CancellationToken): Task<PaymentRequest> =
-        let tags: TaggedFields = {
-          Fields = [ TaggedField.DescriptionTaggedField(memo) ]
-        }
-        let deadline = DateTimeOffset.UtcNow + expiry
-        PaymentRequest.TryCreate(Network.RegTest, amount |> Some, deadline, tags, (new Key()))
-        |> ResultUtils.Result.deref
+        parameters.GetInvoice paymentPreimage amount expiry memo routeHint
         |> Task.FromResult
       member this.Offer(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
         TaskResult.retn {
@@ -215,7 +212,7 @@ type TestHelpers =
       member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
         failwith "todo"
       member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<InvoiceSubscription> =
-        failwith "todo"
+        parameters.SubscribeSingleInvoice invoiceHash
       member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
         {
           Capacity = Money.Satoshis(10000m)
@@ -270,7 +267,8 @@ type TestHelpers =
           |> Task.FromResult
 
         member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
-          failwith "todo"
+          parameters.LoopInQuote request
+          |> Task.FromResult
 
         member this.GetLoopOutTerms(req, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
           parameters.LoopOutTerms req
@@ -298,7 +296,7 @@ type TestHelpers =
           failwith "todo"
     }
 
-  static member GetDummySwapExecutor(?parameters) =
+  static member GetDummySwapExecutor(?_parameters) =
     {
       new ISwapExecutor with
         member this.ExecNewLoopOut(req, height, source, ct) =
@@ -314,7 +312,7 @@ type TestHelpers =
         member this.GetBlock(blockHash, _) =
           p.GetBlock blockHash
           |> Task.FromResult
-        member this.GetBlockChainInfo(_) =
+        member this.GetBlockChainInfo _ =
           p.GetBlockchainInfo()
           |> Task.FromResult
         member this.GetBlockHash(height, _) =
