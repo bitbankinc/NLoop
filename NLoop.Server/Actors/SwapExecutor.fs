@@ -61,20 +61,15 @@ module private Observable =
       |> Observable.first
       |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
 
-type SwapActor(broadcaster: IBroadcaster,
+type SwapActor(opts: IOptions<NLoopOptions>,
+               lightningClientProvider: ILightningClientProvider,
+               broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
                utxoProvider: IUTXOProvider,
                getChangeAddress: GetAddress,
-               lightningClientProvider: ILightningClientProvider,
-               invoiceProvider: ILightningInvoiceProvider,
-               opts: IOptions<NLoopOptions>,
-               logger: ILogger<SwapActor>,
                eventAggregator: IEventAggregator,
-               swapServerClient: ISwapServerClient,
-               tryGetExchangeRate: TryGetExchangeRate,
-               conn: IEventStoreConnection
-  )  =
-
+               getAllSwapEvents: GetAllEvents<Swap.Event>,
+               logger: ILogger<SwapActor>) =
   let aggr =
     let payInvoice =
       fun (n: Network) (param: Swap.PayInvoiceParams) (i: PaymentRequest) ->
@@ -100,7 +95,6 @@ type SwapActor(broadcaster: IBroadcaster,
 
   member val Handler = handler with get
   member val Aggregate = aggr with get
-
   member this.Execute(swapId, msg: Swap.Command, ?source) = unitTask {
     let source = defaultArg source (nameof(SwapActor))
     logger.LogDebug($"New Command {msg}")
@@ -125,16 +119,53 @@ type SwapActor(broadcaster: IBroadcaster,
       logger.LogError($"Error when executing swap handler %A{s}")
       eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }
-
   interface ISwapActor with
+    member this.Aggregate = failwith "todo"
     member this.Execute(i, cmd, s) =
       match s with
       | Some s -> this.Execute(i, cmd, s)
       | None -> this.Execute(i, cmd)
 
-    member this.Handler = this.Handler
-    member this.Aggregate = this.Aggregate
+    member this.GetAllEntities(?ct: CancellationToken) = task {
+      let ct = defaultArg ct CancellationToken.None
+      let! events = getAllSwapEvents(ct)
+      let eventListToStateMap (l: RecordedEvent<_> list) =
+        l
+        |> List.groupBy(fun re -> re.StreamId)
+        |> List.map(fun (streamId, reList) -> streamId, reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute)
+        |> Map.ofList
+      return
+        events
+        |> Result.map eventListToStateMap
+    }
+    member this.Handler = failwith "todo"
 
+type ISwapExecutor =
+  abstract member ExecNewLoopOut:
+    req: LoopOutRequest *
+    height: BlockHeight *
+    ?s: string *
+    ?ct: CancellationToken -> Task<Result<LoopOutResponse, string>>
+  abstract member ExecNewLoopIn:
+    req: LoopInRequest *
+    height: BlockHeight *
+    ?s: string *
+    ?ct: CancellationToken -> Task<Result<LoopInResponse, string>>
+type SwapExecutor(
+                  invoiceProvider: ILightningInvoiceProvider,
+                  opts: IOptions<NLoopOptions>,
+                  logger: ILogger<SwapExecutor>,
+                  eventAggregator: IEventAggregator,
+                  swapServerClient: ISwapServerClient,
+                  tryGetExchangeRate: TryGetExchangeRate,
+                  lightningClientProvider: ILightningClientProvider,
+                  getSwapKey: GetSwapKey,
+                  getSwapPreimage: GetSwapPreimage,
+                  swapActor: ISwapActor
+  )=
+
+
+  interface ISwapExecutor with
     /// Helper function for creating new loop out.
     /// Technically, the logic of this function should be in the Domain layer, but we want
     /// swapId to be the StreamId of the event stream, thus we have to
@@ -148,10 +179,10 @@ type SwapActor(broadcaster: IBroadcaster,
                                ?s,
                                ?ct
                                ) = taskResult {
-        let s = defaultArg s (nameof(SwapActor))
+        let s = defaultArg s (nameof(SwapExecutor))
         let ct = defaultArg ct CancellationToken.None
-        let claimKey = new Key()
-        let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
+        let! claimKey = getSwapKey()
+        let! preimage = getSwapPreimage()
         let preimageHash = preimage.Hash
         let pairId =
           req.PairIdValue
@@ -206,7 +237,7 @@ type SwapActor(broadcaster: IBroadcaster,
         }
         let! exchangeRate =
           tryGetExchangeRate(pairId, ct)
-          |> Task.map(Result.requireSome $"exchange rate for {pairId} is not avilable")
+          |> Task.map(Result.requireSome $"exchange rate for {pairId} is not available")
         match outResponse.Validate(preimageHash.Value,
                                    claimKey.PubKey,
                                    req.Amount,
@@ -226,13 +257,13 @@ type SwapActor(broadcaster: IBroadcaster,
             getObs eventAggregator loopOut.Id
             |> Observable.replay
           use _ = obs.Connect()
-          do! this.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut), s)
+          do! swapActor.Execute(loopOut.Id, Swap.Command.NewLoopOut(loopOutParams, loopOut), s)
           let! maybeClaimTxId =
             let chooser =
               if loopOut.AcceptZeroConf then
                 (function | Swap.Event.ClaimTxPublished { Txid = txId }  -> Some (Some txId) | _ -> None)
               else
-                (function | Swap.Event.NewLoopOutAdded _  -> Some (None) | _ -> None)
+                (function | Swap.Event.NewLoopOutAdded _  -> Some None | _ -> None)
             obs
             |> Observable.chooseOrError chooser
           return
@@ -242,19 +273,15 @@ type SwapActor(broadcaster: IBroadcaster,
               ClaimTxId = maybeClaimTxId
             }
     }
-
-
     member this.ExecNewLoopIn(loopIn: LoopInRequest, height: BlockHeight, ?source, ?ct) = taskResult {
         let ct = defaultArg ct CancellationToken.None
-        let source = defaultArg source (nameof(SwapActor))
+        let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let struct(baseCryptoCode, quoteCryptoCode) =
-          pairId.Value
-        let onChainNetwork = opts.Value.GetNetwork(quoteCryptoCode)
+        let onChainNetwork = opts.Value.GetNetwork(pairId.Quote)
 
-        let refundKey = new Key()
-        let preimage = RandomUtils.GetBytes 32 |> PaymentPreimage.Create
+        let! refundKey = getSwapKey()
+        let! preimage = getSwapPreimage()
 
         let mutable maybeSwapId = None
         let! invoice =
@@ -263,7 +290,7 @@ type SwapActor(broadcaster: IBroadcaster,
             logger.LogInformation $"Received on-chain payment for loopIn swap {maybeSwapId}"
             match maybeSwapId with
             | Some i ->
-              this.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), (nameof(invoiceProvider)))
+              swapActor.Execute(i, Swap.Command.CommitReceivedOffChainPayment(amt), (nameof(invoiceProvider)))
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
@@ -272,12 +299,12 @@ type SwapActor(broadcaster: IBroadcaster,
             logger.LogWarning $"Invoice for the loopin swap {maybeSwapId} has been cancelled"
             match maybeSwapId with
             | Some i ->
-              this.Execute(i, Swap.Command.MarkAsErrored(msg), nameof(invoiceProvider))
+              swapActor.Execute(i, Swap.Command.MarkAsErrored(msg), nameof(invoiceProvider))
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
           invoiceProvider.GetAndListenToInvoice(
-            baseCryptoCode,
+            pairId.Base,
             preimage,
             amt,
             loopIn.Label |> Option.defaultValue(String.Empty),
@@ -305,7 +332,7 @@ type SwapActor(broadcaster: IBroadcaster,
                                     onChainNetwork,
                                     exchangeRate) with
           | Error e ->
-            do! this.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
+            do! swapActor.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)
           | Ok () ->
             let loopIn = {
@@ -325,7 +352,7 @@ type SwapActor(broadcaster: IBroadcaster,
               HTLCConfTarget =
                 loopIn.HtlcConfTarget
                 |> ValueOption.map(uint >> BlockHeightOffset32)
-                |> ValueOption.defaultValue (pairId.DefaultLoopInParameters.HTLCConfTarget)
+                |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
               Cost = SwapCost.Zero
               MaxMinerFee =
                 loopIn.Limits.MaxMinerFee
@@ -340,7 +367,7 @@ type SwapActor(broadcaster: IBroadcaster,
               getObs(eventAggregator) swapId
               |> Observable.replay
             use _ = obs.Connect()
-            do! this.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn), source)
+            do! swapActor.Execute(swapId, Swap.Command.NewLoopIn(height, loopIn), source)
             let! () =
               obs
               |> Observable.chooseOrError
@@ -354,17 +381,3 @@ type SwapActor(broadcaster: IBroadcaster,
           let msg = ex.Message.Replace("\"", "")
           return! Error($"Error requesting to boltz ({msg})")
       }
-
-    member this.GetAllEntities(?ct: CancellationToken) = task {
-      let ct = defaultArg ct CancellationToken.None
-      let! events =
-        conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
-      let eventListToStateMap (l: RecordedEvent<_> list) =
-        l
-        |> List.groupBy(fun re -> re.StreamId)
-        |> List.map(fun (streamId, reList) -> streamId, reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute)
-        |> Map.ofList
-      return
-        events
-        |> Result.map eventListToStateMap
-    }

@@ -8,6 +8,8 @@ open FSharp.Control.Tasks
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
 open NBitcoin.DataEncoders
 open NLoop.Domain

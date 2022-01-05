@@ -16,28 +16,27 @@ open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.SwapServerClient
 
-type BitcoinRPCBroadcaster(opts: IOptions<NLoopOptions>, logger: ILogger<BitcoinRPCBroadcaster>) =
+type BitcoinRPCBroadcaster(getClient: GetBlockchainClient, logger: ILogger<BitcoinRPCBroadcaster>) =
   interface IBroadcaster with
     member this.BroadcastTx(tx, cryptoCode) = unitTask {
-      let cli = opts.Value.GetRPCClient(cryptoCode)
+      let cli = getClient(cryptoCode)
       logger.LogInformation($"Broadcasting Transaction: {tx.GetWitHash()}")
-      let! _ = cli.SendRawTransactionAsync(tx)
+      let! _ = cli.SendRawTransaction(tx)
       ()
     }
 
-type RPCFeeEstimator(opts: IOptions<NLoopOptions>) =
+type RPCFeeEstimator(getClient: GetBlockchainClient) =
   interface IFeeEstimator with
     member this.Estimate target cc = task {
-      let! resp = opts.Value.GetRPCClient(cc).TryEstimateSmartFeeAsync(target.Value |> int)
-      return resp.FeeRate
+      return! getClient(cc).EstimateFee(target)
     }
 
-type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
+type BitcoinUTXOProvider(getWalletClient: GetWalletClient) =
 
   interface IUTXOProvider with
     member this.GetUTXOs(amount, cryptoCode) = task {
-      let cli = opts.Value.GetRPCClient(cryptoCode)
-      let! us = cli.ListUnspentAsync()
+      let cli = getWalletClient(cryptoCode)
+      let! us = cli.ListUnspent()
       let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
       if whatWeHave < amount then
         return
@@ -48,9 +47,7 @@ type BitcoinUTXOProvider(opts: IOptions<NLoopOptions>) =
         return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
     }
 
-    member this.SignSwapTxPSBT(psbt, cryptoCode) = task {
-      let cli = opts.Value.GetRPCClient(cryptoCode)
-      let! resp = cli.WalletProcessPSBTAsync(psbt, sign=true)
-      return resp.PSBT
-    }
+    member this.SignSwapTxPSBT(psbt, cryptoCode) =
+      let cli = getWalletClient(cryptoCode)
+      cli.SignSwapTxPSBT(psbt)
 

@@ -26,6 +26,11 @@ type NLoopOptions() =
   member this.GetBlockChainClient cc =
     cc |> this.GetRPCClient |> RPCBlockchainClient :> IBlockChainClient
 
+  member this.GetWalletClient cc =
+    this.GetRPCClient cc
+    |> BitcoindWalletClient
+    :> IWalletClient
+
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
   // -- --
   // -- https --

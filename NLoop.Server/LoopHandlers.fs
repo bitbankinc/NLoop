@@ -30,10 +30,8 @@ open Giraffe
 let handleLoopOutCore (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
     task {
-      let struct(baseCryptoCode, _quoteCryptoCode) =
-        req.PairIdValue.Value
-      let height = ctx.GetBlockHeight(baseCryptoCode)
-      let actor = ctx.GetService<ISwapActor>()
+      let height = ctx.GetBlockHeight(req.PairIdValue.Base)
+      let actor = ctx.GetService<ISwapExecutor>()
       match! actor.ExecNewLoopOut(req, height) with
       | Error e ->
         return! (error503 e) next ctx
@@ -54,18 +52,16 @@ let handleLoopOut (req: LoopOutRequest) =
     let opts = ctx.GetService<IOptions<NLoopOptions>>()
     (validateLoopOutRequest opts.Value req
      >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
-     >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount
+     >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount req.OutgoingChannelIds
      >=> validateFeeLimitAgainstServerQuote req
      >=> handleLoopOutCore req)
       next ctx
 
 let handleLoopInCore (loopIn: LoopInRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let actor = ctx.GetService<ISwapActor>()
+    let actor = ctx.GetService<ISwapExecutor>()
     let height =
-      let struct(_, quoteAsset) =
-        loopIn.PairIdValue.Value
-      ctx.GetBlockHeight quoteAsset
+      ctx.GetBlockHeight loopIn.PairIdValue.Quote
     task {
       match! actor.ExecNewLoopIn(loopIn, height) with
       | Ok resp ->

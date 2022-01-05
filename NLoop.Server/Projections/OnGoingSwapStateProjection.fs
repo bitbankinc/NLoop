@@ -23,7 +23,6 @@ type IOnGoingSwapStateProjection =
 /// TODO: Use EventStoreDB's inherent Projection system
 type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
-                  checkpointDB: ICheckpointDB,
                   actor: ISwapActor,
                   eventAggregator: IEventAggregator,
                   conn: IEventStoreConnection) as this =
@@ -62,10 +61,6 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         log.LogTrace($"Publishing RecordedEvent {r}")
 
         eventAggregator.Publish<RecordedEvent<Swap.Event>> r
-        do!
-          r.EventNumber.Value
-          |> int64
-          |> fun n -> checkpointDB.SetSwapStateCheckpoint(n, CancellationToken.None)
     }
 
   let mutable catchupCompletion = TaskCompletionSource()
@@ -93,14 +88,8 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     member this.FinishCatchup = catchupCompletion.Task
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
-    let maybeCheckpoint = ValueNone
-    //let! maybeCheckpoint =
-      //checkpointDB.GetSwapStateCheckpoint(stoppingToken)
     let checkpoint =
-      maybeCheckpoint
-      |> ValueOption.map(Checkpoint.StreamPosition)
-      |> ValueOption.defaultValue Checkpoint.StreamStart
-    log.LogDebug($"Start projecting from checkpoint {checkpoint}")
+      Checkpoint.StreamStart
     try
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with

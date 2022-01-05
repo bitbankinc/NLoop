@@ -20,7 +20,6 @@
     <PackageReference Include="NetMQ" Version="4.0.1.6" />
     <PackageReference Include="Ply" Version="0.3.*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
-    <PackageReference Include="DBTrie" Version="1.0.38" />
     <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
   <ItemGroup>
@@ -42,7 +41,6 @@
     <Compile Include="SwapServerClient\interfaces.fs" />
     <Compile Include="SwapServerClient\BoltzSwapServerClient.fs" />
     <Compile Include="EventAggregator.fs" />
-    <Compile Include="Projections\FlatFileCheckpointDB.fs" />
     <Compile Include="Projections\OnGoingSwapStateProjection.fs" />
     <Compile Include="Projections\RecentSwapFailureProjection.fs" />
     <Compile Include="BlockChainListeners\BlockChainListener.fs" />
@@ -50,7 +48,7 @@
     <Compile Include="BlockChainListeners\RPCLongPollingBlockchainListener.fs" />
     <Compile Include="BlockChainListeners\BlockchainListeners.fs" />
     <Compile Include="LightningClientProvider.fs" />
-    <Compile Include="Actors\SwapActor.fs" />
+    <Compile Include="Actors\SwapExecutor.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
     <Compile Include="Services\LightningInvoiceProvider.fs" />
     <Compile Include="Services\ExchangeRateProvider.fs" />

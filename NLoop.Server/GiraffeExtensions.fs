@@ -43,17 +43,17 @@ module CustomHandlers =
   let internal checkBlockchainIsSyncedAndSetTipHeight(cryptoCodePair: PairId) =
     fun (next : HttpFunc) (ctx : HttpContext) -> task {
 
-      let opts = ctx.GetService<IOptions<NLoopOptions>>()
+      let getClient = ctx.GetService<GetBlockchainClient>()
       let ccs =
         let struct (ourCryptoCode, theirCryptoCode) = cryptoCodePair.Value
         [ourCryptoCode; theirCryptoCode] |> Seq.distinct
       let mutable errorMsg = null
       for cc in ccs do
-        let rpcClient = opts.Value.GetRPCClient(cc)
-        let! info = rpcClient.GetBlockchainInfoAsync()
-        ctx.SetBlockHeight(cc, info.Blocks)
-        if info.VerificationProgress < 1.f then
-          errorMsg <- $"{cc} blockchain is not synced. VerificationProgress: %f{info.VerificationProgress}. Please wait until its done."
+        let rpcClient = getClient(cc)
+        let! info = rpcClient.GetBlockChainInfo()
+        ctx.SetBlockHeight(cc, info.Height.Value |> uint64)
+        if info.Progress < 1.f then
+          errorMsg <- $"{cc} blockchain is not synced. VerificationProgress: %f{info.Progress}. Please wait until its done."
         else
           ()
 
@@ -64,7 +64,7 @@ module CustomHandlers =
     }
 
   open System.Threading.Tasks
-  let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) =
+  let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) (chanIdsSpecified: ShortChannelId[]) =
     fun (next: HttpFunc) ( ctx: HttpContext) -> task {
       let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
       let boltzCli = ctx.GetService<ISwapServerClient>()
@@ -75,7 +75,7 @@ module CustomHandlers =
         ctx
           .GetLogger<_>()
       for kv in nodes.Nodes do
-        if (maybeResult.IsSome) then () else
+        if maybeResult.IsSome then () else
         try
           let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
           if (r.Value.Length > 0) then
@@ -104,7 +104,7 @@ module CustomHandlers =
                   SwapDTO.SweepConfTarget =
                     req.SweepConfTarget
                     |> ValueOption.map (uint32 >> BlockHeightOffset32)
-                    |> ValueOption.defaultValue(req.PairIdValue.DefaultLoopOutParameters.SweepConfTarget)
+                    |> ValueOption.defaultValue req.PairIdValue.DefaultLoopOutParameters.SweepConfTarget
                   SwapDTO.Pair = req.PairIdValue }
         swapServerClient.GetLoopOutQuote(r)
       let r =
