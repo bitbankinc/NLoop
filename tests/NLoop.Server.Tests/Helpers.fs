@@ -77,15 +77,6 @@ module Helpers =
   let findEmptyPort(ports: int[]) =
     findEmptyPortUInt(ports |> Array.map(uint))
 
-  let mockCheckpointDB = {
-    new ICheckpointDB
-      with
-      member this.GetSwapStateCheckpoint(ct: CancellationToken): ValueTask<int64 voption> =
-        ValueTask.FromResult(ValueNone)
-      member this.SetSwapStateCheckpoint(checkpoint: int64, ct:CancellationToken): ValueTask =
-        ValueTask()
-  }
-
   type TestStartup(env) =
     member this.Configure(appBuilder) =
       App.configureApp(appBuilder)
@@ -365,7 +356,6 @@ type TestHelpers =
         services
           .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
           .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
-          .AddSingleton<ICheckpointDB>(Helpers.mockCheckpointDB)
           .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
           .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
           .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)

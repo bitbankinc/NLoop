@@ -159,7 +159,6 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddSingleton<ICheckpointDB, FlatFileCheckpointDB>()
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
