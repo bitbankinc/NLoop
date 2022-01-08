@@ -46,6 +46,7 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
       AutoMaxInFlight = p.MaxAutoInFlight
       MinSwapAmount = p.ClientRestrictions.Minimum
       MaxSwapAmount = p.ClientRestrictions.Maximum
+      HTLCConfTarget = p.HTLCConfTarget.Value |> int |> Some
     }
     let resp =
       match p.FeeLimit with
@@ -113,7 +114,9 @@ let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFee
   else
     Error "no fee categories set"
 
-let setLiquidityParams (maybePairId: PairId option) ({ SetLiquidityParametersRequest.Parameters = req }): HttpHandler =
+let setLiquidityParams
+  (maybePairId: PairId option)
+  { SetLiquidityParametersRequest.Parameters = req }: HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
     let man = ctx.GetService<AutoLoopManager>()
     let pairId =
@@ -145,6 +148,10 @@ let setLiquidityParams (maybePairId: PairId option) ({ SetLiquidityParametersReq
           Minimum = req.MinSwapAmount
           Maximum = req.MaxSwapAmount
         }
+        HTLCConfTarget =
+          req.HTLCConfTarget
+          |> Option.map(uint >> BlockHeightOffset32)
+          |> Option.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
         AutoLoop = req.AutoLoop
       }
       match! man.SetParameters(group, p) with

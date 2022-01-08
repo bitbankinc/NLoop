@@ -20,6 +20,8 @@ type SwapDisqualifiedReason =
   | LoopInAlreadyInTheChannel
   | LiquidityOk
   | FeePPMInsufficient of {| Required: Money; OurLimit: Money |}
+  | LoopOutUnreachable of errorMsg: string
+  | LoopInUnReachable of errorMsg: string
   with
   member this.Message =
     match this with
@@ -87,6 +89,9 @@ type LiquidityParameters = {
   MinSwapAmount: Money option
   [<JsonPropertyName "max_swap_amount">]
   MaxSwapAmount: Money option
+
+  [<JsonPropertyName "htlc_conf_target">]
+  HTLCConfTarget: int option
 }
 
 type SetLiquidityParametersRequest = {

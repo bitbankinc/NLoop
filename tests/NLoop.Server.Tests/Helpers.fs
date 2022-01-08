@@ -89,6 +89,7 @@ type DummyLnClientParameters = {
   QueryRoutes: PubKey -> LNMoney -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
   SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
+  GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
   static member Default = {
@@ -101,8 +102,8 @@ type DummyLnClientParameters = {
       let deadline = DateTimeOffset.UtcNow + expiry
       PaymentRequest.TryCreate(Network.RegTest, amount |> Some, deadline, tags, (new Key()))
       |> ResultUtils.Result.deref
-
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
+    GetChannelInfo = fun _cId -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -212,7 +213,7 @@ type TestHelpers =
             TimeLockDelta = BlockHeightOffset16(10us)
             MinHTLC = LNMoney.Satoshis(10)
             FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
+            FeeProportionalMillionths = 2u
             Disabled = false
           }
           Node2Policy = {
@@ -220,7 +221,7 @@ type TestHelpers =
             TimeLockDelta = BlockHeightOffset16(10us)
             MinHTLC = LNMoney.Satoshis(10)
             FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
+            FeeProportionalMillionths = 2u
             Disabled = false
           }
         }

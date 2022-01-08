@@ -164,4 +164,6 @@ module Transactions =
   let dummyRefundTxFee feeRate =
     let prev = dummySwapTx feeRate
     dummyRefundTx feeRate
-    |> fun t -> t.GetFee(prev.Outputs.AsCoins() |> Seq.cast<_> |> Seq.toArray)
+    |> fun t ->
+      let swapOutput = prev.Outputs.AsCoins() |> Seq.find(fun o -> o.ScriptPubKey = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey)
+      swapOutput.Amount - t.TotalOut

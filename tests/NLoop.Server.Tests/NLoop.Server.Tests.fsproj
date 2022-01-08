@@ -36,9 +36,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
+    <ProjectReference Include="..\..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
-    <ProjectReference Include="..\NLoop.Server.PropertyTests\NLoop.Server.PropertyTests.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -30,8 +30,8 @@ open NLoop.Server.SwapServerClient
 module internal AutoLoopConstants =
   /// We use static fee rate to estimate our sweep fee, because we can't realistically
   /// estimate what our fee estimate will be by the time we reach timeout. We set this to a
-  /// high estimate so that we can account for worst-case fees, (1250 * 4 / 1000) = 50 sat/byte
-  let defaultLoopInSweepFee = FeeRate(1250m)
+  /// high estimate so that we can account for worst-case fees, (1250 * 4 / 1000) = 5 sat/byte
+  let defaultLoopInSweepFee = FeeRate(5m)
 
   let [<Literal>] defaultFeePPM =
     20000L<ppm>
@@ -53,22 +53,6 @@ module internal AutoLoopHelpers =
     let prepayMaxFee = ((available.Satoshi * prepayAmount.Satoshi) / total.Satoshi) |> Money.Satoshis
     let routeMaxFee = ((available.Satoshi * swapAmount.Satoshi) / total.Satoshi) |> Money.Satoshis
     prepayMaxFee, routeMaxFee
-  let private getChanInfos (lnClient: INLoopLightningClient) (cId: ShortChannelId) = task {
-      let! resp = lnClient.GetChannelInfo(cId)
-      return (resp, cId)
-    }
-  let private chanInfoToRouteHint(c, cId) =
-    {
-      HopHint.NodeId = c.Node1Policy.Id
-      HopHint.ChanId = cId
-      FeeBaseMSat = c.Node1Policy.FeeBase.MilliSatoshi
-      FeeProportionalMillionths = c.Node1Policy.FeeProportionalMillionths.MilliSatoshi
-      CltvExpiryDelta = c.Node1Policy.TimeLockDelta.Value |> int
-    }
-    |> fun h -> { RouteHint.Hops = [|h|] }
-
-  let chanIdToRouteHint cli =
-    getChanInfos cli >> Task.map(chanInfoToRouteHint)
 
   let scaleMinerFee (fee: Money) =
     100 * fee
@@ -315,7 +299,6 @@ type FeePortion = {
       // our total limit. We do this so that we can provide more specific reasons for not executing swaps.
       let feeLimit = ppmToSat(swapAmount, this.PartsPerMillion)
       let minerFee = scaleMinerFee(quote.SweepMinerFee)
-      let swapFee = quote.SwapFee
       if minerFee > feeLimit then
         Error <| SwapDisqualifiedReason.MinerFeeTooHigh({| ServerRequirement = minerFee; OurLimit = feeLimit |})
       elif quote.SwapFee > feeLimit then
@@ -452,24 +435,32 @@ type FeeCategoryLimit = {
 
 /// run-time modifiable part of the auto loop parameters.
 type Parameters = {
+  /// maximum number of in-flight automatically dispatched swaps we allow.
   MaxAutoInFlight: int
   FailureBackoff: TimeSpan
+  /// We use this number when estimating the fee for sweep tx in loop-out.
   SweepConfTarget: BlockHeightOffset32
   FeeLimit: IFeeLimit
+  /// restriction placed on swap size by the client.
   ClientRestrictions: ClientRestrictions
   Rules: Rules
+  /// We use this number when estimating the fee for swap tx in loop-in.
+  HTLCConfTarget: BlockHeightOffset32
+  /// if we dispatch the actual swap or not.
   AutoLoop: bool
 }
   with
-  static member Default(pairId: PairId) = {
-    MaxAutoInFlight = 1
-    FailureBackoff = defaultFailureBackoff
-    SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
-    FeeLimit = FeePortion.Default
-    ClientRestrictions = ClientRestrictions.Default
-    Rules = Rules.Zero
-    AutoLoop = false
-  }
+  static member Default(pairId: PairId) =
+    {
+      MaxAutoInFlight = 1
+      FailureBackoff = defaultFailureBackoff
+      SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
+      FeeLimit = FeePortion.Default
+      ClientRestrictions = ClientRestrictions.Default
+      Rules = Rules.Zero
+      HTLCConfTarget = pairId.DefaultLoopInParameters.HTLCConfTarget
+      AutoLoop = false
+    }
 
   /// Checks whether a set of parameters is valid.
   member this.Validate(openChannels: ListChannelResponse seq, server): Result<unit, string> =
@@ -507,14 +498,6 @@ type Parameters = {
   member this.HaveRules =
     this.Rules.ChannelRules.Count <> 0 || this.Rules.PeerRules.Count <> 0
 
-type Config = {
-  EstimateFee: IFeeEstimator
-  SwapServerClient: ISwapServerClient
-  Restrictions: Swap.Category -> Task<Result<ServerRestrictions, exn>>
-  Lnd: INLoopLightningClient
-  SwapExecutor: ISwapExecutor
-}
-
 type SuggestSwapError =
   | SwapDisqualified of SwapDisqualifiedReason
   | Other of string
@@ -530,6 +513,47 @@ type TargetPeerOrChannel = {
   Peer: NodeId
   Channels: ShortChannelId array
 }
+type LoopOutSwapBuilderDeps = {
+  FeeEstimator: IFeeEstimator
+  GetLoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, exn>>
+  GetDepositAddress: unit -> Task<BitcoinAddress>
+}
+type LoopInSwapBuilderDeps = {
+  GetLoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<Result<SwapDTO.LoopInQuote, exn>>
+}
+
+type Config = {
+  EstimateFee: IFeeEstimator
+  SwapServerClient: ISwapServerClient
+  Restrictions: Swap.Category -> Task<Result<ServerRestrictions, exn>>
+  Lnd: INLoopLightningClient
+  SwapExecutor: ISwapExecutor
+}
+  with
+    member this.GetLoopOutSwapBuilderDeps() =
+      {
+        LoopOutSwapBuilderDeps.FeeEstimator = this.EstimateFee
+        GetLoopOutQuote = fun req -> task {
+          try
+            let! resp =
+              this.SwapServerClient.GetLoopOutQuote req
+            return resp |> Ok
+          with
+          | ex -> return Error ex
+        }
+        GetDepositAddress = this.Lnd.GetDepositAddress
+      }
+    member this.GetLoopInSwapBuilderDeps() = {
+      LoopInSwapBuilderDeps.GetLoopInQuote =
+        fun req -> task {
+          try
+            let! resp = this.SwapServerClient.GetLoopInQuote req
+            return resp |> Ok
+          with
+          | ex -> return Error ex
+        }
+    }
+
 type SwapBuilder = {
   /// Validate our swap is able to execute according to the current state of fee market.
   MaySwap: Parameters -> Task<Result<unit, SwapDisqualifiedReason>>
@@ -539,13 +563,13 @@ type SwapBuilder = {
   /// BuildSwap creates a swap for the target peer/channels provided. The autoloop boolean indicates whether this swap
   /// will actually be executed, because there are some calls we can leave out if this swap is just for a dry run.
   /// e.g. in loop out we don't have to bother getting a new on-chain address.
-  BuildSwap: TargetPeerOrChannel -> Money -> INLoopLightningClient -> PairId -> bool -> Parameters -> Task<Result<SwapSuggestion, SwapDisqualifiedReason>>
+  BuildSwap: TargetPeerOrChannel -> Money -> PairId -> bool -> Parameters -> Task<Result<SwapSuggestion, SwapDisqualifiedReason>>
 }
   with
-  static member NewLoopOut(cfg: Config, pairId: PairId, logger: ILogger): SwapBuilder =
+  static member NewLoopOut(cfg: LoopOutSwapBuilderDeps, pairId: PairId, logger: ILogger): SwapBuilder =
     {
       MaySwap = fun parameters -> task {
-        let! feeRate = cfg.EstimateFee.Estimate(parameters.SweepConfTarget) pairId.Base
+        let! feeRate = cfg.FeeEstimator.Estimate(parameters.SweepConfTarget) pairId.Base
         return parameters.FeeLimit.CheckWithEstimatedFee(feeRate)
       }
       VerifyTargetIsNotInUse = fun traffic { Peer = peer; Channels = channels } -> result {
@@ -566,18 +590,19 @@ type SwapBuilder = {
           return! Error(SwapDisqualifiedReason.LoopInAlreadyInTheChannel)
 
       }
-      BuildSwap = fun { Peer = peer; Channels = channels } amount lnClient pairId autoloop parameters -> taskResult {
+      BuildSwap = fun { Channels = channels } amount pairId autoloop parameters -> taskResult {
         let! quote =
           let req =
             { SwapDTO.LoopOutQuoteRequest.Pair = pairId
               SwapDTO.Amount = amount
               SwapDTO.SweepConfTarget = parameters.SweepConfTarget }
-          cfg.SwapServerClient.GetLoopOutQuote(req)
+          cfg.GetLoopOutQuote(req)
+          |> TaskResult.mapError(fun ex -> SwapDisqualifiedReason.LoopOutUnreachable(ex.Message))
         do! parameters.FeeLimit.CheckLoopOutLimits(amount, quote)
         let prepayMaxFee, routeMaxFee, minerMaxFee = parameters.FeeLimit.LoopOutFees(amount, quote)
         let! addr =
             if autoloop then
-              cfg.Lnd.GetDepositAddress()
+              cfg.GetDepositAddress()
               |> Task.map Some
             else
               Task.FromResult None
@@ -605,7 +630,7 @@ type SwapBuilder = {
       }
     }
 
-  static member NewLoopIn(cfg: Config, logger: ILogger) =
+  static member NewLoopIn(cfg: LoopInSwapBuilderDeps, logger: ILogger) =
     {
       VerifyTargetIsNotInUse = fun (traffic: SwapTraffic) ({ Channels = channels; Peer = peer }: TargetPeerOrChannel) -> result {
         for chanId in channels do
@@ -626,26 +651,27 @@ type SwapBuilder = {
       /// For loop in, we cannot check any upfront costs because we do not know how many inputs will be used for our
       /// on-chain htlc before it is made, so we can't make any estimation.
       MaySwap = fun _ -> Task.FromResult(Ok())
-      BuildSwap = fun { Channels = channels; Peer = peer } amount lnClient pairId autoloop parameters -> taskResult {
+      BuildSwap =
+        fun
+          { Peer = peer; }
+          amount
+          pairId autoloop parameters -> taskResult {
         let! quote =
-          cfg.SwapServerClient.GetLoopInQuote({
+          cfg.GetLoopInQuote({
             Amount = amount
             Pair = pairId
           })
+          |> TaskResult.mapError(fun ex -> SwapDisqualifiedReason.LoopInUnReachable(ex.Message))
         do! parameters.FeeLimit.CheckLoopInLimits(amount, quote)
-        let! routeHints =
-          channels
-          |> Seq.map(chanIdToRouteHint lnClient)
-          |> Task.WhenAll
         let req = {
           LoopInRequest.Amount = amount
-          ChannelId = None
           Label = if autoloop then Labels.autoLoopLabel(Swap.Category.In) |> Some else None
           PairId = Some pairId
           MaxMinerFee = quote.MinerFee |> ValueSome
           MaxSwapFee = quote.SwapFee |> ValueSome
-          HtlcConfTarget = ValueNone
-          RouteHints = routeHints |> ValueSome
+          HtlcConfTarget = parameters.HTLCConfTarget.Value |> int |> ValueSome
+          LastHop = peer.Value |> Some
+          ChannelId = None
         }
         return
           SwapSuggestion.In(req)
@@ -696,9 +722,9 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       this.Config g
     match g.Category with
     | Swap.Category.Out ->
-      SwapBuilder.NewLoopOut(c, g.PairId, logger)
+      SwapBuilder.NewLoopOut(c.GetLoopOutSwapBuilderDeps(), g.PairId, logger)
     | Swap.Category.In ->
-      SwapBuilder.NewLoopIn(c, logger)
+      SwapBuilder.NewLoopIn(c.GetLoopInSwapBuilderDeps(), logger)
 
   member this.LightningClient (g: Swap.Group) =
     g.OffChainAsset
@@ -832,17 +858,6 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
           | Error e ->
             resp <- { resp with DisqualifiedPeers = resp.DisqualifiedPeers |> Map.add nodeId e }
           | Ok (SwapSuggestion.In s) ->
-            // Create a route_hint for every channel against the last_hop
-            // to tell them which channel we want the inbound liquidity for.
-            let targetChannels =
-              channels
-              |> List.filter(fun c -> match s.LastHop with | None -> false | Some lastHop -> lastHop = c.NodeId)
-            let! routeHints =
-              targetChannels
-              |> Seq.map(fun r -> r.Id |> chanIdToRouteHint (this.LightningClient group))
-              |> Task.WhenAll
-            let s =
-              { s with RouteHints = ValueSome routeHints }
             suggestions.Add (SwapSuggestion.In s)
           | Ok s ->
             suggestions.Add(s)
@@ -904,7 +919,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     taskResult {
       let builder = this.Builder group
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
-      do! builder.VerifyTargetIsNotInUse(traffic) (peerOrChannel)
+      do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
 
       let amount = rule.SwapAmount(balance, restrictions, opts.Value.TargetIncomingLiquidityRatio)
       if amount = Money.Zero then
@@ -912,7 +927,12 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       else
         let par = this.Parameters.[group]
         return!
-          builder.BuildSwap peerOrChannel amount (this.LightningClient group) group.PairId autoloop par
+          builder.BuildSwap
+            peerOrChannel
+            amount
+            group.PairId
+            autoloop
+            par
     }
 
   /// Gets a set of suggested swaps and dispatches them automatically if we have automated looping enabled.
@@ -933,7 +953,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     for inSwap in suggestion.InSwaps do
       let par = this.Parameters.[group]
       if not <| par.AutoLoop then
-        logger.LogDebug($"recommended autoloop in: %d{inSwap.Amount.Satoshi} sats over {inSwap.ChannelId} ({inSwap.ChannelId |> Option.map(fun c -> c.ToUInt64())})")
+        logger.LogDebug($"recommended autoloop in: %d{inSwap.Amount.Satoshi} sats over {inSwap.LastHop} ({inSwap.ChannelId |> Option.map(fun c -> c.ToUInt64())})")
       else
         let! loopIn =
           swapActor.ExecNewLoopIn(inSwap, blockChainListener.CurrentHeight(group.OnChainAsset), nameof(AutoLoopManager), ct)

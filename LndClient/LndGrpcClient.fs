@@ -188,7 +188,7 @@ module Extensions =
       lnHopHint.ChanId <- h.ShortChannelId.ToUInt64()
       lnHopHint.CltvExpiryDelta <- h.CLTVExpiryDelta.Value |> uint32
       lnHopHint.FeeBaseMsat <- h.FeeBase.MilliSatoshi |> uint32
-      lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths
+      lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths |> uint
       lnHopHint
 
   type LndClient.ChannelEventUpdate
@@ -449,7 +449,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           p.TimeLockDelta |> uint16 |> BlockHeightOffset16
         MinHTLC = p.MinHtlc |> LNMoney.MilliSatoshis
         FeeBase = p.FeeBaseMsat |> LNMoney.MilliSatoshis
-        FeeProportionalMillionths = p.FeeRateMilliMsat |> LNMoney.MilliSatoshis
+        FeeProportionalMillionths = p.FeeRateMilliMsat |> uint32
       }
       return {
         GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis

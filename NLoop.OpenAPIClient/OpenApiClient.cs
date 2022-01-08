@@ -1027,35 +1027,6 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public partial class RouteHint 
-    {
-        /// <summary>&lt; Route hints which will be included in the invoice. See bolt11 for the detail.</summary>
-        [Newtonsoft.Json.JsonProperty("hops", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.MaxLength(6)]
-        public System.Collections.Generic.ICollection<HopHint> Hops { get; set; }
-    
-        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
-    
-        [Newtonsoft.Json.JsonExtensionData]
-        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
-        {
-            get { return _additionalProperties; }
-            set { _additionalProperties = value; }
-        }
-    
-        public string ToJson() 
-        {
-            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
-        }
-    
-        public static RouteHint FromJson(string data)
-        {
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<RouteHint>(data);
-        }
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
         /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
@@ -1133,12 +1104,17 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC.</summary>
+        /// <summary>&lt; node_id (pubkey) to perform the swap against. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
+        [Newtonsoft.Json.JsonProperty("last_hop", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
+        public string Last_hop { get; set; }
+    
+        /// <summary>&lt; channel_id (pubkey) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
-        /// <summary>&lt; counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.</summary>
+        /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC.</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Pair_id { get; set; }
     
@@ -1157,10 +1133,6 @@ namespace NLoopClient
         /// <summary>&lt; Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)</summary>
         [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Htlc_conf_target { get; set; }
-    
-        /// <summary>&lt; route hints included in the invoice. Usually used in case of the private channel. But in NLoop, we also use it as a means of communication against the server, i.e. to tell them which channel do we want inbound liqidity for.</summary>
-        [Newtonsoft.Json.JsonProperty("route_hints", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public System.Collections.Generic.ICollection<RouteHint> Route_hints { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     
@@ -1532,6 +1504,10 @@ namespace NLoopClient
         /// <summary>The maximum swap amount, expressed in satoshis.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_amount { get; set; }
+    
+        /// <summary>The conf target we use to estimate the fee for swaptx in loop-in.</summary>
+        [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public int? Htlc_conf_target { get; set; }
     
         private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
     

@@ -3,21 +3,29 @@ namespace NLoop.Server
 open System
 open System.Linq
 open System.Collections.Generic
-open System.IO
+open System.Threading.Tasks
+open System.Threading
 open System.Net.Http
 open System.Runtime.CompilerServices
-open System.Security.Cryptography.X509Certificates
-open System.Threading.Tasks
+open DotNetLightning.Utils
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
-open NBitcoin
 open FsToolkit.ErrorHandling
 open FSharp.Control.Tasks
 open LndClient
 open NLoop.Domain
 
 
+[<AbstractClass;Sealed;Extension>]
+type LightningClientExtensions =
+
+  [<Extension>]
+  static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let! c = this.GetChannelInfo(channelId, ct)
+    return c.ToRouteHints(channelId)
+  }
 type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
 

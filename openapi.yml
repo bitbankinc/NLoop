@@ -307,18 +307,6 @@ components:
           type: integer
           format: int64
 
-    RouteHint:
-      type: object
-      properties:
-        hops:
-          type: array
-          maxItems: 6
-          items:
-            $ref: '#/components/schemas/HopHint'
-          description: <
-            Route hints which will be included in the invoice.
-            See bolt11 for the detail.
-
     # -----
     # ----- requests
     LoopOutRequest:
@@ -418,17 +406,24 @@ components:
           format: int64
           description: <
             amount in satoshi.
+        last_hop:
+          $ref: '#/components/schemas/PubKey'
+          description: <
+            node_id (pubkey) to perform the swap against.
+            If you specify both last_hop and channel_id, channel_id is be prioritized.
+          nullable: true
         channel_id:
           $ref: '#/components/schemas/ShortChannelId'
           description: <
-            currency pair to perform the swap.
-            Default is BTC/BTC.
+            channel_id (pubkey) to perform the swap for.
+            If you specify both last_hop and channel_id, channel_id is be prioritized.
           nullable: true
+            
         pair_id:
           $ref: '#/components/schemas/pairId'
           description: <
-            counterparty's cryptoCode to swap against.
-            default is the same cryptocurrency with the one you pay.
+            currency pair to perform the swap.
+            Default is BTC/BTC.
           nullable: true
         label:
           type: string
@@ -458,15 +453,6 @@ components:
           description: <
             Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
           nullable: true
-        route_hints:
-          type: array
-          items:
-            $ref: '#/components/schemas/RouteHint'
-          nullable: true
-          description: <
-            route hints included in the invoice. Usually used in case of the private channel.
-            But in NLoop, we also use it as a means of communication against the server, i.e.
-            to tell them which channel do we want inbound liqidity for.
       required:
         - amount
 
@@ -661,6 +647,11 @@ components:
           type: integer
           format: int64
           description: The maximum swap amount, expressed in satoshis.
+          nullable: true
+        htlc_conf_target:
+          type: integer
+          format: int32
+          description: The conf target we use to estimate the fee for swaptx in loop-in.
           nullable: true
       required:
         - "rules"

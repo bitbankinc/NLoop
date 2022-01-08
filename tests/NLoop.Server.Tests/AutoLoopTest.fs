@@ -28,8 +28,23 @@ open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
+open NLoop.Server.SwapServerClient
 open Xunit
 
+type private QuoteOutRequestResponse = Map<SwapDTO.LoopOutQuoteRequest, SwapDTO.LoopOutQuote>
+type private QuoteInRequestResponse = Map<SwapDTO.LoopInQuoteRequest, SwapDTO.LoopInQuote>
+type private LoopOutRequestResponse = (LoopOutRequest * LoopOutResponse) seq
+type private LoopInRequestResponse = (LoopInRequest * LoopInResponse) seq
+type private AutoLoopStep = {
+  MinAmount: Money
+  MaxAmount: Money
+  ExistingOut: LoopOut []
+  ExistingIn: LoopIn []
+  QuotesOut: QuoteOutRequestResponse
+  QuotesIn: QuoteInRequestResponse
+  ExpectedOut: LoopOutRequestResponse
+  ExpectedIn: LoopInRequestResponse
+}
 
 [<AutoOpen>]
 module private Constants =
@@ -328,6 +343,27 @@ type AutoLoopTests() =
       let! actual = man.SuggestSwaps(false, group)
       Assertion.isSame(expected, actual)
   }
+
+  member private this.AutoLoop() =
+    ()
+
+  /// Tests the case where we need to perform a swap, but autoloop is not enabled.
+  [<Fact>]
+  member this.TestAutoLoopDisabled() =
+    let parameters = {
+      Parameters.Default pairId
+        with
+        Rules = { Rules.Zero with ChannelRules =  Map.ofSeq[(chanId1, chanRule)] }
+    }
+
+    let quotes: Map<SwapDTO.LoopOutQuoteRequest, SwapDTO.LoopOutQuote> =
+      let req = {
+        SwapDTO.LoopOutQuoteRequest.Amount = chan1Rec.Amount
+        SwapDTO.LoopOutQuoteRequest.SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
+        SwapDTO.LoopOutQuoteRequest.Pair = pairId
+      }
+      Map.ofSeq[(req, testQuote)]
+    ()
 
   static member RestrictedSuggestionTestData =
     seq {

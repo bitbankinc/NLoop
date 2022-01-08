@@ -284,6 +284,23 @@ type SwapExecutor(
         let! preimage = getSwapPreimage()
 
         let mutable maybeSwapId = None
+        let lnClient = lightningClientProvider.GetClient(pairId.Base)
+        let! channels = lnClient.ListChannels()
+        let! maybeRouteHints =
+          match loopIn.ChannelId with
+          | Some cId ->
+            lnClient.GetRouteHints(cId, ct)
+            |> Task.map(Array.singleton)
+          | None ->
+            match loopIn.LastHop with
+            | None -> Task.FromResult([||])
+            | Some pk ->
+              channels
+              |> Seq.filter(fun c -> c.NodeId = pk)
+              |> Seq.map(fun c ->
+                lnClient.GetRouteHints(c.Id, ct)
+              )
+              |> Task.WhenAll
         let! invoice =
           let amt = loopIn.Amount.ToLNMoney()
           let onPaymentFinished = fun (amt: Money) ->
@@ -308,7 +325,7 @@ type SwapExecutor(
             preimage,
             amt,
             loopIn.Label |> Option.defaultValue(String.Empty),
-            loopIn.LndClientRouteHints,
+            maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 
         ct.ThrowIfCancellationRequested()
@@ -360,8 +377,7 @@ type SwapExecutor(
                 loopIn.Limits.MaxSwapFee
               IsOffChainPaymentReceived = false
               IsOurSuccessTxConfirmed = false
-              LastHop =
-                loopIn.LastHop
+              LastHop = maybeRouteHints.TryGetLastHop()
             }
             let obs =
               getObs(eventAggregator) swapId
