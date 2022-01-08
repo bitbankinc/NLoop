@@ -31,20 +31,6 @@ open NLoop.Server.SwapServerClient
 open NLoop.Server.SwapServerClient
 open Xunit
 
-type private QuoteOutRequestResponse = Map<SwapDTO.LoopOutQuoteRequest, SwapDTO.LoopOutQuote>
-type private QuoteInRequestResponse = Map<SwapDTO.LoopInQuoteRequest, SwapDTO.LoopInQuote>
-type private LoopOutRequestResponse = (LoopOutRequest * LoopOutResponse) seq
-type private LoopInRequestResponse = (LoopInRequest * LoopInResponse) seq
-type private AutoLoopStep = {
-  MinAmount: Money
-  MaxAmount: Money
-  ExistingOut: LoopOut []
-  ExistingIn: LoopIn []
-  QuotesOut: QuoteOutRequestResponse
-  QuotesIn: QuoteInRequestResponse
-  ExpectedOut: LoopOutRequestResponse
-  ExpectedIn: LoopInRequestResponse
-}
 
 [<AutoOpen>]
 module private Constants =
@@ -185,7 +171,7 @@ module private Constants =
     }
 
 
-type AutoLoopTests() =
+type LiquidityTest() =
   let mockRecentSwapFailureProjection = {
     new IRecentSwapFailureProjection with
       member this.FailedLoopIns = Map.empty
@@ -285,7 +271,7 @@ type AutoLoopTests() =
     )
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.RestrictionsValidationTestData))>]
+  [<MemberData(nameof(LiquidityTest.RestrictionsValidationTestData))>]
   member this.TestValidateRestrictions(name: string, client, server, maybeExpectedErr: RestrictionError option) =
     match ServerRestrictions.Validate(server, client), maybeExpectedErr with
     | Ok (), None -> ()
@@ -296,8 +282,13 @@ type AutoLoopTests() =
     | Error actualErr, Some expectedErr ->
       Assert.Equal(expectedErr, actualErr)
 
-  member private this.TestSuggestSwapsCore(name: string, injection: IServiceCollection -> unit, group, parameters: Parameters, channels, expected: Result<SwapSuggestions, AutoLoopError>) = task {
-    let i = fun (services: IServiceCollection) ->
+  member private this.TestSuggestSwapsCore(name: string,
+                                           injection: IServiceCollection -> unit,
+                                           group,
+                                           parameters: Parameters,
+                                           channels,
+                                           expected: Result<SwapSuggestions, AutoLoopError>) = task {
+    let configureServices = fun (services: IServiceCollection) ->
       let dummySwapServerClient =
         TestHelpers.GetDummySwapServerClient
           {
@@ -329,7 +320,7 @@ type AutoLoopTests() =
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
       injection services
-    use server = new TestServer(TestHelpers.GetTestHost(i))
+    use server = new TestServer(TestHelpers.GetTestHost configureServices)
     let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
     Assert.NotNull(man)
     match! man.SetParameters(group, parameters) with
@@ -343,27 +334,6 @@ type AutoLoopTests() =
       let! actual = man.SuggestSwaps(false, group)
       Assertion.isSame(expected, actual)
   }
-
-  member private this.AutoLoop() =
-    ()
-
-  /// Tests the case where we need to perform a swap, but autoloop is not enabled.
-  [<Fact>]
-  member this.TestAutoLoopDisabled() =
-    let parameters = {
-      Parameters.Default pairId
-        with
-        Rules = { Rules.Zero with ChannelRules =  Map.ofSeq[(chanId1, chanRule)] }
-    }
-
-    let quotes: Map<SwapDTO.LoopOutQuoteRequest, SwapDTO.LoopOutQuote> =
-      let req = {
-        SwapDTO.LoopOutQuoteRequest.Amount = chan1Rec.Amount
-        SwapDTO.LoopOutQuoteRequest.SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
-        SwapDTO.LoopOutQuoteRequest.Pair = pairId
-      }
-      Map.ofSeq[(req, testQuote)]
-    ()
 
   static member RestrictedSuggestionTestData =
     seq {
@@ -466,7 +436,7 @@ type AutoLoopTests() =
       |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.RestrictedSuggestionTestData))>]
+  [<MemberData(nameof(LiquidityTest.RestrictedSuggestionTestData))>]
   member this.RestrictedSuggestions(name: string,
                                     channels: ListChannelResponse seq,
                                     ongoingSwaps: Swap.State seq,
@@ -541,7 +511,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSweepFeeLimitTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestSweepFeeLimitTestData))>]
   member this.TestSweepFeeLimit(name: string, feeRate: FeeRate, quote, expected) =
     let setup (services: IServiceCollection) =
       let f = {
@@ -646,7 +616,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSuggestSwapsTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestSuggestSwapsTestData))>]
   member this.TestSuggestSwaps(name: string,
                                channels: ListChannelResponse list,
                                rules: Rules,
@@ -734,7 +704,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestFeeLimitsTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestFeeLimitsTestData))>]
   member this.TestFeeLimits(name: string, quote, expected: SwapSuggestions) =
     let setup (services: IServiceCollection) =
       let swapServerClient =
@@ -824,7 +794,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestInFlightLimitTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestInFlightLimitTestData))>]
   member this.TestInFlightLimit(name, maxInFlight, existingSwaps: Swap.State seq, rules: Rules, expected) =
     let setup (services: IServiceCollection) =
       let swapState = {
@@ -912,7 +882,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSizeRestrictionsTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestSizeRestrictionsTestData))>]
   member this.TestSizeRestrictions(name: string,
                                    clientR: ClientRestrictions,
                                    outTerms: SwapDTO.OutTermsResponse[],
@@ -1041,7 +1011,7 @@ type AutoLoopTests() =
   /// Our test is setup to require a 7500 sat swap, and we test this amount against
   /// various fee percentages and server quotes.
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestFeePercentageTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestFeePercentageTestData))>]
   member this.TestFeePercentage(name: string, feePPM: int64<ppm>, quote: SwapDTO.LoopOutQuote, expected) =
     let setup (services: IServiceCollection) =
       let swapClient =

@@ -702,14 +702,15 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   member this.Config (g: Swap.Group) =
     {
-      Config.Restrictions = fun category -> task {
-        try
-          return!
-            swapServerClient.GetSwapAmountRestrictions(g, zeroConf=false)
-            |> Task.map(Ok)
-        with
-        | ex ->
-          return Error(ex)
+      Config.Restrictions =
+        fun category -> task {
+          try
+            return!
+              swapServerClient.GetSwapAmountRestrictions(g, zeroConf=false)
+              |> Task.map(Ok)
+          with
+          | ex ->
+            return Error(ex)
       }
       EstimateFee = feeEstimator
       SwapServerClient = swapServerClient
@@ -963,14 +964,19 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     return ()
   }
 
+  member internal this.RunStep(ct) = unitTask {
+    for group, _ in this.Parameters |> Map.toSeq do
+      match! this.AutoLoop(group, ct) with
+      | Ok() -> ()
+      | Error e ->
+        logger.LogError($"Error in autoloop ({PairId.toStringFromVal(group.PairId)}): {e}")
+    do! Task.Delay tick
+  }
+
   override this.ExecuteAsync(stoppingToken) = unitTask {
     try
       while not <| stoppingToken.IsCancellationRequested do
-        for group, _ in this.Parameters |> Map.toSeq do
-          match! this.AutoLoop(group, stoppingToken) with
-          | Ok() -> ()
-          | Error e ->
-            logger.LogError($"Error in autoloop ({PairId.toStringFromVal(group.PairId)}): {e}")
+        do! this.RunStep(stoppingToken)
         do! Task.Delay tick
     with
     | :? OperationCanceledException ->
