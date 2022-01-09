@@ -38,13 +38,13 @@ type ILightningClientProviderExtensions =
 
   [<Extension>]
   static member AsChangeAddressGetter(this: ILightningClientProvider) =
-    NLoop.Domain.IO.GetAddress(fun c ->
+    GetAddress(fun c ->
       task {
         match this.TryGetClient(c) with
         | None -> return Error("Unsupported Cryptocode")
         | Some s ->
           let! c = s.GetDepositAddress()
-          return (Ok(c :> IDestination))
+          return (Ok c)
       }
     )
 
@@ -91,6 +91,7 @@ type GetSwapPreimage = unit -> Task<PaymentPreimage>
 type IWalletClient =
   abstract member ListUnspent: unit -> Task<UnspentCoin[]>
   abstract member SignSwapTxPSBT: psbt: PSBT -> Task<PSBT>
+  abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
 
 type GetWalletClient = SupportedCryptoCode -> IWalletClient
 

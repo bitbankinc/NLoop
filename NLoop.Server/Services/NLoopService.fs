@@ -1,23 +1,17 @@
 namespace NLoop.Server.Services
 
 open System
-open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
-open System.Threading.Channels
 open System.Threading.Tasks
+open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
-open EventStore.ClientAPI
-open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.Options
 open Microsoft.Extensions.Options
 open NBitcoin
-open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -163,7 +157,24 @@ type NLoopExtensions() =
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
-        .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
+        .AddSingleton<GetAddress>(Func<IServiceProvider, GetAddress>(fun sp ->
+          let opts = sp.GetService<IOptions<NLoopOptions>>()
+          GetAddress(fun cc ->
+            if opts.Value.OffChainCrypto |> Seq.contains cc then
+              let getter = sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter()
+              getter.Invoke cc
+            else
+              let walletClient = sp.GetService<GetWalletClient>()(cc)
+              task {
+                try
+                  let! r = walletClient.GetDepositAddress()
+                  return Ok r
+                with
+                | ex ->
+                  return Error ex.Message
+              }
+          )
+        ))
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<ISwapActor, SwapActor>()
         .AddSingleton<ISwapExecutor, SwapExecutor>()

@@ -219,8 +219,7 @@ type SwapDomainTests() =
           |> Task.FromResult
     }
   let getChangeAddress = GetAddress(fun _cryptoCode ->
-      (new Key()).PubKey.WitHash
-      :> IDestination
+      (new Key()).PubKey.WitHash.GetAddress(Network.RegTest)
       |> Ok
       |> Task.FromResult
     )

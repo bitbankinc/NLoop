@@ -16,16 +16,6 @@ open FSharp.Control.Tasks
 open LndClient
 open NLoop.Domain
 
-
-[<AbstractClass;Sealed;Extension>]
-type LightningClientExtensions =
-
-  [<Extension>]
-  static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
-    let ct = defaultArg ct CancellationToken.None
-    let! c = this.GetChannelInfo(channelId, ct)
-    return c.ToRouteHints(channelId)
-  }
 type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
 

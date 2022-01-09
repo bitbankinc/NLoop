@@ -185,3 +185,14 @@ type INLoopLightningClient =
   abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
   abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
 
+open FSharp.Control.Tasks
+[<AbstractClass;Sealed;Extension>]
+type LightningClientExtensions =
+
+  [<Extension>]
+  static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let! c = this.GetChannelInfo(channelId, ct)
+    return c.ToRouteHints(channelId)
+  }
+
