@@ -29,6 +29,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
@@ -76,6 +77,14 @@ module Helpers =
 
   let findEmptyPort(ports: int[]) =
     findEmptyPortUInt(ports |> Array.map(uint))
+
+  let walletAddress =
+    new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
+    |> fun k -> k.PubKey.WitHash.GetAddress(Network.RegTest)
+
+  let lndAddress =
+    new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
+    |> fun k -> k.PubKey.WitHash.GetAddress(Network.RegTest)
 
   type TestStartup(env) =
     member this.Configure(appBuilder) =
@@ -163,6 +172,19 @@ type DummyBlockChainClientParameters = {
     GetBlockchainInfo = fun () -> failwith "todo"
   }
 
+type DummyWalletClientParameters = {
+  ListUnspent: unit -> UnspentCoin[]
+  SignSwapTxPSBT: PSBT -> PSBT
+  GetDepositAddress: unit -> BitcoinAddress
+}
+  with
+  static member Default =
+    {
+      ListUnspent = fun () -> failwith "todo"
+      SignSwapTxPSBT = fun _ -> failwith "todo"
+      GetDepositAddress = fun () -> Helpers.walletAddress
+    }
+
 type TestHelpers =
 
   static member GetDummyLightningClient(?parameters) =
@@ -170,8 +192,8 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        let k = new Key()
-        Task.FromResult(k.PubKey.WitHash.GetAddress(Network.RegTest))
+        Helpers.lndAddress
+        |> Task.FromResult
       member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
                                  value: LNMoney,
                                  expiry: TimeSpan,
@@ -294,6 +316,18 @@ type TestHelpers =
           failwith "todo"
     }
 
+  static member GetDummyWalletClient(?parameters) =
+    let p = defaultArg parameters DummyWalletClientParameters.Default
+    {
+      new IWalletClient with
+        member this.ListUnspent() =
+          p.ListUnspent() |> Task.FromResult
+        member this.SignSwapTxPSBT(psbt) =
+          p.SignSwapTxPSBT psbt |> Task.FromResult
+        member this.GetDepositAddress() =
+          p.GetDepositAddress() |> Task.FromResult
+    }
+
   static member GetDummySwapExecutor(?_parameters) =
     {
       new ISwapExecutor with
@@ -366,6 +400,10 @@ type TestHelpers =
           .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
           .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
           .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
+          .AddSingleton<IWalletClient>(TestHelpers.GetDummyWalletClient())
+          .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
+            sp.GetRequiredService<IWalletClient>()
+          ))
           |> ignore
 
         configureServices |> Option.iter(fun c -> c services)

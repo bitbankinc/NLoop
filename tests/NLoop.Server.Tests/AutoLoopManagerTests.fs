@@ -52,11 +52,15 @@ type private AutoLoopStep = {
     ExpectedIn = []
   }
 
-(*
+[<RequireQualifiedAccess>]
+module private AutoLoopManagerTests =
+  ()
 type AutoLoopManagerTests() =
+  let offChain = SupportedCryptoCode.BTC
   let onChain = SupportedCryptoCode.BTC
+  let loopOutPair = PairId(onChain, offChain)
+  let loopInPair = PairId(offChain, onChain)
   member private this.TestAutoLoopManager(step: AutoLoopStep,
-                                          group: Swap.Group,
                                           parameters,
                                           channels,
                                           ?injection: IServiceCollection -> unit) = unitTask {
@@ -81,11 +85,9 @@ type AutoLoopManagerTests() =
                 loopInQuoteCount <- loopInQuoteCount + 1
                 resp
               LoopOutTerms = fun _ ->
-                Assert.Equal(Swap.Category.Out, group.Category)
                 { SwapDTO.OutTermsResponse.MaxSwapAmount = step.MaxAmount
                   MinSwapAmount = step.MinAmount }
               LoopInTerms = fun _ ->
-                Assert.Equal(Swap.Category.In, group.Category)
                 { SwapDTO.InTermsResponse.MaxSwapAmount = step.MaxAmount
                   MinSwapAmount = step.MinAmount }
           }
@@ -165,11 +167,13 @@ type AutoLoopManagerTests() =
     use server = new TestServer(TestHelpers.GetTestHost configureServices)
     let getManager = server.Services.GetService<TryGetAutoLoopManager>()
     Assert.NotNull(getManager)
-    let man = (getManager SupportedCryptoCode.BTC).Value
+    let man = (getManager offChain).Value
     let! r = man.SetParameters parameters
     Assertion.isOk r
 
-    do! man.RunStep(CancellationToken.None)
+    use cts = new CancellationTokenSource()
+    cts.CancelAfter(3000)
+    do! man.RunStep(cts.Token)
     Assert.Equal(step.QuotesOut.Length, loopOutQuoteCount)
     Assert.Equal(step.QuotesIn.Length, loopInQuoteCount)
     Assert.Equal(step.ExpectedOut.Length, loopOutCount)
@@ -186,10 +190,6 @@ type AutoLoopManagerTests() =
         Rules = { Rules.Zero with ChannelRules =  Map.ofSeq[(chanId1, chanRule)] }
     }
 
-    let group = {
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
-    }
     let step = {
       AutoLoopStep.Create(min=1L, max=chan1Rec.Amount.Satoshi + 1L)
         with
@@ -201,9 +201,13 @@ type AutoLoopManagerTests() =
           }
           [(req, testQuote)]
     }
-    do! this.TestAutoLoopManager(step, group, parameters, channels)
+    do! this.TestAutoLoopManager(step, parameters, channels)
+    // Trigger another autoloop, this time setting our server restrictions
+    // To have a minimum swap amount greater than the amount that we need to swap.
+    // In this case we don't even expect to get a quote, because
+    // our suggested swap is beneath the minimum swap size.
     let step = AutoLoopStep.Create(min=chan1Rec.Amount.Satoshi + 1L, max=chan1Rec.Amount.Satoshi)
-    do! this.TestAutoLoopManager(step, group, parameters, channels)
+    do! this.TestAutoLoopManager(step, parameters, channels)
   }
 
   [<Fact>]
@@ -230,22 +234,90 @@ type AutoLoopManagerTests() =
       Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule); (chanId2, chanRule)] }
       HTLCConfTarget = pairId.DefaultLoopInParameters.HTLCConfTarget
       OnChainAsset = onChain }
-    let step = {
-      AutoLoopStep.MinAmount = 1L |> Money.Satoshis
-      MaxAmount = failwith "todo"
-      OngoingOut = failwith "todo"
-      OngoingIn = failwith "todo"
-      FailedOut = failwith "todo"
-      FailedIn = failwith "todo"
-      QuotesOut = failwith "todo"
-      QuotesIn = failwith "todo"
-      ExpectedOut = failwith "todo"
-      ExpectedIn = failwith "todo" }
-    let group = {
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
+
+    let channels = [channel1; channel2]
+    let amt = chan1Rec.Amount
+    let maxSwapFee = ppmToSat(amt, swapFeePPM)
+    let quoteRequest = {
+      SwapDTO.LoopOutQuoteRequest.Amount = amt
+      SwapDTO.LoopOutQuoteRequest.SweepConfTarget = parameters.SweepConfTarget
+      SwapDTO.LoopOutQuoteRequest.Pair = loopOutPair
     }
-    //do! this.TestAutoLoopManager(step, group, parameters, channels)
+    let quote1 = {
+      SwapDTO.LoopOutQuote.SwapFee = maxSwapFee
+      SwapDTO.LoopOutQuote.SweepMinerFee = maxSwapFee - (10L |> Money.Satoshis)
+      SwapDTO.LoopOutQuote.SwapPaymentDest = (new Key()).PubKey
+      SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(10u)
+      SwapDTO.LoopOutQuote.PrepayAmount = prepayAmount - (10L |> Money.Satoshis)
+    }
+    let quote2 = {
+      SwapDTO.LoopOutQuote.SwapFee = maxSwapFee
+      SwapDTO.LoopOutQuote.SweepMinerFee = maxSwapFee - (10L |> Money.Satoshis)
+      SwapDTO.LoopOutQuote.SwapPaymentDest = (new Key()).PubKey
+      SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(10u)
+      SwapDTO.LoopOutQuote.PrepayAmount = prepayAmount - (20L |> Money.Satoshis)
+    }
+    let quotes: QuoteOutRequestResponse =
+      [
+        (quoteRequest, quote1)
+        (quoteRequest, quote2)
+      ]
+
+    let maxRouteFee = ppmToSat(amt, routeFeePPM)
+    let chan1Swap = {
+      LoopOutRequest.Amount = amt
+      ChannelIds = [|chanId1|] |> ValueSome
+      Address = Helpers.lndAddress |> Some
+      PairId = loopOutPair |> Some
+      SwapTxConfRequirement =
+        loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
+      Label =
+        Labels.autoLoopLabel(Swap.Category.Out) |> Some
+      MaxSwapRoutingFee = maxRouteFee |> ValueSome
+      MaxPrepayRoutingFee = ppmToSat(quote1.PrepayAmount, routeFeePPM) |> ValueSome
+      MaxSwapFee = quote1.SwapFee |> ValueSome
+      MaxPrepayAmount = quote1.PrepayAmount |> ValueSome
+      MaxMinerFee = maxMiner |> ValueSome
+      SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
+    }
+    let chan2Swap = {
+      LoopOutRequest.Amount = amt
+      ChannelIds = [|chanId2|] |> ValueSome
+      Address = Helpers.lndAddress |> Some
+      PairId = loopOutPair |> Some
+      SwapTxConfRequirement =
+        loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
+      Label =
+        Labels.autoLoopLabel(Swap.Category.Out) |> Some
+      MaxSwapRoutingFee = maxRouteFee |> ValueSome
+      MaxPrepayRoutingFee = ppmToSat(quote2.PrepayAmount, routeFeePPM) |> ValueSome
+      MaxSwapFee = quote2.SwapFee |> ValueSome
+      MaxPrepayAmount = quote2.PrepayAmount |> ValueSome
+      MaxMinerFee = maxMiner |> ValueSome
+      SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
+    }
+    let loopOuts: LoopOutRequestResponse =
+      let resp1 = {
+        LoopOutResponse.Address = "resp1-address"
+        Id = "resp1"
+        ClaimTxId = None
+      }
+      let resp2 = {
+        LoopOutResponse.Address = "resp2-address"
+        Id = "resp2"
+        ClaimTxId = None
+      }
+      [
+        (chan1Swap, resp1)
+        (chan2Swap, resp2)
+      ]
+    let step = {
+      AutoLoopStep.Create(1L, amt.Satoshi + 1L)
+        with
+          ExpectedOut = loopOuts
+          QuotesOut = quotes
+    }
+    do! this.TestAutoLoopManager(step, parameters, channels)
+
     ()
   }
-*)
