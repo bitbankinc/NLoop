@@ -3,6 +3,7 @@ namespace NLoop.Server.Options
 open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Domain
+open NLoop.Server
 
 type CryptoCodeDefaultOnChainParams = {
   SwapTxConfRequirement: BlockHeightOffset32
@@ -28,6 +29,7 @@ type  CryptoCodeDefaultOffChainParams = {
   MaxPrepay: Money
   MaxRoutingFee: Money
   MaxPrepayRoutingFee: Money
+  MaxSwapFeePPM: int64<ppm>
 }
 
 type CryptoCodeDefaultParams = {
@@ -53,6 +55,7 @@ module CryptoCodeExtensions =
             MaxPrepay = 1000L |> Money.Satoshis
             MaxRoutingFee = 100L |> Money.Satoshis
             MaxPrepayRoutingFee = 100L |> Money.Satoshis
+            MaxSwapFeePPM = 20000L<ppm> // 2%
           }
         }
       | SupportedCryptoCode.LTC ->
@@ -68,6 +71,8 @@ module CryptoCodeExtensions =
             MaxPrepay = 1000L |> Money.Satoshis
             MaxRoutingFee = 100L |> Money.Satoshis
             MaxPrepayRoutingFee = 100L |> Money.Satoshis
+            // Why don't we expect cheaper? isn't that the point of using LTC?
+            MaxSwapFeePPM = 6000L<ppm> // 0.6%
           }
         }
       | x -> failwith $"Unknown CryptoCode {x}"

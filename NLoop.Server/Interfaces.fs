@@ -63,8 +63,7 @@ type ILightningInvoiceProvider =
     ct: CancellationToken option
      -> Task<PaymentRequest>
 
-type ISwapActor =
-  inherit IActor<Swap.State, Swap.Command,Swap. Event, Swap.Error, SwapId, uint16 * DateTime>
+type ISwapActor = Swap.IActor
 
 type BlockChainInfo = {
   Progress: float32

@@ -137,7 +137,7 @@ type SwapBuilderTests() =
     }
     let builder = SwapBuilder.NewLoopIn(config, NullLogger.Instance)
     let parameters = {
-      Parameters.Default pairId
+      Parameters.Default SupportedCryptoCode.BTC
         with
         HTLCConfTarget = htlcConfTarget
     }

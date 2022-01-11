@@ -71,10 +71,10 @@ type NLoopExtensions() =
             p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<AutoLoopManager>() :> IHostedService
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+            p.GetRequiredService<AutoLoopManagers>() :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
           .AddSingleton<IHostedService>(fun p ->
@@ -93,9 +93,6 @@ type NLoopExtensions() =
         )
         |> ignore
 
-      this
-        .AddSingleton<AutoLoopManager>()
-        |> ignore
 
       this
         .AddSingleton<ISystemClock, SystemClock>()
@@ -117,6 +114,14 @@ type NLoopExtensions() =
         )
         |> ignore
 
+      this
+        .AddSingleton<AutoLoopManagers>()
+        .AddSingleton<TryGetAutoLoopManager>(Func<IServiceProvider, _>(fun sp cc ->
+          match sp.GetRequiredService<AutoLoopManagers>().Managers.TryGetValue(cc) with
+          | true, v -> Some v
+          | false, _ -> None
+        ))
+        |> ignore
       this
         .AddSingleton<ExchangeRateProvider>()
         .AddSingleton<TryGetExchangeRate>(Func<IServiceProvider,_> (fun sp ->

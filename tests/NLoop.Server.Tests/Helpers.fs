@@ -130,7 +130,10 @@ type DummySwapServerClientParameters = {
       SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
       SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
     }
-    LoopInTerms = fun _ -> failwith "todo"
+    LoopInTerms = fun _ -> {
+      SwapDTO.InTermsResponse.MinSwapAmount = Money.Satoshis(1L)
+      SwapDTO.InTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
+    }
     GetNodes = fun () -> {
       SwapDTO.GetNodesResponse.Nodes = Map.empty
     }

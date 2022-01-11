@@ -61,11 +61,10 @@ namespace NLoopClient
         System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="@base">base currency</param>
-        /// <param name="quote">quote currency</param>
+        /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
@@ -692,22 +691,17 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="@base">base currency</param>
-        /// <param name="quote">quote currency</param>
+        /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (@base == null)
-                throw new System.ArgumentNullException("@base");
-    
-            if (quote == null)
-                throw new System.ArgumentNullException("quote");
+            if (offchainAsset == null)
+                throw new System.ArgumentNullException("offchainAsset");
     
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
-            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
-            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{offchainAsset}");
+            urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -777,7 +771,7 @@ namespace NLoopClient
                 throw new System.ArgumentNullException("body");
     
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{base}/{quote}");
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{offchainAsset}");
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -1496,14 +1490,28 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.Always)]
         public int Auto_max_in_flight { get; set; }
     
-        /// <summary>The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
+        /// <summary>The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.
         /// </summary>
-        [Newtonsoft.Json.JsonProperty("min_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long? Min_swap_amount { get; set; }
+        [Newtonsoft.Json.JsonProperty("min_swap_amount_loopout", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Min_swap_amount_loopout { get; set; }
     
-        /// <summary>The maximum swap amount, expressed in satoshis.</summary>
-        [Newtonsoft.Json.JsonProperty("max_swap_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long? Max_swap_amount { get; set; }
+        /// <summary>The maximum off-chain amount for loop out, expressed in satoshis.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_amount_loopout", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_amount_loopout { get; set; }
+    
+        /// <summary>The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("min_swap_amount_loopin", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Min_swap_amount_loopin { get; set; }
+    
+        /// <summary>The maximum off-chain amount for loop in, expressed in satoshis.</summary>
+        [Newtonsoft.Json.JsonProperty("max_swap_amount_loopin", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public long? Max_swap_amount_loopin { get; set; }
+    
+        /// <summary>on-chain asset for the swap. default is BTC.</summary>
+        [Newtonsoft.Json.JsonProperty("onchain_asset", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        [Newtonsoft.Json.JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public CryptoCode? Onchain_asset { get; set; }
     
         /// <summary>The conf target we use to estimate the fee for swaptx in loop-in.</summary>
         [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

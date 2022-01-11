@@ -57,7 +57,7 @@ module PairIdExtensions =
       // most default values can be derived from CryptoCode parameters.
       let p = {
           PairIdDefaultLoopOutParameters.MaxPrepay = quoteP.MaxPrepay
-          MaxSwapFeePPM = 20000L<ppm> // 2%
+          MaxSwapFeePPM = quoteP.MaxSwapFeePPM
           MaxRoutingFee = quoteP.MaxRoutingFee
           MaxPrepayRoutingFee = quoteP.MaxPrepayRoutingFee
           MaxMinerFee = baseP.MaxMinerFee
@@ -79,8 +79,6 @@ module PairIdExtensions =
           p
             with
             MaxCLTVDelta = BlockHeightOffset32(40u)
-            // Why don't we expect cheaper? isn't that the point of using LTC?
-            MaxSwapFeePPM = 6000L<ppm> // 0.6%
         }
       | _ -> p
 

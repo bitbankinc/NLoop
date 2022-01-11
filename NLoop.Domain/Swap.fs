@@ -928,6 +928,7 @@ module Swap =
 
   type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>
   type Handler = Handler<State, Command, Event, Error, SwapId>
+  type IActor = IActor<State, Command, Event, Error, SwapId, uint16 * DateTime>
 
   let getAggregate deps: Aggregate = {
     Zero = State.Zero

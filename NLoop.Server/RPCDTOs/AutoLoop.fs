@@ -19,6 +19,7 @@ type SwapDisqualifiedReason =
   | LoopOutAlreadyInTheChannel
   | LoopInAlreadyInTheChannel
   | LiquidityOk
+  | FailedToGetOnChainAddress of msg: string
   | FeePPMInsufficient of {| Required: Money; OurLimit: Money |}
   | LoopOutUnreachable of errorMsg: string
   | LoopInUnReachable of errorMsg: string
@@ -85,10 +86,20 @@ type LiquidityParameters = {
 
   [<JsonPropertyName "auto_max_in_flight">]
   AutoMaxInFlight: int
-  [<JsonPropertyName "min_swap_amount">]
-  MinSwapAmount: Money option
-  [<JsonPropertyName "max_swap_amount">]
-  MaxSwapAmount: Money option
+
+  [<JsonPropertyName "min_swap_amount_loopout">]
+  MinSwapAmountLoopOut: Money option
+  [<JsonPropertyName "max_swap_amount_loopout">]
+  MaxSwapAmountLoopOut: Money option
+
+  [<JsonPropertyName "min_swap_amount_loopin">]
+  MinSwapAmountLoopIn: Money option
+
+  [<JsonPropertyName "max_swap_amount_loopin">]
+  MaxSwapAmountLoopIn: Money option
+
+  [<JsonPropertyName "onchain_asset">]
+  OnChainAsset: SupportedCryptoCode voption
 
   [<JsonPropertyName "htlc_conf_target">]
   HTLCConfTarget: int option

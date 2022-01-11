@@ -45,7 +45,7 @@ let private validateLoopOutRequest (opts: NLoopOptions) (req: LoopOutRequest) =
     | Ok() ->
       next
     | Error errorMsg ->
-      validationError400 errorMsg next
+      errorBadRequest errorMsg next
 
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
@@ -76,7 +76,7 @@ let private validateLoopIn (req: LoopInRequest) =
     | Ok() ->
       next ctx
     | Error errorMsg ->
-      validationError400 errorMsg next ctx
+      errorBadRequest errorMsg next ctx
 
 let handleLoopIn (loopIn: LoopInRequest) =
   (validateLoopIn loopIn

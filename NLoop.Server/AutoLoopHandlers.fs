@@ -18,19 +18,14 @@ open FsToolkit.ErrorHandling
 open NLoop.Server.Options
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
-let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
+let getLiquidityParams (offChainAsset: SupportedCryptoCode) : HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    let man = ctx.GetService<AutoLoopManager>()
-    let pairId =
-      maybePairId
-      |> Option.defaultValue PairId.Default
-
-    let group = {
-      /// todo: consider loop in
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
-    }
-    let p = man.Parameters.[group]
+    match ctx.GetService<TryGetAutoLoopManager>() offChainAsset with
+    | None -> return! errorBadRequest [$"off chain asset {offChainAsset} not supported"] next ctx
+    | Some man ->
+    match man.Parameters with
+    | None -> return! errorBadRequest [$"no parameter for {offChainAsset} has been set yet."] next ctx
+    | Some p ->
     let resp = {
       LiquidityParameters.Rules = [||]
       FeePPM = ValueNone
@@ -44,9 +39,12 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
       FailureBackoffSecond = p.FailureBackoff.TotalSeconds |> int
       AutoLoop = p.AutoLoop
       AutoMaxInFlight = p.MaxAutoInFlight
-      MinSwapAmount = p.ClientRestrictions.Minimum
-      MaxSwapAmount = p.ClientRestrictions.Maximum
       HTLCConfTarget = p.HTLCConfTarget.Value |> int |> Some
+      MinSwapAmountLoopOut = p.ClientRestrictions.OutMinimum
+      MaxSwapAmountLoopOut = p.ClientRestrictions.OutMaximum
+      MinSwapAmountLoopIn = p.ClientRestrictions.InMinimum
+      MaxSwapAmountLoopIn = p.ClientRestrictions.InMaximum
+      OnChainAsset = p.OnChainAsset |> ValueSome
     }
     let resp =
       match p.FeeLimit with
@@ -71,7 +69,9 @@ let getLiquidityParams (maybePairId: PairId option) : HttpHandler =
     return! json resp next ctx
   }
 
-let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFeeLimit, _> =
+let private dtoToFeeLimit
+  (offChain: CryptoCodeDefaultOffChainParams, onChain: CryptoCodeDefaultOnChainParams)
+  (r: LiquidityParameters): Result<IFeeLimit, _> =
   let isFeePPM = r.FeePPM.IsSome
   let isCategories =
     r.MaxSwapFeePpm.IsSome  ||
@@ -87,14 +87,13 @@ let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFee
     :> IFeeLimit
     |> Ok
   elif isCategories then
-    let p = pairId.DefaultLoopOutParameters
     {
       FeeCategoryLimit.MaximumSwapFeePPM =
         r.MaxSwapFeePpm
-        |> ValueOption.defaultValue(p.MaxSwapFeePPM)
+        |> ValueOption.defaultValue(offChain.MaxSwapFeePPM)
       MaximumPrepay =
         r.MaxPrepay
-        |> ValueOption.defaultValue(p.MaxPrepay)
+        |> ValueOption.defaultValue(offChain.MaxPrepay)
       MaximumRoutingFeePPM =
         r.MaxRoutingFeePpm
         |> ValueOption.defaultValue(defaultMaxRoutingFeePPM)
@@ -103,11 +102,11 @@ let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFee
         |> ValueOption.defaultValue defaultMaxPrepayRoutingFeePPM
       MaximumMinerFee =
         r.MaxMinerFee
-        |> ValueOption.defaultValue(p.MaxMinerFee)
+        |> ValueOption.defaultValue(onChain.MaxMinerFee)
       SweepFeeRateLimit =
         r.SweepFeeRateSatPerKVByte
         |> ValueOption.map FeeRate
-        |> ValueOption.defaultValue(p.SweepFeeRateLimit)
+        |> ValueOption.defaultValue(onChain.SweepFeeRateLimit)
     }
     :> IFeeLimit
     |> Ok
@@ -115,24 +114,17 @@ let private dtoToFeeLimit (pairId: PairId) (r: LiquidityParameters): Result<IFee
     Error "no fee categories set"
 
 let setLiquidityParams
-  (maybePairId: PairId option)
+  (maybeOffChainAsset: SupportedCryptoCode option)
   { SetLiquidityParametersRequest.Parameters = req }: HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
     let man = ctx.GetService<AutoLoopManager>()
-    let pairId =
-      maybePairId
-      |> Option.defaultValue PairId.Default
+    let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
+    let onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
 
-    let group = {
-      /// todo: consider loop in
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
-    }
-
-    match dtoToFeeLimit pairId req with
+    match dtoToFeeLimit (offchainAsset.DefaultParams.OffChain, onChainAsset.DefaultParams.OnChain) req with
     | Error e ->
       return!
-        validationError400 [e] next ctx
+        errorBadRequest [e] next ctx
     | Ok feeLimit ->
       let p = {
         Parameters.Rules =
@@ -145,35 +137,31 @@ let setLiquidityParams
           req.SweepConfTarget |> uint |> BlockHeightOffset32
         FeeLimit = feeLimit
         ClientRestrictions = {
-          Minimum = req.MinSwapAmount
-          Maximum = req.MaxSwapAmount
+          OutMinimum = req.MinSwapAmountLoopOut
+          OutMaximum = req.MaxSwapAmountLoopOut
+          InMinimum = req.MinSwapAmountLoopIn
+          InMaximum = req.MaxSwapAmountLoopIn
         }
         HTLCConfTarget =
           req.HTLCConfTarget
           |> Option.map(uint >> BlockHeightOffset32)
-          |> Option.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
+          |> Option.defaultValue onChainAsset.DefaultParams.OnChain.HTLCConfTarget
         AutoLoop = req.AutoLoop
+        OnChainAsset =
+          onChainAsset
       }
-      match! man.SetParameters(group, p) with
+      match! man.SetParameters p with
       | Ok () ->
         return! json {||} next ctx
       | Error e ->
         return!
-          validationError400 [e.Message] next ctx
+          errorBadRequest [e.Message] next ctx
   }
 
 let suggestSwaps (maybePairId: PairId option): HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
     let man = ctx.GetService<AutoLoopManager>()
-    let pairId =
-      maybePairId
-      |> Option.defaultValue PairId.Default
-    // todo: consider loopin
-    let  group = {
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
-    }
-    match! man.SuggestSwaps(false, group) with
+    match! man.SuggestSwaps false with
     | Error e ->
       return! error503 e next ctx
     | Ok suggestion ->

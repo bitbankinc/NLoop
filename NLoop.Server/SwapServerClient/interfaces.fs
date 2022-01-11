@@ -266,32 +266,58 @@ type RestrictionError =
       $"minimum swap amount ({c.Satoshi} sats) is less than server minimum ({s.Satoshi} sats)"
 
 type ClientRestrictions = {
-  Minimum: Money option
-  Maximum: Money option
+  OutMinimum: Money option
+  OutMaximum: Money option
+  InMinimum: Money option
+  InMaximum: Money option
 }
   with
   static member Default = {
-    Minimum = None
-    Maximum = None
+    OutMinimum = None
+    OutMaximum = None
+    InMinimum = None
+    InMaximum = None
   }
+
+  static member FromMaybeUnaryMinMax min max = {
+    OutMaximum = max
+    OutMinimum = min
+    InMaximum = max
+    InMinimum = min
+  }
+  static member FromUnaryMinMax min max =
+    ClientRestrictions.FromMaybeUnaryMinMax(Some min) (Some max)
+
+open FsToolkit.ErrorHandling
 
 type ServerRestrictions = {
   Minimum: Money
   Maximum: Money
 }
   with
-  static member Validate
-    ({Minimum = serverMin; Maximum =  serverMax}: ServerRestrictions,
-     { Minimum = maybeClientMin; Maximum = maybeClientMax }: ClientRestrictions) =
-    match maybeClientMin, maybeClientMax with
-    | Some clientMin, Some clientMax when clientMin > clientMax ->
-      Error(RestrictionError.MinimumExceedsMaximumAmt)
-    | Some clientMin, _  when clientMin < serverMin ->
-      Error(RestrictionError.MinLessThenServer(clientMin, serverMin))
-    | _, Some clientMax when clientMax > serverMax ->
-        Error(RestrictionError.MaxExceedsServer(clientMax, serverMax))
-    | _ ->
-      Ok()
+  member this.Validate
+    (cR: ClientRestrictions, cat: Swap.Category) =
+    let check maybeClientMin maybeClientMax =
+      match maybeClientMin, maybeClientMax with
+      | Some clientMin, Some clientMax when clientMin > clientMax ->
+        Error(RestrictionError.MinimumExceedsMaximumAmt)
+      | Some clientMin, _  when clientMin < this.Minimum ->
+        Error(RestrictionError.MinLessThenServer(clientMin, this.Minimum))
+      | _, Some clientMax when clientMax > this.Maximum ->
+          Error(RestrictionError.MaxExceedsServer(clientMax, this.Maximum))
+      | _ ->
+        Ok()
+    match cat with
+    | Swap.Category.Out ->
+      check cR.OutMinimum cR.OutMaximum
+    | Swap.Category.In ->
+      check cR.InMinimum cR.InMaximum
+
+  member this.Validate(cr: ClientRestrictions) =
+    result {
+      do! this.Validate(cr, Swap.Category.Out)
+      do! this.Validate(cr, Swap.Category.In)
+    }
 
 
 [<Extension;AbstractClass;Sealed>]

@@ -176,7 +176,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/SuggestSwapsResponse'
 
-  /v1/liquidity/params/{base}/{quote}:
+  /v1/liquidity/params/{offchainAsset}:
     get:
       description: >
         Get the parameters that the daemon's liquidity manager is currently configured with.
@@ -185,18 +185,11 @@ paths:
         - autoloop
       parameters:
         - in: path
-          name: base
+          name: offchainAsset
           schema:
             $ref:  "#/components/schemas/cryptoCode"
           required: true
-          description: base currency
-        - in: path
-          name: quote
-          schema:
-            $ref:  "#/components/schemas/cryptoCode"
-          required: true
-          description: quote currency
-
+          description: off-chain asset which autoloop manager will take care. default is BTC.
       responses:
         '200':
           description: OK
@@ -637,17 +630,33 @@ components:
         auto_max_in_flight:
           type: integer
           description: The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time.
-        min_swap_amount:
+        min_swap_amount_loopout:
           type: integer
           format: int64
           description: >
-            The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.
+            The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.
           nullable: true
-        max_swap_amount:
+        max_swap_amount_loopout:
           type: integer
           format: int64
-          description: The maximum swap amount, expressed in satoshis.
+          description: The maximum off-chain amount for loop out, expressed in satoshis.
           nullable: true
+        min_swap_amount_loopin:
+          type: integer
+          format: int64
+          description: >
+            The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.
+          nullable: true
+        max_swap_amount_loopin:
+          type: integer
+          format: int64
+          description: The maximum off-chain amount for loop in, expressed in satoshis.
+          nullable: true
+        onchain_asset:
+          $ref: "#/components/schemas/cryptoCode"
+          description: on-chain asset for the swap. default is BTC.
+          nullable: true
+        
         htlc_conf_target:
           type: integer
           format: int32
