@@ -54,11 +54,10 @@ namespace NLoopClient
         System.Threading.Tasks.Task<LoopInResponse> InAsync(LoopInRequest body = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="@base">base currency</param>
-        /// <param name="quote">quote currency</param>
+        /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
@@ -614,22 +613,17 @@ namespace NLoopClient
         }
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
-        /// <param name="@base">base currency</param>
-        /// <param name="quote">quote currency</param>
+        /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode @base, CryptoCode quote, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (@base == null)
-                throw new System.ArgumentNullException("@base");
-    
-            if (quote == null)
-                throw new System.ArgumentNullException("quote");
+            if (offchainAsset == null)
+                throw new System.ArgumentNullException("offchainAsset");
     
             var urlBuilder_ = new System.Text.StringBuilder();
-            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest/{base}/{quote}");
-            urlBuilder_.Replace("{base}", System.Uri.EscapeDataString(ConvertToString(@base, System.Globalization.CultureInfo.InvariantCulture)));
-            urlBuilder_.Replace("{quote}", System.Uri.EscapeDataString(ConvertToString(quote, System.Globalization.CultureInfo.InvariantCulture)));
+            urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest/{offchainAsset}");
+            urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
     
             var client_ = _httpClient;
             var disposeClient_ = false;

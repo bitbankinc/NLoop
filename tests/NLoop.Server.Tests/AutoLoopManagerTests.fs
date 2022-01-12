@@ -7,9 +7,9 @@ open System.Threading.Tasks
 open DotNetLightning.Utils
 open LndClient
 open FSharp.Control.Tasks
-open Microsoft.AspNetCore.Authentication
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Internal
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -73,6 +73,8 @@ type private AutoLoopManagerTestContext() =
   member val OngoingIn: LoopIn list = [] with get, set
   member val FailedOut: ShortChannelId list = [] with get, set
   member val FailedIn: NodeId list = [] with get, set
+
+  member val TestTime = testTime with get, set
 
   member this.Prepare(parameters, channels) = task {
     let configureServices = fun (services: IServiceCollection) ->
@@ -156,23 +158,27 @@ type private AutoLoopManagerTestContext() =
       let swapExecutor =
         {
           new ISwapExecutor with
-            member exe.ExecNewLoopOut(req, h, s, ct) =
-              use cts = new CancellationTokenSource()
+            member exe.ExecNewLoopOut(req, h, s, ct) = task {
+              let ct = defaultArg ct CancellationToken.None
+              use cts = CancellationTokenSource.CreateLinkedTokenSource(ct)
               cts.CancelAfter(10)
-              let expectedReq, resp = this.ExpectedOutChannel.Reader.ReadAsync(cts.Token).Result
+              let! expectedReq, resp = this.ExpectedOutChannel.Reader.ReadAsync(cts.Token)
               Assert.Equal(expectedReq, req)
-              resp |> Ok |> Task.FromResult
-            member exe.ExecNewLoopIn(req, h, s, ct) =
-              use cts = new CancellationTokenSource()
+              return resp |> Ok
+            }
+            member exe.ExecNewLoopIn(req, h, s, ct) = task {
+              let ct = defaultArg ct CancellationToken.None
+              use cts = CancellationTokenSource.CreateLinkedTokenSource(ct)
               cts.CancelAfter(10)
-              let expectedReq, resp = this.ExpectedInChannel.Reader.ReadAsync(cts.Token).Result
+              let! expectedReq, resp = this.ExpectedInChannel.Reader.ReadAsync(cts.Token)
               Assert.Equal(expectedReq, req)
-              resp |> Ok |> Task.FromResult
+              return resp |> Ok
+            }
         }
       services
         .AddSingleton<IFeeEstimator>(f)
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
-        .AddSingleton<ISystemClock>({ new ISystemClock with member this.UtcNow = testTime })
+        .AddSingleton<ISystemClock>({ new ISystemClock with member _.UtcNow = this.TestTime })
         .AddSingleton<ISwapExecutor>(swapExecutor)
         .AddSingleton<IBlockChainListener>(mockBlockchainListener)
         .AddSingleton<IOnGoingSwapStateProjection>(mockOnGoingSwapProjection)
@@ -228,6 +234,12 @@ type AutoLoopManagerTests() =
   let onChain = SupportedCryptoCode.BTC
   let loopOutPair = PairId(onChain, offChain)
   let loopInPair = PairId(offChain, onChain)
+  let dummyResp =
+    {
+      LoopOutResponse.Address = "resp1-address"
+      Id = "resp1"
+      ClaimTxId = None
+    }
   let ongoingLoopOutFromRequest(req: LoopOutRequest, initTime: DateTimeOffset) =
     {
       LoopOut.OnChainAmount = req.Amount
@@ -380,19 +392,9 @@ type AutoLoopManagerTests() =
       SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
     }
     let loopOuts: LoopOutRequestResponse =
-      let resp1 = {
-        LoopOutResponse.Address = "resp1-address"
-        Id = "resp1"
-        ClaimTxId = None
-      }
-      let resp2 = {
-        LoopOutResponse.Address = "resp2-address"
-        Id = "resp2"
-        ClaimTxId = None
-      }
       [
-        (chan1Swap, resp1)
-        (chan2Swap, resp2)
+        (chan1Swap, dummyResp)
+        (chan2Swap, dummyResp)
       ]
 
     use ctx = new AutoLoopManagerTestContext()
@@ -416,16 +418,30 @@ type AutoLoopManagerTests() =
     }
     do! ctx.RunStep(step)
 
-    // update channel 2 swap to have failed due to off-chain failure and our first swap to have succeeded
-    let failedOffChain =
-      [
-      ]
-
+    // case 2: channel 2 swap now has previous off-chain failure.
     let step = {
       AutoLoopStep.Create(1L, amt.Satoshi + 1L)
         with
-        OngoingOut = existing
+        FailedOut = [chanId2]
+        QuotesOut = [(quoteRequest, quote1)]
+        ExpectedOut = [(chan1Swap, dummyResp)]
     }
+    do! ctx.RunStep(step)
+    // but if we wait enough...
+    ctx.TestTime <- testTime + parameters.FailureBackoff + TimeSpan.FromSeconds(1.)
 
+    // swap will happen again.
+    let step = {
+      step
+        with
+        QuotesOut = [(quoteRequest, quote1); (quoteRequest, quote2)]
+        ExpectedOut = [(chan1Swap, dummyResp); (chan2Swap, dummyResp)]
+    }
+    do! ctx.RunStep(step)
     ()
   }
+
+
+  [<Fact>]
+  member this.TestCompositeRules() =
+    ()

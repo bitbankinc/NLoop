@@ -877,21 +877,23 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
       let mutable resp = SwapSuggestions.Zero
       let mutable suggestions: ResizeArray<SwapSuggestion> = ResizeArray()
-      let traffic = {
-        SwapTraffic.FailedLoopOut =
-          recentSwapFailureProjection.FailedLoopOuts
-          |> Map.filter(fun _ v -> (systemClock.UtcNow - par.FailureBackoff) <= v)
-        FailedLoopIn =
-          recentSwapFailureProjection.FailedLoopIns
-          |> Map.filter(fun _ v -> (systemClock.UtcNow - par.FailureBackoff) <= v)
-        OngoingLoopOut =
-          onGoingLoopOuts
-          |> List.map(fun o -> o.OutgoingChanIds |> Array.toList) |> List.concat
-        OngoingLoopIn =
-          onGoingLoopIns
-          |> List.map(fun i -> i.LastHop |> Option.map(NodeId) |> Option.toList)
-          |> List.concat
-      }
+      let traffic =
+        let failureCutoff = (systemClock.UtcNow - par.FailureBackoff)
+        {
+          SwapTraffic.FailedLoopOut =
+            recentSwapFailureProjection.FailedLoopOuts
+            |> Map.filter(fun _ v -> failureCutoff <= v)
+          FailedLoopIn =
+            recentSwapFailureProjection.FailedLoopIns
+            |> Map.filter(fun _ v -> failureCutoff <= v)
+          OngoingLoopOut =
+            onGoingLoopOuts
+            |> List.map(fun o -> o.OutgoingChanIds |> Array.toList) |> List.concat
+          OngoingLoopIn =
+            onGoingLoopIns
+            |> List.map(fun i -> i.LastHop |> Option.map(NodeId) |> Option.toList)
+            |> List.concat
+        }
 
       for nodeId, balances, rule in peersWithRules do
         match! this.SuggestSwap(traffic, balances, rule, restrictions, group.Category, autoloop) with

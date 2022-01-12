@@ -148,23 +148,17 @@ paths:
                     items:
                       type: string
 
-  /v1/auto/suggest/{base}/{quote}:
+  /v1/auto/suggest/{offchainAsset}:
     get:
       description: >
         Get suggestion for the swaps.
       parameters:
         - in: path
-          name: base
+          name: offchainAsset
           schema:
             $ref:  "#/components/schemas/cryptoCode"
           required: true
-          description: base currency
-        - in: path
-          name: quote
-          schema:
-            $ref:  "#/components/schemas/cryptoCode"
-          required: true
-          description: quote currency
+          description: off-chain asset which autoloop manager will take care. default is BTC.
       tags:
         - loop
         - autoloop

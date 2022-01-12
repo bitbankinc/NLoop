@@ -68,11 +68,8 @@ module App =
         ])
         subRoute "/auto" (choose [
           GET >=>
-            routef "/suggest/%s/%s" (fun (b, q) ->
-              let b = SupportedCryptoCode.Parse(b)
-              let q = SupportedCryptoCode.Parse(q)
-              AutoLoopHandlers.suggestSwaps(Some (PairId(b, q)))
-            )
+            route "/suggest" >=> (AutoLoopHandlers.suggestSwaps None)
+            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopHandlers.suggestSwaps)
         ])
         subRoute "/liquidity" (choose [
           route "/params" >=> choose [
@@ -155,7 +152,7 @@ module App =
 
       services.AddGiraffe() |> ignore
 
-  let configureServicesTest services = configureServices false None services
+  let configureServicesTest services = configureServices true None services
 
 type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =

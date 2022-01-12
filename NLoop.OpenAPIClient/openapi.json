@@ -237,7 +237,7 @@
         }
       }
     },
-    "/v1/auto/suggest/{base}/{quote}": {
+    "/v1/auto/suggest/{offchainAsset}": {
       "get": {
         "tags": [
           "loop",
@@ -247,19 +247,10 @@
         "operationId": "suggest",
         "parameters": [
           {
-            "name": "base",
+            "name": "offchainAsset",
             "in": "path",
             "required": true,
-            "description": "base currency",
-            "schema": {
-              "$ref": "#/components/schemas/cryptoCode"
-            }
-          },
-          {
-            "name": "quote",
-            "in": "path",
-            "required": true,
-            "description": "quote currency",
+            "description": "off-chain asset which autoloop manager will take care. default is BTC.",
             "schema": {
               "$ref": "#/components/schemas/cryptoCode"
             }

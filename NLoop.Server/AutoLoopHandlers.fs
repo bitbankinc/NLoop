@@ -117,10 +117,11 @@ let setLiquidityParams
   (maybeOffChainAsset: SupportedCryptoCode option)
   { SetLiquidityParametersRequest.Parameters = req }: HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    let man = ctx.GetService<AutoLoopManager>()
     let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
     let onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
-
+    match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
+    | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
+    | Some man ->
     match dtoToFeeLimit (offchainAsset.DefaultParams.OffChain, onChainAsset.DefaultParams.OnChain) req with
     | Error e ->
       return!
@@ -158,9 +159,12 @@ let setLiquidityParams
           errorBadRequest [e.Message] next ctx
   }
 
-let suggestSwaps (maybePairId: PairId option): HttpHandler =
+let suggestSwaps (maybeOffchainAsset: SupportedCryptoCode option): HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    let man = ctx.GetService<AutoLoopManager>()
+    let offchainAsset = defaultArg maybeOffchainAsset SupportedCryptoCode.BTC
+    match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
+    | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
+    | Some man ->
     match! man.SuggestSwaps false with
     | Error e ->
       return! error503 e next ctx
