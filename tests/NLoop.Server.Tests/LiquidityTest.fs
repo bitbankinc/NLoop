@@ -294,7 +294,7 @@ type LiquidityTest() =
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> testQuote
+              LoopOutQuote = fun _ -> testQuote |> Task.FromResult
           }
       let dummyLnClientProvider =
         TestHelpers.GetDummyLightningClientProvider
@@ -880,11 +880,11 @@ type LiquidityTest() =
           {
             DummySwapServerClientParameters.Default
               with
-                LoopOutQuote = fun _ -> testQuote
+                LoopOutQuote = fun _ -> testQuote |> Task.FromResult
                 LoopOutTerms = fun _ ->
                   let r = outTerms.[callCount]
                   callCount <- callCount + 1
-                  r
+                  r |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapClient)
@@ -1002,7 +1002,7 @@ type LiquidityTest() =
             DummySwapServerClientParameters.Default
               with
                 LoopOutQuote = fun _ ->
-                  quote
+                  quote |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapClient)

@@ -116,13 +116,13 @@ type DummyLnClientParameters = {
   }
 
 type DummySwapServerClientParameters = {
-  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> SwapDTO.LoopOutQuote
-  LoopInQuote: SwapDTO.LoopInQuoteRequest -> SwapDTO.LoopInQuote
-  LoopOutTerms: SwapDTO.OutTermsRequest -> SwapDTO.OutTermsResponse
-  LoopInTerms: SwapDTO.InTermsRequest -> SwapDTO.InTermsResponse
+  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<SwapDTO.LoopOutQuote>
+  LoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<SwapDTO.LoopInQuote>
+  LoopOutTerms: SwapDTO.OutTermsRequest -> Task<SwapDTO.OutTermsResponse>
+  LoopInTerms: SwapDTO.InTermsRequest -> Task<SwapDTO.InTermsResponse>
   GetNodes: unit -> SwapDTO.GetNodesResponse
-  LoopOut: SwapDTO.LoopOutRequest -> SwapDTO.LoopOutResponse
-  LoopIn: SwapDTO.LoopInRequest -> SwapDTO.LoopInResponse
+  LoopOut: SwapDTO.LoopOutRequest -> Task<SwapDTO.LoopOutResponse>
+  LoopIn: SwapDTO.LoopInRequest -> Task<SwapDTO.LoopInResponse>
 }
   with
   static member Default = {
@@ -133,16 +133,20 @@ type DummySwapServerClientParameters = {
         SwapDTO.LoopOutQuote.SwapPaymentDest = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
         SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
         SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(10L)
-      }
+      } |> Task.FromResult
     LoopInQuote = fun _ -> failwith "todo"
-    LoopOutTerms = fun _ -> {
-      SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
-      SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
-    }
-    LoopInTerms = fun _ -> {
-      SwapDTO.InTermsResponse.MinSwapAmount = Money.Satoshis(1L)
-      SwapDTO.InTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
-    }
+    LoopOutTerms = fun _ ->
+      {
+        SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
+        SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
+      }
+      |> Task.FromResult
+    LoopInTerms = fun _ ->
+      {
+        SwapDTO.InTermsResponse.MinSwapAmount = Money.Satoshis(1L)
+        SwapDTO.InTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
+      }
+      |> Task.FromResult
     GetNodes = fun () -> {
       SwapDTO.GetNodesResponse.Nodes = Map.empty
     }
@@ -273,28 +277,22 @@ type TestHelpers =
       new ISwapServerClient with
         member this.LoopOut(request: SwapDTO.LoopOutRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutResponse> =
           parameters.LoopOut request
-          |> Task.FromResult
         member this.LoopIn(request: SwapDTO.LoopInRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInResponse> =
           parameters.LoopIn request
-          |> Task.FromResult
         member this.GetNodes(?ct: CancellationToken): Task<SwapDTO.GetNodesResponse> =
           parameters.GetNodes()
           |> Task.FromResult
 
         member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
           parameters.LoopOutQuote request
-          |> Task.FromResult
 
         member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
           parameters.LoopInQuote request
-          |> Task.FromResult
 
         member this.GetLoopOutTerms(req, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
           parameters.LoopOutTerms req
-          |> Task.FromResult
         member this.GetLoopInTerms(req, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
           parameters.LoopInTerms req
-          |> Task.FromResult
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"
 

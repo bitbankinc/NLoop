@@ -321,7 +321,7 @@ type ServerAPITest() =
               with
                 LoopOutQuote =  fun _req -> quote
                 GetNodes = fun () -> { Nodes = swapServerNodes }
-                LoopOut = fun _req -> responseFromServer
+                LoopOut = fun _req -> responseFromServer |> Task.FromResult
           }))
           |> ignore
       ))
@@ -430,8 +430,8 @@ type ServerAPITest() =
             .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
               DummySwapServerClientParameters.Default
                 with
-                  LoopInQuote =  fun _req -> quote
-                  LoopIn = fun _req -> responseFromServer
+                  LoopInQuote =  fun _req -> quote |> Task.FromResult
+                  LoopIn = fun _req -> responseFromServer |> Task.FromResult
             }))
             |> ignore
         ))
