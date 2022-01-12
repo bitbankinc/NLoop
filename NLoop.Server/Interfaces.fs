@@ -94,6 +94,8 @@ type IWalletClient =
 
 type GetWalletClient = SupportedCryptoCode -> IWalletClient
 
+type GetNetwork = SupportedCryptoCode -> Network
+
 [<AbstractClass;Sealed;Extension>]
 type IBlockChainClientExtensions =
   [<Extension>]

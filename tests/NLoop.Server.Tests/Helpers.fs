@@ -91,7 +91,7 @@ module Helpers =
       App.configureApp(appBuilder)
 
     member this.ConfigureServices(services) =
-      App.configureServices true env services
+      App.configureServices true (Some env) services
 
 type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
@@ -371,7 +371,43 @@ type TestHelpers =
           |> Task.FromResult
     }
 
+  static member private ConfigureTestServices(services: IServiceCollection, ?configureServices: IServiceCollection -> unit) =
+    let rc = NLoopServerCommandLine.getRootCommand()
+    let p =
+      CommandLineBuilder(rc)
+        .UseMiddleware(Main.useWebHostMiddleware)
+        .Build()
+    services
+      .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
+      .AddHttpClient<BoltzClient>()
+      .ConfigureHttpClient(fun _sp _client ->
+        () // TODO: Inject Mock ?
+        )
+      |> ignore
+    services
+      .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
+      .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
+      .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
+      .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
+      .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
+      .AddSingleton<IWalletClient>(TestHelpers.GetDummyWalletClient())
+      .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
+        cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
+      ))
+      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
+        sp.GetRequiredService<IWalletClient>()
+      ))
+      |> ignore
+    configureServices |> Option.iter(fun conf -> conf services)
+
+  static member GetTestServiceProvider(?configureServices) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
+    let services = ServiceCollection()
+    App.configureServicesTest services
+    TestHelpers.ConfigureTestServices(services, configureServices)
+    services.BuildServiceProvider()
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
     WebHostBuilder()
       .UseContentRoot(Directory.GetCurrentDirectory())
       .ConfigureAppConfiguration(fun configBuilder ->
@@ -380,31 +416,7 @@ type TestHelpers =
       .UseStartup<Helpers.TestStartup>()
       .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
-        let rc = NLoopServerCommandLine.getRootCommand()
-        let p =
-          CommandLineBuilder(rc)
-            .UseMiddleware(Main.useWebHostMiddleware)
-            .Build()
-        services
-          .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
-          .AddHttpClient<BoltzClient>()
-          .ConfigureHttpClient(fun _sp _client ->
-            () // TODO: Inject Mock ?
-            )
-          |> ignore
-        services
-          .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
-          .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
-          .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
-          .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
-          .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
-          .AddSingleton<IWalletClient>(TestHelpers.GetDummyWalletClient())
-          .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
-            sp.GetRequiredService<IWalletClient>()
-          ))
-          |> ignore
-
-        configureServices |> Option.iter(fun c -> c services)
+        TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
 

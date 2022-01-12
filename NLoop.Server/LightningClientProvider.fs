@@ -16,13 +16,16 @@ open FSharp.Control.Tasks
 open LndClient
 open NLoop.Domain
 
-type LightningClientProvider(logger: ILogger<LightningClientProvider> ,opts: IOptions<NLoopOptions>, httpClientFactory: IHttpClientFactory) =
+type LightningClientProvider(logger: ILogger<LightningClientProvider>,
+                             opts: IOptions<NLoopOptions>,
+                             getNetwork: GetNetwork,
+                             httpClientFactory: IHttpClientFactory) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
 
   member private this.CheckClientConnection(c: SupportedCryptoCode) = task {
     let settings = opts.Value.GetLndGrpcSettings()
     let cli =
-      NLoopLndGrpcClient(settings, opts.Value.GetNetwork(c))
+      NLoopLndGrpcClient(settings, getNetwork(c))
       :> INLoopLightningClient
     clients.Add(c, cli)
     try

@@ -161,6 +161,7 @@ type SwapExecutor(
                   lightningClientProvider: ILightningClientProvider,
                   getSwapKey: GetSwapKey,
                   getSwapPreimage: GetSwapPreimage,
+                  getNetwork: GetNetwork,
                   swapActor: ISwapActor
   )=
 
@@ -187,7 +188,7 @@ type SwapExecutor(
         let pairId =
           req.PairIdValue
 
-        let n = opts.Value.GetNetwork(pairId.Base)
+        let n = getNetwork(pairId.Base)
         let! outResponse =
           let req =
             { SwapDTO.LoopOutRequest.InvoiceAmount = req.Amount
@@ -278,7 +279,7 @@ type SwapExecutor(
         let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let onChainNetwork = opts.Value.GetNetwork(pairId.Quote)
+        let onChainNetwork = getNetwork(pairId.Quote)
 
         let! refundKey = getSwapKey()
         let! preimage = getSwapPreimage()

@@ -1041,14 +1041,13 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       | Error e ->
         logger.LogError($"Error in autoloop (OnChain: {p.OnChainAsset}, offChain: {offChainAsset}): {e}")
     | None -> ()
-    do! Task.Delay tick
   }
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     try
       while not <| stoppingToken.IsCancellationRequested do
         do! this.RunStep(stoppingToken)
-        do! Task.Delay tick
+        do! Task.Delay(tick, stoppingToken)
     with
     | :? OperationCanceledException ->
       logger.LogInformation($"Stopping {nameof(AutoLoopManager)}...")

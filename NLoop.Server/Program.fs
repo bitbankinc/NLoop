@@ -130,8 +130,7 @@ module App =
       .UseEndpoints(Action<_>(configureSignalR))
       .UseGiraffe(webApp)
 
-  let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
-
+  let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
       // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters()
@@ -141,7 +140,7 @@ module App =
 
       services.AddNLoopServices(test) |> ignore
 
-      if (env.IsDevelopment()) then
+      if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
         services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
 
@@ -156,13 +155,14 @@ module App =
 
       services.AddGiraffe() |> ignore
 
+  let configureServicesTest services = configureServices false None services
 
 type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices false env services
+    App.configureServices false (Some env) services
 
 module Main =
 

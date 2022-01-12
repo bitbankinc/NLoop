@@ -36,11 +36,13 @@ type NLoopExtensions() =
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
-          config.Bind(opts)
+          if config |> isNull |> not then
+            config.Bind(opts)
           )
         .BindCommandLine()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
+          if config |> isNull then () else
           let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
             let cOpts =
@@ -158,6 +160,10 @@ type NLoopExtensions() =
         |> ignore
 
       this
+        .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          opts.Value.GetNetwork(cc)
+          ))
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()

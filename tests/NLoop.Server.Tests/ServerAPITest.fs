@@ -289,13 +289,13 @@ type ServerAPITest() =
   [<Theory>]
   [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]
   member this.TestValidateLoopOut(_name,
-                                  channels,
+                                  channels: ListChannelResponse list,
                                   loopOutReq: LoopOutRequest,
                                   swapServerNodes: Map<string, SwapDTO.NodeInfo>,
                                   routesToNodes: Map<NodeId, Route>,
                                   responseFromServer: SwapDTO.LoopOutResponse,
-                                  blockchainInfo,
-                                  quote,
+                                  blockchainInfo: BlockChainInfo,
+                                  quote: SwapDTO.LoopOutQuote,
                                   expectedStatusCode: HttpStatusCode,
                                   expectedErrorMsg: string option) = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
@@ -319,7 +319,7 @@ type ServerAPITest() =
           .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
             DummySwapServerClientParameters.Default
               with
-                LoopOutQuote =  fun _req -> quote
+                LoopOutQuote =  fun _req -> quote |> Task.FromResult
                 GetNodes = fun () -> { Nodes = swapServerNodes }
                 LoopOut = fun _req -> responseFromServer |> Task.FromResult
           }))

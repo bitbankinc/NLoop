@@ -29,6 +29,7 @@ open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
 open NLoop.Server.SwapServerClient
+open NLoop.Server.SwapServerClient
 open Xunit
 
 
@@ -195,7 +196,7 @@ type LiquidityTest() =
   }
   [<Fact>]
   member this.TestParameters() = task {
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+    use sp = TestHelpers.GetTestServiceProvider(fun services ->
       services
         .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
         .AddSingleton<IBlockChainListener>(mockBlockchainListener)
@@ -203,8 +204,8 @@ type LiquidityTest() =
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
         |> ignore
-    ))
-    let getManager = server.Services.GetRequiredService<TryGetAutoLoopManager>()
+    )
+    let getManager = sp.GetRequiredService<TryGetAutoLoopManager>()
     let onChainAsset = SupportedCryptoCode.BTC
     let offChainAsset = SupportedCryptoCode.BTC
     let man = getManager(offChainAsset).Value
@@ -320,8 +321,8 @@ type LiquidityTest() =
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
       injection services
-    use server = new TestServer(TestHelpers.GetTestHost configureServices)
-    let getManager = server.Services.GetRequiredService<TryGetAutoLoopManager>()
+    use sp = TestHelpers.GetTestServiceProvider(configureServices)
+    let getManager = sp.GetRequiredService<TryGetAutoLoopManager>()
     let offChainAsset = SupportedCryptoCode.BTC
     let man = getManager(offChainAsset).Value
     Assert.NotNull(man)
@@ -510,7 +511,9 @@ type LiquidityTest() =
 
   [<Theory>]
   [<MemberData(nameof(LiquidityTest.TestSweepFeeLimitTestData))>]
-  member this.TestSweepFeeLimit(name: string, feeRate: FeeRate, quote, expected) =
+  member this.TestSweepFeeLimit(name: string,
+                                feeRate: FeeRate,
+                                quote: SwapDTO.LoopOutQuote, expected) =
     let setup (services: IServiceCollection) =
       let f = {
         new IFeeEstimator
@@ -523,7 +526,7 @@ type LiquidityTest() =
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> quote
+              LoopOutQuote = fun _ -> quote |> Task.FromResult
           }
       services
         .AddSingleton<IFeeEstimator>(f)
@@ -696,14 +699,14 @@ type LiquidityTest() =
 
   [<Theory>]
   [<MemberData(nameof(LiquidityTest.TestFeeLimitsTestData))>]
-  member this.TestFeeLimits(name: string, quote, expected: SwapSuggestions) =
+  member this.TestFeeLimits(name: string, quote: SwapDTO.LoopOutQuote, expected: SwapSuggestions) =
     let setup (services: IServiceCollection) =
       let swapServerClient =
         TestHelpers.GetDummySwapServerClient
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> quote
+              LoopOutQuote = fun _ -> quote |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapServerClient)

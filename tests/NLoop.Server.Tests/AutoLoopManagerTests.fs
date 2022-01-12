@@ -180,8 +180,8 @@ type private AutoLoopManagerTestContext() =
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
 
-    let server = new TestServer(TestHelpers.GetTestHost configureServices)
-    let getManager = server.Services.GetService<TryGetAutoLoopManager>()
+    let sp = TestHelpers.GetTestServiceProvider(configureServices)
+    let getManager = sp.GetService<TryGetAutoLoopManager>()
     Assert.NotNull(getManager)
     let man = (getManager offChain).Value
     let! r = man.SetParameters parameters
@@ -219,7 +219,8 @@ type private AutoLoopManagerTestContext() =
 
   interface IDisposable with
     member this.Dispose() =
-      this.Manager.Dispose()
+      if this.Manager |> box |> isNull |> not then
+        this.Manager.Dispose()
 
 type AutoLoopManagerTests() =
 
