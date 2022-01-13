@@ -219,38 +219,44 @@ module private Extensions =
   type ThresholdRule with
     /// SwapAmount suggests a swap based on the liquidity thresholds configured,
     /// returning zero if no swap is recommended.
-    member this.SwapAmount(channelBalances: Balances, outRestrictions: ServerRestrictions, targetIncomingLiquidityRatio: int16<percent>): Money =
-      /// The logic defined in here resembles that of the lightning loop.
-      /// In lightning loop, it targets the midpoint of the the largest/smallest possible incoming liquidity.
-      /// But with one difference, in lightning loop, it always targets the midpoint and there is no other choice.
-      /// But in nloop, we can specify targetIncomingThresholdRatio.
-      /// Thus we can tell the algorithm how we think the future incoming/outgoing payment is skewed.
-      let loopOutSwapAmount (incomingThresholdPercent: int16<percent>) (outgoingThresholdPercent: int16<percent>) =
-        let minimumInComing =
-          (channelBalances.CapacitySat.Satoshi * int64 incomingThresholdPercent) / 100L
-          |> Money.Satoshis
-        let minimumOutGoing =
-          (channelBalances.CapacitySat.Satoshi * int64 outgoingThresholdPercent) / 100L
-          |> Money.Satoshis
-        // if we have sufficient incoming capacity, we do not need to loop out.
-        if channelBalances.IncomingSat >= minimumInComing then Money.Zero else
-        // if we are already below the threshold set for outgoing capacity, we cannot take any further action.
-        if channelBalances.OutGoingSat <= minimumOutGoing then Money.Zero else
-        let targetPoint =
-          let maximumIncoming = channelBalances.CapacitySat - minimumOutGoing
-          let possibleTargetRange = (minimumInComing + maximumIncoming)
-          (possibleTargetRange * int64 targetIncomingLiquidityRatio) / 100L
-        // Calculate the amount of incoming balance we need to shift to reach this desired point.
-        let required = targetPoint - channelBalances.IncomingSat
-        // Since we can have pending htlcs on our channel, we check the amount of
-        // outbound capacity that we can shift before we fall below our threshold.
-        let available = channelBalances.OutGoingSat - minimumOutGoing
-        if available < required then Money.Zero else required
+    member this.SwapAmount(channelBalances: Balances, category: Swap.Category, outRestrictions: ServerRestrictions, targetIncomingLiquidityRatio: int16<percent>): Money =
+      match category with
+      | Swap.Category.Out ->
+        /// The logic defined in here resembles that of the lightning loop.
+        /// In lightning loop, it targets the midpoint of the the largest/smallest possible incoming liquidity.
+        /// But with one difference, in lightning loop, it always targets the midpoint and there is no other choice.
+        /// But in nloop, we can specify targetIncomingThresholdRatio.
+        /// Thus we can tell the algorithm how we think the future incoming/outgoing payment is skewed.
+        let loopOutSwapAmount
+          (incomingThresholdPercent: int16<percent>)
+          (outgoingThresholdPercent: int16<percent>) =
+          let minimumInComing =
+            (channelBalances.CapacitySat.Satoshi * int64 incomingThresholdPercent) / 100L
+            |> Money.Satoshis
+          let minimumOutGoing =
+            (channelBalances.CapacitySat.Satoshi * int64 outgoingThresholdPercent) / 100L
+            |> Money.Satoshis
+          // if we have sufficient incoming capacity, we do not need to loop out.
+          if channelBalances.IncomingSat >= minimumInComing then Money.Zero else
+          // if we are already below the threshold set for outgoing capacity, we cannot take any further action.
+          if channelBalances.OutGoingSat <= minimumOutGoing then Money.Zero else
+          let targetPoint =
+            let maximumIncoming = channelBalances.CapacitySat - minimumOutGoing
+            let possibleTargetRange = (minimumInComing + maximumIncoming)
+            (possibleTargetRange * int64 targetIncomingLiquidityRatio) / 100L
+          // Calculate the amount of incoming balance we need to shift to reach this desired point.
+          let required = targetPoint - channelBalances.IncomingSat
+          // Since we can have pending htlcs on our channel, we check the amount of
+          // outbound capacity that we can shift before we fall below our threshold.
+          let available = channelBalances.OutGoingSat - minimumOutGoing
+          if available < required then Money.Zero else required
 
-      let amount = loopOutSwapAmount this.MinimumIncoming this.MinimumOutGoing
-      if amount < outRestrictions.Minimum then Money.Zero else
-      if outRestrictions.Maximum < amount then outRestrictions.Maximum else
-      amount
+        let amount = loopOutSwapAmount this.MinimumIncoming this.MinimumOutGoing
+        if amount < outRestrictions.Minimum then Money.Zero else
+        if outRestrictions.Maximum < amount then outRestrictions.Maximum else
+        amount
+      | Swap.Category.In ->
+        ()
 
 
 type Rules = {
@@ -469,7 +475,7 @@ type Parameters = {
       FailureBackoff = defaultFailureBackoff
       SweepConfTarget = onChain.DefaultParams.OnChain.SweepConfTarget
       FeeLimit = FeePortion.Default
-      ClientRestrictions = ClientRestrictions.Default
+      ClientRestrictions = ClientRestrictions.NoRestriction
       Rules = Rules.Zero
       HTLCConfTarget = onChain.DefaultParams.OnChain.HTLCConfTarget
       AutoLoop = false
@@ -993,8 +999,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       do! builder.MaySwap(par)
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
       do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
-
-      let amount = rule.SwapAmount(balance, restrictions, opts.Value.TargetIncomingLiquidityRatio)
+      let amount =
+        rule.SwapAmount(balance, category, restrictions, opts.Value.TargetIncomingLiquidityRatio)
       if amount = Money.Zero then
         return! Error(SwapDisqualifiedReason.LiquidityOk)
       else

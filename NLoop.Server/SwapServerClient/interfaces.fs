@@ -272,7 +272,7 @@ type ClientRestrictions = {
   InMaximum: Money option
 }
   with
-  static member Default = {
+  static member NoRestriction = {
     OutMinimum = None
     OutMaximum = None
     InMinimum = None
