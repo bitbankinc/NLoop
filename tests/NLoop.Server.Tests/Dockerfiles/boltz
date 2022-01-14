@@ -1,7 +1,7 @@
 FROM node:16.13.1-alpine3.14 as build
 
 LABEL maintainer="Joe Miyamoto <joemphilips@gmail.com>"
-ARG BOLTZ_VERSION=master
+ARG BOLTZ_VERSION=490d2a605bd7dae20a795607d61f5c722ab42054
 
 # Install dependencies and install/build lnd.
 RUN apk add --no-cache --update alpine-sdk \
@@ -17,9 +17,11 @@ RUN apk add --no-cache --update alpine-sdk \
   boost-dev
 
 # Copy in the local repository to build from.
-RUN git clone --quiet --depth 1 --single-branch --branch $BOLTZ_VERSION https://github.com/BoltzExchange/boltz-backend /boltz-backend
+RUN git clone --quiet https://github.com/BoltzExchange/boltz-backend /boltz-backend
 
 WORKDIR /boltz-backend
+
+RUN git checkout $BOLTZ_VERSION 
 
 RUN npm install
 
