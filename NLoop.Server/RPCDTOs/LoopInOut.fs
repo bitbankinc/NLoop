@@ -17,8 +17,8 @@ module private ValidationHelpers =
     | Some l ->
       if l.Length > Labels.MaxLength then
         Error $"Label's length must not be longer than {Labels.MaxLength}. it was {l.Length}"
-      elif l.StartsWith Labels.reserved then
-        Error $"{Labels.reserved} is a reserved prefix"
+      elif l.StartsWith Labels.reservedPrefix then
+        Error $"{Labels.reservedPrefix} is a reserved prefix"
       else
         Ok()
 

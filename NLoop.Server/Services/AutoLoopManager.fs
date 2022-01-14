@@ -211,53 +211,95 @@ type Balances = {
       PubKey = resp.NodeId |> NodeId
     }
 
-type SwapRestrictions = ServerRestrictions
+type SwapSizeRestrictions = ServerRestrictions
 
 [<AutoOpen>]
 module private Extensions =
 
+  /// calculateSwapAmount calculates amount for a swap based on thresholds.
+  /// This function can be used for loop out or loop in, but the concept is the
+  /// same - we want liquidity in one (target) direction, while preserving some
+  /// minimum in the other(reserve) direction.
+  /// * target: this is the side of the channel(s) where we want to acquire some
+  ///   liquidity. We aim for this liquidity to reach the threshold amount set.
+  /// * reserve: this is the side of the channel(s) that we will move liquidity
+  ///   away from. This may not drop below a certain reserve threshold
+  let private calculateSwapAmount
+    (targetAmount: Money)
+    (reserveAmount: Money)
+    (capacity: Money)
+    (targetThresholdPercentage: int16<percent>)
+    (reserveThresholdPercentage: int16<percent>)
+    (targetLiquidityRatio: int16<percent>)
+    : Money =
+    let targetGoal =
+      Money.Satoshis((capacity.Satoshi * int64 targetThresholdPercentage) / 100L)
+    let reserveMinimum =
+      Money.Satoshis((capacity.Satoshi * int64 reserveThresholdPercentage) / 100L)
+
+    // if we have sufficient target capacity (no need to swap), or if we are already below the
+    // threshold set for reserve capacity (can not take further action), we return zero.
+    if targetAmount >= targetGoal || reserveAmount <= reserveMinimum then
+      Money.Zero
+    else
+      // Express our minimum reserve amount as a maximum target amount.
+      // we will use this value to limit the amount that we swap, so that we
+      // do not dip below our reserve threshold.
+      let maximumTarget = capacity - reserveMinimum
+      let targetPoint =
+        let possibleTargetRange = (targetGoal + maximumTarget)
+        ((possibleTargetRange.Satoshi * int64 targetLiquidityRatio) / 100L)
+        |> Money.Satoshis
+
+      // Calculate the amount of target balance we need to shift to reach
+      // this desired midpoint.
+      let required = targetPoint - targetAmount
+      // since we can have pending htlcs on our channel, we check the amount of
+      // reserve capacity that we can shift before we fall below our threshold.
+      let available = reserveAmount - reserveMinimum
+      if available < required then Money.Zero else
+        required
   type ThresholdRule with
     /// SwapAmount suggests a swap based on the liquidity thresholds configured,
     /// returning zero if no swap is recommended.
-    member this.SwapAmount(channelBalances: Balances, category: Swap.Category, outRestrictions: ServerRestrictions, targetIncomingLiquidityRatio: int16<percent>): Money =
-      match category with
-      | Swap.Category.Out ->
-        /// The logic defined in here resembles that of the lightning loop.
-        /// In lightning loop, it targets the midpoint of the the largest/smallest possible incoming liquidity.
-        /// But with one difference, in lightning loop, it always targets the midpoint and there is no other choice.
-        /// But in nloop, we can specify targetIncomingThresholdRatio.
-        /// Thus we can tell the algorithm how we think the future incoming/outgoing payment is skewed.
-        let loopOutSwapAmount
-          (incomingThresholdPercent: int16<percent>)
-          (outgoingThresholdPercent: int16<percent>) =
-          let minimumInComing =
-            (channelBalances.CapacitySat.Satoshi * int64 incomingThresholdPercent) / 100L
-            |> Money.Satoshis
-          let minimumOutGoing =
-            (channelBalances.CapacitySat.Satoshi * int64 outgoingThresholdPercent) / 100L
-            |> Money.Satoshis
-          // if we have sufficient incoming capacity, we do not need to loop out.
-          if channelBalances.IncomingSat >= minimumInComing then Money.Zero else
-          // if we are already below the threshold set for outgoing capacity, we cannot take any further action.
-          if channelBalances.OutGoingSat <= minimumOutGoing then Money.Zero else
-          let targetPoint =
-            let maximumIncoming = channelBalances.CapacitySat - minimumOutGoing
-            let possibleTargetRange = (minimumInComing + maximumIncoming)
-            (possibleTargetRange * int64 targetIncomingLiquidityRatio) / 100L
-          // Calculate the amount of incoming balance we need to shift to reach this desired point.
-          let required = targetPoint - channelBalances.IncomingSat
-          // Since we can have pending htlcs on our channel, we check the amount of
-          // outbound capacity that we can shift before we fall below our threshold.
-          let available = channelBalances.OutGoingSat - minimumOutGoing
-          if available < required then Money.Zero else required
+    member this.SwapAmount(channelBalances: Balances,
+                           restrictions: SwapSizeRestrictions,
+                           category: Swap.Category,
+                           targetLiquidityRatio: int16<percent>) =
+      let targetBalance, targetPercentage, reserveBalance, reservePercentage =
+        match category with
+        | Swap.Category.Out ->
+          // For loop out swaps, we want to adjust our incoming liquidity
+          // so the channel's incoming balance is our target.
+          channelBalances.IncomingSat,
+          // For loop out swaps, we target a minimum amount of incoming liquidity,
+          // so the minimum incoming threshold is our target percentage.
+          this.MinimumIncoming,
+          // For loop out swaps, we may want to preserve some of our outgoing balance,
+          // so the channel's outgoing balance is our reserve.
+          channelBalances.OutGoingSat,
+          // For loop out swaps, we may wan to preserve some percentage of our
+          // outgoing balance, so the minimum outgoing threshold is our
+          // reserve percentage.
+          this.MinimumOutGoing
+        | Swap.Category.In ->
+          // For loop in swaps, reverse targets and reserve values.
+          channelBalances.OutGoingSat,
+          this.MinimumOutGoing,
+          channelBalances.IncomingSat,
+          this.MinimumIncoming
 
-        let amount = loopOutSwapAmount this.MinimumIncoming this.MinimumOutGoing
-        if amount < outRestrictions.Minimum then Money.Zero else
-        if outRestrictions.Maximum < amount then outRestrictions.Maximum else
-        amount
-      | Swap.Category.In ->
-        ()
-
+      let amount =
+        calculateSwapAmount
+          targetBalance
+          reserveBalance
+          channelBalances.CapacitySat
+          targetPercentage
+          reservePercentage
+          targetLiquidityRatio
+      if amount < restrictions.Minimum then Money.Zero else
+      if restrictions.Maximum < amount then restrictions.Maximum else
+      amount
 
 type Rules = {
   ChannelRules: Map<ShortChannelId, ThresholdRule>
@@ -981,7 +1023,8 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
           | Error e -> return Error e
           | Ok restrictions ->
             let group = getGroup cat
-            return! this.SuggestLoopInOrOutSwaps(autoloop, group, onGoingLoopOuts, onGoingLoopIns, restrictions, ct)
+            let! r = this.SuggestLoopInOrOutSwaps(autoloop, group, onGoingLoopOuts, onGoingLoopIns, restrictions, ct)
+            return r
         }
       )
       |> Task.WhenAll
@@ -1000,7 +1043,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
       do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
       let amount =
-        rule.SwapAmount(balance, category, restrictions, opts.Value.TargetIncomingLiquidityRatio)
+        rule.SwapAmount(balance, restrictions, category, opts.Value.TargetIncomingLiquidityRatio)
       if amount = Money.Zero then
         return! Error(SwapDisqualifiedReason.LiquidityOk)
       else
