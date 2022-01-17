@@ -4,12 +4,14 @@ open System
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Tasks
+open ExchangeSharp
 open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
@@ -104,7 +106,7 @@ type NLoopExtensions() =
       this
         .AddSingleton<ExchangeRateProvider>()
         .AddSingleton<TryGetExchangeRate>(Func<IServiceProvider,_> (fun sp ->
-          sp.GetService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
+          sp.GetRequiredService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
         ))
         |> ignore
       // Workaround to register one instance as a multiple interfaces.
@@ -167,6 +169,9 @@ type NLoopExtensions() =
       if (not <| test) then
         this
           .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
@@ -182,12 +187,6 @@ type NLoopExtensions() =
             p.GetRequiredService<AutoLoopManagers>() :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
-          )
           |> ignore
-
       this
         .AddHostedService<SwapProcessManager>()
-        |> ignore
-

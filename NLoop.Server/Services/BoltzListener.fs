@@ -3,11 +3,12 @@ namespace NLoop.Server.Services
 
 open System
 open System.Collections.Concurrent
+open System.Threading
 open System.Threading.Tasks
 open BoltzClient
 open DotNetLightning.Utils
 open FSharp.Control
-open FSharp.Control.Tasks.Affine
+open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 
@@ -23,15 +24,16 @@ type BoltzListener(swapServerClient: ISwapServerClient,
                    opts: IOptions<NLoopOptions>,
                    actor: ISwapActor
                    ) =
-
-  inherit BackgroundService()
   let statuses = ConcurrentDictionary<SwapId, Task<Transaction>>()
 
+  let mutable _executingTask = null
+  let mutable _stoppingCts = null
 
-  override  this.ExecuteAsync(ct) = unitTask {
+
+  member this.ExecuteAsync(ct: CancellationToken) = unitTask {
       try
-
         while not <| ct.IsCancellationRequested do
+          do! Task.Yield() // Without this, startup process hangs up by Task.WaitAny.
           ct.ThrowIfCancellationRequested()
           let ts = statuses.Values |> Seq.cast<_> |> Array.ofSeq
           let index = Task.WaitAny(ts, -1, ct)
@@ -53,16 +55,23 @@ type BoltzListener(swapServerClient: ISwapServerClient,
         raise <| ex
     }
 
-  override this.StartAsync(ct) =
-    try
-      // Just to check the connection on the startup.
-      let _ = swapServerClient.CheckConnection(ct).GetAwaiter().GetResult()
-      logger.LogInformation $"starting {nameof(BoltzListener)}..."
-    with
-    | ex ->
-      logger.LogCritical $"Failed to connect to boltz-backend"
-      raise <| ex
-    base.StartAsync(ct)
+  interface IHostedService with
+    member this.StartAsync(ct) =
+      logger.LogInformation $"Starting {nameof(BoltzListener)}"
+      _stoppingCts <- CancellationTokenSource.CreateLinkedTokenSource(ct)
+      _executingTask <- this.ExecuteAsync(_stoppingCts.Token)
+      if _executingTask.IsCompleted then _executingTask else
+      Task.CompletedTask
+
+    member this.StopAsync(_cancellationToken) = unitTask {
+      if _executingTask = null then () else
+      try
+        _stoppingCts.Cancel()
+      with
+      | _ -> ()
+      let! _ = Task.WhenAny(_executingTask, Task.Delay(Timeout.Infinite, _cancellationToken))
+      ()
+    }
 
   interface ISwapEventListener with
     member this.RegisterSwap(swapId: SwapId) =

@@ -1096,6 +1096,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     try
+      logger.LogInformation $"Starting {nameof(AutoLoopManager)} for offchain crypto {offChainAsset}..."
       while not <| stoppingToken.IsCancellationRequested do
         do! this.RunStep(stoppingToken)
         do! Task.Delay(tick, stoppingToken)
