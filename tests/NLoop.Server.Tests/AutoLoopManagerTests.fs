@@ -140,7 +140,6 @@ type private AutoLoopManagerTestContext() =
                   ((StreamId.Create "swap-" (Guid.NewGuid())), (h, Swap.State.In(h, t)))
                 )
             ]
-          member this.FinishCatchup = Task.CompletedTask
       }
       let mockRecentSwapFailureProjection = {
         new IRecentSwapFailureProjection with

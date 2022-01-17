@@ -30,8 +30,6 @@ type BoltzListener(swapServerClient: ISwapServerClient,
 
   override  this.ExecuteAsync(ct) = unitTask {
       try
-        // Just to check the connection on the startup.
-        let! _boltzVersion = swapServerClient.CheckConnection(ct).ConfigureAwait(false)
 
         while not <| ct.IsCancellationRequested do
           ct.ThrowIfCancellationRequested()
@@ -54,6 +52,17 @@ type BoltzListener(swapServerClient: ISwapServerClient,
         logger.LogError($"{ex}")
         raise <| ex
     }
+
+  override this.StartAsync(ct) =
+    try
+      // Just to check the connection on the startup.
+      let _ = swapServerClient.CheckConnection(ct).GetAwaiter().GetResult()
+      logger.LogInformation $"starting {nameof(BoltzListener)}..."
+    with
+    | ex ->
+      logger.LogCritical $"Failed to connect to boltz-backend"
+      raise <| ex
+    base.StartAsync(ct)
 
   interface ISwapEventListener with
     member this.RegisterSwap(swapId: SwapId) =

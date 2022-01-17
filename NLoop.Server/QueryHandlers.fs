@@ -21,8 +21,6 @@ module QueryHandlers =
   let handleGetInfo =
     fun (next: HttpFunc) (ctx: HttpContext) ->
       task {
-        printfn $"opts: {ctx.GetService<IOptions<NLoopOptions>>().Value.RPCHost}"
-        let _logger = ctx.GetLogger("handleGetInfo")
         let response = {
           GetInfoResponse.Version = Constants.AssemblyVersion
           SupportedCoins = { OnChain = [SupportedCryptoCode.BTC; SupportedCryptoCode.LTC]

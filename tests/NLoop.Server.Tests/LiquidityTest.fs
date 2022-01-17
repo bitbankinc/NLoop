@@ -187,7 +187,6 @@ type LiquidityTest() =
   let mockOnGoingSwapProjection = {
     new IOnGoingSwapStateProjection with
       member this.State = Map.empty
-      member this.FinishCatchup = Task.CompletedTask
   }
 
   let defaultTestRestrictions = {
@@ -460,7 +459,6 @@ type LiquidityTest() =
             member this.State =
               ongoingSwaps
               |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
-            member this.FinishCatchup = Task.CompletedTask
       }
       let failureView = {
         new IRecentSwapFailureProjection with
@@ -793,7 +791,6 @@ type LiquidityTest() =
           member this.State =
             existingSwaps
             |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
-          member this.FinishCatchup = Task.CompletedTask
       }
       services
         .AddSingleton<IOnGoingSwapStateProjection>(swapState)

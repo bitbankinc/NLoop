@@ -61,29 +61,6 @@ type NLoopExtensions() =
           )
         |> ignore
 
-      if (not <| test) then
-        this
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<AutoLoopManagers>() :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
-          )
-          |> ignore
-
       this
         .AddSingleton<IEventStoreConnection>(fun sp ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
@@ -156,10 +133,6 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddHostedService<SwapProcessManager>()
-        |> ignore
-
-      this
         .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
           opts.Value.GetNetwork(cc)
@@ -189,4 +162,32 @@ type NLoopExtensions() =
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<ISwapActor, SwapActor>()
         .AddSingleton<ISwapExecutor, SwapExecutor>()
+        |> ignore
+
+      if (not <| test) then
+        this
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<AutoLoopManagers>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
+          )
+          |> ignore
+
+      this
+        .AddHostedService<SwapProcessManager>()
+        |> ignore
 

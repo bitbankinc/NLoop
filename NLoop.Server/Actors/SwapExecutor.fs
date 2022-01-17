@@ -120,7 +120,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }
   interface ISwapActor with
-    member this.Aggregate = failwith "todo"
+    member this.Aggregate = this.Aggregate
     member this.Execute(i, cmd, s) =
       match s with
       | Some s -> this.Execute(i, cmd, s)
