@@ -60,6 +60,7 @@ type LiquidityRule = {
   // -----  -----
 }
 type LiquidityParameters = {
+  [<JsonPropertyName "rules">]
   Rules: LiquidityRule[]
 
   [<JsonPropertyName "fee_ppm">]
@@ -106,6 +107,7 @@ type LiquidityParameters = {
 }
 
 type SetLiquidityParametersRequest = {
+  [<JsonPropertyName "parameters">]
   Parameters: LiquidityParameters
 }
 

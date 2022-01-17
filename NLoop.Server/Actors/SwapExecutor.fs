@@ -138,7 +138,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
         events
         |> Result.map eventListToStateMap
     }
-    member this.Handler = failwith "todo"
+    member this.Handler = this.Handler
 
 type ISwapExecutor =
   abstract member ExecNewLoopOut:
