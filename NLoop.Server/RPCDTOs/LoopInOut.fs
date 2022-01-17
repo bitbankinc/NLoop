@@ -17,8 +17,8 @@ module private ValidationHelpers =
     | Some l ->
       if l.Length > Labels.MaxLength then
         Error $"Label's length must not be longer than {Labels.MaxLength}. it was {l.Length}"
-      elif l.StartsWith Labels.reserved then
-        Error $"{Labels.reserved} is a reserved prefix"
+      elif l.StartsWith Labels.reservedPrefix then
+        Error $"{Labels.reservedPrefix} is a reserved prefix"
       else
         Ok()
 
@@ -36,8 +36,13 @@ type LoopInLimits = {
 type LoopInRequest = {
   [<JsonPropertyName "amount">]
   Amount: Money
+
   [<JsonPropertyName "channel_id">]
   ChannelId: ShortChannelId option
+
+  [<JsonPropertyName "last_hop">]
+  LastHop: PubKey option
+
   Label: string option
 
   [<JsonPropertyName "pair_id">]
@@ -51,20 +56,8 @@ type LoopInRequest = {
 
   [<JsonPropertyName "htlc_conf_target">]
   HtlcConfTarget: int voption
-
-  [<JsonPropertyName "route_hints">]
-  RouteHints: RouteHint array voption
 }
   with
-  member this.LastHop =
-    let lastHops =
-      this.RouteHints |> ValueOption.defaultValue [||] |> Array.map(fun rh -> rh.Hops.[0].NodeId)
-    if lastHops |> Seq.distinct |> Seq.length = 1 then
-      lastHops.[0] |> Some
-    else
-      // if we don't have unique last hop in route hints, we don't know what will be
-      // the last hop. (it is up to the counterparty)
-      None
 
   member this.PairIdValue =
     this.PairId
@@ -86,46 +79,11 @@ type LoopInRequest = {
     Swap.Group.Category = Swap.Category.In
   }
 
-  member this.LndClientRouteHints =
-    this.RouteHints
-    |> ValueOption.defaultValue [||]
-    |> Array.map(fun h ->
-      {
-        LndClient.RouteHint.Hops = h.Hops |> Array.map(fun r -> r.LndClientHopHint)
-      }
-    )
   member this.Validate() =
     this.HtlcConfTarget
     |> checkConfTarget
     |> Result.mapError(fun e -> [e])
 
-and RouteHint = {
-  Hops: HopHint[]
-}
-and HopHint = {
-  [<JsonPropertyName "node_id">]
-  NodeId: PubKey
-
-  [<JsonPropertyName "chan_id">]
-  ChanId: ShortChannelId
-
-  [<JsonPropertyName "fee_base_msat">]
-  FeeBaseMSat: int64
-
-  [<JsonPropertyName "fee_proportional_millionths">]
-  FeeProportionalMillionths: int64
-
-  [<JsonPropertyName "cltv_expiry_delta">]
-  CltvExpiryDelta: int
-}
-  with
-  member this.LndClientHopHint = {
-    LndClient.HopHint.NodeId = this.NodeId |> NodeId
-    ShortChannelId = this.ChanId
-    FeeBase = this.FeeBaseMSat |> LNMoney.MilliSatoshis
-    FeeProportionalMillionths = this.FeeProportionalMillionths |> uint32
-    CLTVExpiryDelta = this.CltvExpiryDelta |> uint16 |> BlockHeightOffset16
-  }
 
 type LoopOutLimits = {
   MaxPrepay: Money

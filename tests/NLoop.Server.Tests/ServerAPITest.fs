@@ -60,7 +60,7 @@ module private ServerAPITestHelpers =
       MaxMinerFee = ValueNone
       MaxSwapFee = ValueNone
       HtlcConfTarget = ValueNone
-      RouteHints = ValueNone
+      LastHop = None
     }
 
   let channel1 = {
@@ -289,13 +289,13 @@ type ServerAPITest() =
   [<Theory>]
   [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]
   member this.TestValidateLoopOut(_name,
-                                  channels,
+                                  channels: ListChannelResponse list,
                                   loopOutReq: LoopOutRequest,
                                   swapServerNodes: Map<string, SwapDTO.NodeInfo>,
                                   routesToNodes: Map<NodeId, Route>,
                                   responseFromServer: SwapDTO.LoopOutResponse,
-                                  blockchainInfo,
-                                  quote,
+                                  blockchainInfo: BlockChainInfo,
+                                  quote: SwapDTO.LoopOutQuote,
                                   expectedStatusCode: HttpStatusCode,
                                   expectedErrorMsg: string option) = task {
     use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
@@ -319,9 +319,9 @@ type ServerAPITest() =
           .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
             DummySwapServerClientParameters.Default
               with
-                LoopOutQuote =  fun _req -> quote
+                LoopOutQuote =  fun _req -> quote |> Task.FromResult
                 GetNodes = fun () -> { Nodes = swapServerNodes }
-                LoopOut = fun _req -> responseFromServer
+                LoopOut = fun _req -> responseFromServer |> Task.FromResult
           }))
           |> ignore
       ))
@@ -347,6 +347,29 @@ type ServerAPITest() =
     seq [
       ("loop in success", loopInReq, testLoopInQuote, loopInResp1, testBlockchainInfo, HttpStatusCode.OK, None)
       ("blockchain not synced", loopInReq, testLoopInQuote, loopInResp1, { testBlockchainInfo with Progress = 0.999f }, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
+      let q = {
+        testLoopInQuote
+          with
+          MinerFee = Money.Satoshis 1000L
+      }
+      let req = {
+        loopInReq
+          with
+          MaxMinerFee = Money.Satoshis 999L |> ValueSome
+      }
+      ("miner fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Miner fee specified by the server is too high")
+      let q = {
+        testLoopInQuote
+          with
+          SwapFee = Money.Satoshis 1000L
+      }
+      let req = {
+        loopInReq
+          with
+          MaxSwapFee = Money.Satoshis 999L |> ValueSome
+      }
+      ("swap fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Swap fee specified by the server is too high")
+      ()
     ]
     |> Seq.map(fun (name,
                     req,
@@ -383,7 +406,7 @@ type ServerAPITest() =
           {
             DummyLnClientParameters.Default
               with
-              GetInvoice = fun preimage amt _ _ _ -> invoice
+              GetInvoice = fun _preimage _amt _ _ _ -> invoice
               SubscribeSingleInvoice = fun _hash -> asyncSeq {
                 {
                   PaymentRequest = invoice
@@ -407,8 +430,8 @@ type ServerAPITest() =
             .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
               DummySwapServerClientParameters.Default
                 with
-                  LoopInQuote =  fun _req -> quote
-                  LoopIn = fun _req -> responseFromServer
+                  LoopInQuote =  fun _req -> quote |> Task.FromResult
+                  LoopIn = fun _req -> responseFromServer |> Task.FromResult
             }))
             |> ignore
         ))

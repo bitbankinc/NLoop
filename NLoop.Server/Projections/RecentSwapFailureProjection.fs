@@ -44,48 +44,51 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
     Map.remove oldestId m
 
   let handleEvent (re: SerializedRecordedEvent) = unitTask {
-    if not <| re.StreamId.Value.StartsWith(Swap.entityType) then () else
-    match re.ToRecordedEvent(Swap.serializer) with
-    | Error _ -> ()
-    | Ok r ->
-      match r.Data with
-      | Swap.Event.NewLoopOutAdded { LoopOut = o } ->
-        this.FailedLoopOutSwapState <-
-          this.FailedLoopOutSwapState
-          |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
-
-        // We only need information about the recent swap failure.
-        // discard old ones so that we don't waste too much memory.
-        if this.FailedLoopOutSwapState.Count > InMemoryHistorySize then
+    try
+      if not <| re.StreamId.Value.StartsWith(Swap.entityType) then () else
+      match re.ToRecordedEvent(Swap.serializer) with
+      | Error _ -> ()
+      | Ok r ->
+        match r.Data with
+        | Swap.Event.NewLoopOutAdded { LoopOut = o } ->
           this.FailedLoopOutSwapState <-
             this.FailedLoopOutSwapState
-            |> dropOldest
-      | Swap.Event.NewLoopInAdded { LoopIn = i } ->
-        i.LastHop
-        |> Option.iter(fun lastHop ->
-          this.FailedLoopInSwapState <-
-            this.FailedLoopInSwapState
-              |> Map.add re.StreamId (NodeId lastHop, ValueNone)
-        )
+            |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
 
-        if this.FailedLoopInSwapState.Count > InMemoryHistorySize then
+          // We only need information about the recent swap failure.
+          // discard old ones so that we don't waste too much memory.
+          if this.FailedLoopOutSwapState.Count > InMemoryHistorySize then
+            this.FailedLoopOutSwapState <-
+              this.FailedLoopOutSwapState
+              |> dropOldest
+        | Swap.Event.NewLoopInAdded { LoopIn = i } ->
+          i.LastHop
+          |> Option.iter(fun lastHop ->
+            this.FailedLoopInSwapState <-
+              this.FailedLoopInSwapState
+                |> Map.add re.StreamId (NodeId lastHop, ValueNone)
+          )
+
+          if this.FailedLoopInSwapState.Count > InMemoryHistorySize then
+            this.FailedLoopInSwapState <-
+              this.FailedLoopInSwapState
+              |> dropOldest
+        | Swap.Event.FinishedByError _
+        | Swap.Event.FinishedByTimeout _
+        | Swap.Event.FinishedByRefund _ ->
+          this.FailedLoopOutSwapState <-
+            this.FailedLoopOutSwapState
+            |> Map.change
+                re.StreamId
+                (Option.map(fun struct (chanId, _) -> (chanId, ValueSome re.CreatedDate)))
           this.FailedLoopInSwapState <-
             this.FailedLoopInSwapState
-            |> dropOldest
-      | Swap.Event.FinishedByError _
-      | Swap.Event.FinishedByTimeout _
-      | Swap.Event.FinishedByRefund _ ->
-        this.FailedLoopOutSwapState <-
-          this.FailedLoopOutSwapState
-          |> Map.change
-              re.StreamId
-              (Option.map(fun struct (chanId, _) -> (chanId, ValueSome re.CreatedDate)))
-        this.FailedLoopInSwapState <-
-          this.FailedLoopInSwapState
-          |> Map.change
-              re.StreamId
-              (Option.map(fun struct (nodeId, _) -> (nodeId, ValueSome re.CreatedDate)))
-      | _ -> ()
+            |> Map.change
+                re.StreamId
+                (Option.map(fun struct (nodeId, _) -> (nodeId, ValueSome re.CreatedDate)))
+        | _ -> ()
+      with
+      | ex -> log.LogCritical $"{ex}"
   }
   let subscription =
     EventStoreDBSubscription(
@@ -94,7 +97,6 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent,
-      (fun _ -> ()),
       conn
     )
 
@@ -139,7 +141,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       maybeCheckpoint
       |> ValueOption.map(Checkpoint.StreamPosition)
       |> ValueOption.defaultValue Checkpoint.StreamStart
-    log.LogDebug($"Start projecting from checkpoint {checkpoint}")
+    log.LogDebug($"Starting {nameof(RecentSwapFailureProjection)} from checkpoint {checkpoint}")
     try
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with

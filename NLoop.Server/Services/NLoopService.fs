@@ -1,23 +1,19 @@
 namespace NLoop.Server.Services
 
 open System
-open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
-open System.Threading.Channels
 open System.Threading.Tasks
+open ExchangeSharp
+open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
-open EventStore.ClientAPI
-open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
-open Microsoft.Extensions.Options
 open NBitcoin
-open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils
@@ -42,11 +38,13 @@ type NLoopExtensions() =
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
-          config.Bind(opts)
+          if config |> isNull |> not then
+            config.Bind(opts)
           )
         .BindCommandLine()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
           let config = serviceProvider.GetService<IConfiguration>()
+          if config |> isNull then () else
           let bindingContext = serviceProvider.GetService<BindingContext>()
           for c in Enum.GetValues<SupportedCryptoCode>() do
             let cOpts =
@@ -65,29 +63,6 @@ type NLoopExtensions() =
           )
         |> ignore
 
-      if (not <| test) then
-        this
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<AutoLoopManager>() :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
-          )
-          |> ignore
-
       this
         .AddSingleton<IEventStoreConnection>(fun sp ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
@@ -99,9 +74,6 @@ type NLoopExtensions() =
         )
         |> ignore
 
-      this
-        .AddSingleton<AutoLoopManager>()
-        |> ignore
 
       this
         .AddSingleton<ISystemClock, SystemClock>()
@@ -124,9 +96,17 @@ type NLoopExtensions() =
         |> ignore
 
       this
+        .AddSingleton<AutoLoopManagers>()
+        .AddSingleton<TryGetAutoLoopManager>(Func<IServiceProvider, _>(fun sp cc ->
+          match sp.GetRequiredService<AutoLoopManagers>().Managers.TryGetValue(cc) with
+          | true, v -> Some v
+          | false, _ -> None
+        ))
+        |> ignore
+      this
         .AddSingleton<ExchangeRateProvider>()
         .AddSingleton<TryGetExchangeRate>(Func<IServiceProvider,_> (fun sp ->
-          sp.GetService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
+          sp.GetRequiredService<ExchangeRateProvider>().TryGetExchangeRate >> Task.FromResult
         ))
         |> ignore
       // Workaround to register one instance as a multiple interfaces.
@@ -155,16 +135,58 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddHostedService<SwapProcessManager>()
-        |> ignore
-
-      this
+        .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          opts.Value.GetNetwork(cc)
+          ))
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
-        .AddSingleton<GetAddress>(fun sp -> sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter())
+        .AddSingleton<GetAddress>(Func<IServiceProvider, GetAddress>(fun sp ->
+          let opts = sp.GetService<IOptions<NLoopOptions>>()
+          GetAddress(fun cc ->
+            if opts.Value.OffChainCrypto |> Seq.contains cc then
+              let getter = sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter()
+              getter.Invoke cc
+            else
+              let walletClient = sp.GetService<GetWalletClient>()(cc)
+              task {
+                try
+                  let! r = walletClient.GetDepositAddress()
+                  return Ok r
+                with
+                | ex ->
+                  return Error ex.Message
+              }
+          )
+        ))
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<ISwapActor, SwapActor>()
         .AddSingleton<ISwapExecutor, SwapExecutor>()
+        |> ignore
 
+      if (not <| test) then
+        this
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<AutoLoopManagers>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
+          |> ignore
+      this
+        .AddHostedService<SwapProcessManager>()

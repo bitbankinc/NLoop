@@ -65,12 +65,13 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
                         loggerFactory: ILoggerFactory,
                         getBlockchainClient: GetBlockchainClient,
                         cc: SupportedCryptoCode,
+                        getNetwork: GetNetwork,
                         actor: ISwapActor) as this =
 
   let logger: ILogger<BlockchainListener> = loggerFactory.CreateLogger<_>()
   let mutable _currentTip =
-    let n = opts.Value.GetNetwork cc
-    BlockWithHeight.Genesis(n)
+    getNetwork cc
+    |> BlockWithHeight.Genesis
 
   let _currentTipLockObj = obj()
 

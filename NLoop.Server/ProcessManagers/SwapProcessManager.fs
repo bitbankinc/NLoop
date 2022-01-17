@@ -28,6 +28,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
   }
   interface IHostedService with
     member this.StartAsync(_ct) =
+      logger.LogInformation $"starting {nameof(SwapProcessManager)}..."
       let subsc1 =
         obs
         |> Observable.choose(fun e ->
@@ -90,7 +91,6 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           | _ -> ()
         )
       subscriptions.Add subsc2
-
       Task.CompletedTask
 
 

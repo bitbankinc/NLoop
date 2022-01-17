@@ -84,10 +84,11 @@ type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
                            zmqAddress,
                            loggerFactory,
                            getBlockchainClient,
+                           getNetwork,
                            actor,
                            cryptoCode,
                            rewindLimit: unit -> StartHeight) as this =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cryptoCode, actor)
+  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cryptoCode, getNetwork, actor)
   let zmqClient = new ZmqClient(loggerFactory.CreateLogger<_>(), zmqAddress)
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
 

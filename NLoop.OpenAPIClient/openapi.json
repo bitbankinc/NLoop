@@ -237,7 +237,7 @@
         }
       }
     },
-    "/v1/auto/suggest/{base}/{quote}": {
+    "/v1/auto/suggest/{offchainAsset}": {
       "get": {
         "tags": [
           "loop",
@@ -247,19 +247,10 @@
         "operationId": "suggest",
         "parameters": [
           {
-            "name": "base",
+            "name": "offchainAsset",
             "in": "path",
             "required": true,
-            "description": "base currency",
-            "schema": {
-              "$ref": "#/components/schemas/cryptoCode"
-            }
-          },
-          {
-            "name": "quote",
-            "in": "path",
-            "required": true,
-            "description": "quote currency",
+            "description": "off-chain asset which autoloop manager will take care. default is BTC.",
             "schema": {
               "$ref": "#/components/schemas/cryptoCode"
             }
@@ -279,7 +270,7 @@
         }
       }
     },
-    "/v1/liquidity/params/{base}/{quote}": {
+    "/v1/liquidity/params/{offchainAsset}": {
       "get": {
         "tags": [
           "autoloop"
@@ -288,19 +279,10 @@
         "operationId": "params",
         "parameters": [
           {
-            "name": "base",
+            "name": "offchainAsset",
             "in": "path",
             "required": true,
-            "description": "base currency",
-            "schema": {
-              "$ref": "#/components/schemas/cryptoCode"
-            }
-          },
-          {
-            "name": "quote",
-            "in": "path",
-            "required": true,
-            "description": "quote currency",
+            "description": "off-chain asset which autoloop manager will take care. default is BTC.",
             "schema": {
               "$ref": "#/components/schemas/cryptoCode"
             }
@@ -447,19 +429,6 @@
           }
         }
       },
-      "RouteHint": {
-        "type": "object",
-        "properties": {
-          "hops": {
-            "type": "array",
-            "description": "< Route hints which will be included in the invoice. See bolt11 for the detail.",
-            "maxItems": 6,
-            "items": {
-              "$ref": "#/components/schemas/HopHint"
-            }
-          }
-        }
-      },
       "LoopOutRequest": {
         "type": "object",
         "required": [
@@ -547,13 +516,18 @@
             "description": "< amount in satoshi.",
             "format": "int64"
           },
+          "last_hop": {
+            "description": "< node_id (pubkey) to perform the swap against. If you specify both last_hop and channel_id, channel_id is be prioritized.",
+            "nullable": true,
+            "$ref": "#/components/schemas/PubKey"
+          },
           "channel_id": {
-            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
+            "description": "< channel_id (pubkey) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.",
             "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "pair_id": {
-            "description": "< counterparty's cryptoCode to swap against. default is the same cryptocurrency with the one you pay.",
+            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
             "nullable": true,
             "$ref": "#/components/schemas/pairId"
           },
@@ -579,14 +553,6 @@
             "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
             "format": "int32",
             "nullable": true
-          },
-          "route_hints": {
-            "type": "array",
-            "description": "< route hints included in the invoice. Usually used in case of the private channel. But in NLoop, we also use it as a means of communication against the server, i.e. to tell them which channel do we want inbound liqidity for.",
-            "nullable": true,
-            "items": {
-              "$ref": "#/components/schemas/RouteHint"
-            }
           }
         }
       },
@@ -807,16 +773,39 @@
             "type": "integer",
             "description": "The maximum number of of automatically dispatched swaps that we allow to be in flight at any point in time."
           },
-          "min_swap_amount": {
+          "min_swap_amount_loopout": {
             "type": "integer",
-            "description": "The minimum amount, expressed in satoshis, that the autoloop client will dispatch a swap for.\n",
+            "description": "The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.\n",
             "format": "int64",
             "nullable": true
           },
-          "max_swap_amount": {
+          "max_swap_amount_loopout": {
             "type": "integer",
-            "description": "The maximum swap amount, expressed in satoshis.",
+            "description": "The maximum off-chain amount for loop out, expressed in satoshis.",
             "format": "int64",
+            "nullable": true
+          },
+          "min_swap_amount_loopin": {
+            "type": "integer",
+            "description": "The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.\n",
+            "format": "int64",
+            "nullable": true
+          },
+          "max_swap_amount_loopin": {
+            "type": "integer",
+            "description": "The maximum off-chain amount for loop in, expressed in satoshis.",
+            "format": "int64",
+            "nullable": true
+          },
+          "onchain_asset": {
+            "description": "on-chain asset for the swap. default is BTC.",
+            "nullable": true,
+            "$ref": "#/components/schemas/cryptoCode"
+          },
+          "htlc_conf_target": {
+            "type": "integer",
+            "description": "The conf target we use to estimate the fee for swaptx in loop-in.",
+            "format": "int32",
             "nullable": true
           }
         }

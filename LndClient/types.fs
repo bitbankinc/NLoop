@@ -59,19 +59,56 @@ type ListChannelResponse = {
   NodeId: PubKey
 }
 
+type RouteHint = {
+  Hops: HopHint []
+}
+and HopHint = {
+  NodeId: NodeId
+  ShortChannelId: ShortChannelId
+  FeeBase: LNMoney
+  FeeProportionalMillionths: uint32
+  CLTVExpiryDelta: BlockHeightOffset16
+}
+
+[<Extension;AbstractClass;Sealed>]
+type RouteHintExtensions =
+  [<Extension>]
+  static member TryGetLastHop(this: RouteHint[]) =
+    let lastHops =
+      this |> Array.map(fun rh -> rh.Hops.[0].NodeId)
+    if lastHops |> Seq.distinct |> Seq.length = 1 then
+      lastHops.[0].Value |> Some
+    else
+      // if we don't have unique last hop in route hints, we don't know what will be
+      // the last hop. (it is up to the counterparty)
+      None
+
+type NodePolicy = {
+  Id: PubKey
+  TimeLockDelta: BlockHeightOffset16
+  MinHTLC: LNMoney
+  FeeBase: LNMoney
+  FeeProportionalMillionths: uint32
+  Disabled: bool
+}
+
 type GetChannelInfoResponse = {
   Capacity: Money
   Node1Policy: NodePolicy
   Node2Policy: NodePolicy
 }
-and NodePolicy = {
-  Id: PubKey
-  TimeLockDelta: BlockHeightOffset16
-  MinHTLC: LNMoney
-  FeeBase: LNMoney
-  FeeProportionalMillionths: LNMoney
-  Disabled: bool
-}
+  with
+  member this.ToRouteHints(channelId: ShortChannelId) =
+    let hopHint =
+      {
+        HopHint.NodeId = this.Node1Policy.Id |> NodeId
+        HopHint.ShortChannelId = channelId
+        HopHint.FeeBase = this.Node1Policy.FeeBase
+        HopHint.FeeProportionalMillionths = this.Node1Policy.FeeProportionalMillionths
+        HopHint.CLTVExpiryDelta = this.Node1Policy.TimeLockDelta
+      }
+    { RouteHint.Hops = [|hopHint|] }
+
 
 type ChannelEventUpdate =
   | OpenChannel of ListChannelResponse
@@ -118,17 +155,8 @@ type InvoiceSubscription = {
   InvoiceState: InvoiceStateEnum
   AmountPayed: Money
 }
-type RouteHint = {
-  Hops: HopHint []
-}
-and HopHint = {
-  NodeId: NodeId
-  ShortChannelId: ShortChannelId
-  FeeBase: LNMoney
-  FeeProportionalMillionths: uint32
-  CLTVExpiryDelta: BlockHeightOffset16
-}
 
+type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse>
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -156,4 +184,15 @@ type INLoopLightningClient =
   abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
   abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
   abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
+
+open FSharp.Control.Tasks
+[<AbstractClass;Sealed;Extension>]
+type LightningClientExtensions =
+
+  [<Extension>]
+  static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let! c = this.GetChannelInfo(channelId, ct)
+    return c.ToRouteHints(channelId)
+  }
 

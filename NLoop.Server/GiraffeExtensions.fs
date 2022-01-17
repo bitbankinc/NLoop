@@ -36,7 +36,7 @@ module CustomHandlers =
     setStatusCode StatusCodes.Status503ServiceUnavailable
       >=> json {| error = e.ToString() |}
 
-  let inline internal validationError400 (errors: #seq<string>) =
+  let inline internal errorBadRequest (errors: #seq<string>) =
     setStatusCode StatusCodes.Status400BadRequest
       >=> json {| errors = errors |}
 
@@ -111,7 +111,7 @@ module CustomHandlers =
         quote.Validate(req.Limits)
         |> Result.mapError(fun e -> e.Message)
       match r with
-      | Error e -> return! validationError400 [e] next ctx
+      | Error e -> return! errorBadRequest [e] next ctx
       | Ok () -> return! next ctx
   }
 
@@ -129,6 +129,6 @@ module CustomHandlers =
         swapServerClient.GetLoopInQuote(r)
       let r = quote.Validate(req.Limits) |> Result.mapError(fun e -> e.Message)
       match r with
-      | Error e -> return! validationError400 [e] next ctx
+      | Error e -> return! errorBadRequest [e] next ctx
       | Ok () -> return! next ctx
   }

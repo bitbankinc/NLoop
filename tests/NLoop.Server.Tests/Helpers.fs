@@ -29,6 +29,7 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
@@ -77,18 +78,27 @@ module Helpers =
   let findEmptyPort(ports: int[]) =
     findEmptyPortUInt(ports |> Array.map(uint))
 
+  let walletAddress =
+    new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
+    |> fun k -> k.PubKey.WitHash.GetAddress(Network.RegTest)
+
+  let lndAddress =
+    new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
+    |> fun k -> k.PubKey.WitHash.GetAddress(Network.RegTest)
+
   type TestStartup(env) =
     member this.Configure(appBuilder) =
       App.configureApp(appBuilder)
 
     member this.ConfigureServices(services) =
-      App.configureServices true env services
+      App.configureServices true (Some env) services
 
 type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
   SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
+  GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
   static member Default = {
@@ -101,17 +111,18 @@ type DummyLnClientParameters = {
       let deadline = DateTimeOffset.UtcNow + expiry
       PaymentRequest.TryCreate(Network.RegTest, amount |> Some, deadline, tags, (new Key()))
       |> ResultUtils.Result.deref
-
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
+    GetChannelInfo = fun _cId -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
-  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> SwapDTO.LoopOutQuote
-  LoopInQuote: SwapDTO.LoopInQuoteRequest -> SwapDTO.LoopInQuote
-  LoopOutTerms: SwapDTO.OutTermsRequest -> SwapDTO.OutTermsResponse
+  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<SwapDTO.LoopOutQuote>
+  LoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<SwapDTO.LoopInQuote>
+  LoopOutTerms: SwapDTO.OutTermsRequest -> Task<SwapDTO.OutTermsResponse>
+  LoopInTerms: SwapDTO.InTermsRequest -> Task<SwapDTO.InTermsResponse>
   GetNodes: unit -> SwapDTO.GetNodesResponse
-  LoopOut: SwapDTO.LoopOutRequest -> SwapDTO.LoopOutResponse
-  LoopIn: SwapDTO.LoopInRequest -> SwapDTO.LoopInResponse
+  LoopOut: SwapDTO.LoopOutRequest -> Task<SwapDTO.LoopOutResponse>
+  LoopIn: SwapDTO.LoopInRequest -> Task<SwapDTO.LoopInResponse>
 }
   with
   static member Default = {
@@ -122,12 +133,20 @@ type DummySwapServerClientParameters = {
         SwapDTO.LoopOutQuote.SwapPaymentDest = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
         SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
         SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(10L)
-      }
+      } |> Task.FromResult
     LoopInQuote = fun _ -> failwith "todo"
-    LoopOutTerms = fun _ -> {
-      SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
-      SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
-    }
+    LoopOutTerms = fun _ ->
+      {
+        SwapDTO.OutTermsResponse.MinSwapAmount = Money.Satoshis(1L)
+        SwapDTO.OutTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
+      }
+      |> Task.FromResult
+    LoopInTerms = fun _ ->
+      {
+        SwapDTO.InTermsResponse.MinSwapAmount = Money.Satoshis(1L)
+        SwapDTO.InTermsResponse.MaxSwapAmount = Money.Satoshis(10000L)
+      }
+      |> Task.FromResult
     GetNodes = fun () -> {
       SwapDTO.GetNodesResponse.Nodes = Map.empty
     }
@@ -157,6 +176,19 @@ type DummyBlockChainClientParameters = {
     GetBlockchainInfo = fun () -> failwith "todo"
   }
 
+type DummyWalletClientParameters = {
+  ListUnspent: unit -> UnspentCoin[]
+  SignSwapTxPSBT: PSBT -> PSBT
+  GetDepositAddress: unit -> BitcoinAddress
+}
+  with
+  static member Default =
+    {
+      ListUnspent = fun () -> failwith "todo"
+      SignSwapTxPSBT = fun _ -> failwith "todo"
+      GetDepositAddress = fun () -> Helpers.walletAddress
+    }
+
 type TestHelpers =
 
   static member GetDummyLightningClient(?parameters) =
@@ -164,8 +196,8 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        let k = new Key()
-        Task.FromResult(k.PubKey.WitHash.GetAddress(Network.RegTest))
+        Helpers.lndAddress
+        |> Task.FromResult
       member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
                                  value: LNMoney,
                                  expiry: TimeSpan,
@@ -212,7 +244,7 @@ type TestHelpers =
             TimeLockDelta = BlockHeightOffset16(10us)
             MinHTLC = LNMoney.Satoshis(10)
             FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
+            FeeProportionalMillionths = 2u
             Disabled = false
           }
           Node2Policy = {
@@ -220,7 +252,7 @@ type TestHelpers =
             TimeLockDelta = BlockHeightOffset16(10us)
             MinHTLC = LNMoney.Satoshis(10)
             FeeBase = LNMoney.Satoshis(10)
-            FeeProportionalMillionths = LNMoney.Satoshis(2)
+            FeeProportionalMillionths = 2u
             Disabled = false
           }
         }
@@ -245,27 +277,22 @@ type TestHelpers =
       new ISwapServerClient with
         member this.LoopOut(request: SwapDTO.LoopOutRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutResponse> =
           parameters.LoopOut request
-          |> Task.FromResult
         member this.LoopIn(request: SwapDTO.LoopInRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInResponse> =
           parameters.LoopIn request
-          |> Task.FromResult
         member this.GetNodes(?ct: CancellationToken): Task<SwapDTO.GetNodesResponse> =
           parameters.GetNodes()
           |> Task.FromResult
 
         member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
           parameters.LoopOutQuote request
-          |> Task.FromResult
 
         member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
           parameters.LoopInQuote request
-          |> Task.FromResult
 
         member this.GetLoopOutTerms(req, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
           parameters.LoopOutTerms req
-          |> Task.FromResult
         member this.GetLoopInTerms(req, ?ct : CancellationToken): Task<SwapDTO.InTermsResponse> =
-          failwith "todo"
+          parameters.LoopInTerms req
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"
 
@@ -285,6 +312,18 @@ type TestHelpers =
           p.Execute(swapId, msg, source); Task.CompletedTask
         member this.GetAllEntities ct =
           failwith "todo"
+    }
+
+  static member GetDummyWalletClient(?parameters) =
+    let p = defaultArg parameters DummyWalletClientParameters.Default
+    {
+      new IWalletClient with
+        member this.ListUnspent() =
+          p.ListUnspent() |> Task.FromResult
+        member this.SignSwapTxPSBT(psbt) =
+          p.SignSwapTxPSBT psbt |> Task.FromResult
+        member this.GetDepositAddress() =
+          p.GetDepositAddress() |> Task.FromResult
     }
 
   static member GetDummySwapExecutor(?_parameters) =
@@ -332,7 +371,43 @@ type TestHelpers =
           |> Task.FromResult
     }
 
+  static member private ConfigureTestServices(services: IServiceCollection, ?configureServices: IServiceCollection -> unit) =
+    let rc = NLoopServerCommandLine.getRootCommand()
+    let p =
+      CommandLineBuilder(rc)
+        .UseMiddleware(Main.useWebHostMiddleware)
+        .Build()
+    services
+      .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
+      .AddHttpClient<BoltzClient>()
+      .ConfigureHttpClient(fun _sp _client ->
+        () // TODO: Inject Mock ?
+        )
+      |> ignore
+    services
+      .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
+      .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
+      .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
+      .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
+      .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
+      .AddSingleton<IWalletClient>(TestHelpers.GetDummyWalletClient())
+      .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
+        cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
+      ))
+      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
+        sp.GetRequiredService<IWalletClient>()
+      ))
+      |> ignore
+    configureServices |> Option.iter(fun conf -> conf services)
+
+  static member GetTestServiceProvider(?configureServices) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
+    let services = ServiceCollection()
+    App.configureServicesTest services
+    TestHelpers.ConfigureTestServices(services, configureServices)
+    services.BuildServiceProvider()
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
     WebHostBuilder()
       .UseContentRoot(Directory.GetCurrentDirectory())
       .ConfigureAppConfiguration(fun configBuilder ->
@@ -341,27 +416,7 @@ type TestHelpers =
       .UseStartup<Helpers.TestStartup>()
       .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
-        let rc = NLoopServerCommandLine.getRootCommand()
-        let p =
-          CommandLineBuilder(rc)
-            .UseMiddleware(Main.useWebHostMiddleware)
-            .Build()
-        services
-          .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
-          .AddHttpClient<BoltzClient>()
-          .ConfigureHttpClient(fun _sp _client ->
-            () // TODO: Inject Mock ?
-            )
-          |> ignore
-        services
-          .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
-          .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
-          .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
-          .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
-          .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
-          |> ignore
-
-        configureServices |> Option.iter(fun c -> c services)
+        TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
 

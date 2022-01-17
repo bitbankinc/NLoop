@@ -12,7 +12,8 @@
     <Compile Include="Helpers.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="ServerAPITest.fs" />
-    <Compile Include="AutoLoopTest.fs" />
+    <Compile Include="LiquidityTest.fs" />
+    <Compile Include="AutoLoopManagerTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />
     <Compile Include="BlockListenerTest.fs" />
     <Compile Include="Program.fs" />
@@ -36,9 +37,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\NLoop.CLI\NLoop.CLI.fsproj" />
+    <ProjectReference Include="..\..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
     <ProjectReference Include="..\..\NLoop.Server\NLoop.Server.fsproj" />
-    <ProjectReference Include="..\NLoop.Server.PropertyTests\NLoop.Server.PropertyTests.fsproj" />
   </ItemGroup>
 
   <ItemGroup>

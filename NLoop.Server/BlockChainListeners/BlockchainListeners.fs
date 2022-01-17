@@ -17,6 +17,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
                          loggerFactory: ILoggerFactory,
                          getBlockchainClient,
                          swapActor,
+                         getNetwork: GetNetwork,
                          swapState: IOnGoingSwapStateProjection) =
   let mutable listeners = ConcurrentDictionary<SupportedCryptoCode, BlockchainListener>()
   let logger = loggerFactory.CreateLogger<BlockchainListeners>()
@@ -48,7 +49,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         let cOpts = opts.Value.ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
-            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), swapActor, cc)
+            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), getNetwork, swapActor, cc)
           do! (rpcListener :> IHostedService).StartAsync(ct)
           match listeners.TryAdd(cc, rpcListener :> BlockchainListener) with
           | true -> ()
@@ -59,7 +60,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         | None ->
           do! startRPCListener cc
         | Some addr ->
-          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, swapActor, cc, (fun () -> this.GetRewindLimit(cc)))
+          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, getNetwork, swapActor, cc, (fun () -> this.GetRewindLimit(cc)))
           match! zmqListener.CheckConnection ct with
           | true ->
             do! (zmqListener :> IHostedService).StartAsync(ct)

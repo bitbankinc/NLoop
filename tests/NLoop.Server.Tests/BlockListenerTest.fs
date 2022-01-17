@@ -117,7 +117,7 @@ type BlockchainListenerTest() =
     let actualBlocks = ResizeArray()
     let blocksOnTheNodeSoFar = ResizeArray()
     let unconfirmedBlocks = ResizeArray()
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+    use sp = TestHelpers.GetTestServiceProvider(fun services ->
       let mockSwapActor =
         TestHelpers.GetDummySwapActor
           {
@@ -169,11 +169,18 @@ type BlockchainListenerTest() =
         .AddSingleton<ISwapActor>(mockSwapActor)
         .AddSingleton<GetBlockchainClient>(getMockBlockChainClient)
         .AddSingleton<BlockchainListener>(fun sp ->
-          BlockchainListener(sp.GetRequiredService<_>(), sp.GetRequiredService<_>(), sp.GetRequiredService<_>(), SupportedCryptoCode.BTC, sp.GetRequiredService<_>())
+          BlockchainListener(
+            sp.GetRequiredService<_>(),
+            sp.GetRequiredService<_>(),
+            sp.GetRequiredService<_>(),
+            SupportedCryptoCode.BTC,
+            sp.GetRequiredService<_>(),
+            sp.GetRequiredService<_>()
+          )
         )
         |> ignore
-    ))
-    let listener = server.Services.GetService<BlockchainListener>()
+    )
+    let listener = sp.GetService<BlockchainListener>()
     Assert.NotNull(listener)
     let dummySwap = SwapId (Guid.NewGuid().ToString())
     (listener :> ISwapEventListener).RegisterSwap(dummySwap)

@@ -28,4 +28,4 @@ type IUTXOProvider =
   /// Sign psbt for UTXOs provided by `GetUTXOs`
   abstract member SignSwapTxPSBT: psbt: PSBT * cryptoCode: SupportedCryptoCode -> Task<PSBT>
 
-type GetAddress = delegate of SupportedCryptoCode -> Task<Result<IDestination, string>>
+type GetAddress = delegate of SupportedCryptoCode -> Task<Result<BitcoinAddress, string>>

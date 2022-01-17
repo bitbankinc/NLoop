@@ -48,3 +48,5 @@ type BitcoindWalletClient(rpc: RPCClient) =
       let! resp = rpc.WalletProcessPSBTAsync(psbt, sign=true)
       return resp.PSBT
     }
+    member this.GetDepositAddress() =
+      rpc.GetNewAddressAsync()

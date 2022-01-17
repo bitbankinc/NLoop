@@ -17,7 +17,6 @@ open NLoop.Server
 type StartHeight = BlockHeight
 type IOnGoingSwapStateProjection =
   abstract member State: Map<StreamId, StartHeight * Swap.State>
-  abstract member FinishCatchup: Task
 
 /// Create Swap Projection with Catch-up subscription.
 /// TODO: Use EventStoreDB's inherent Projection system
@@ -34,39 +33,40 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
 
   let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
     fun event -> unitTask {
-      if not <| event.StreamId.Value.StartsWith(Swap.entityType) then () else
-      match event.ToRecordedEvent(Swap.serializer) with
-      | Error _ -> ()
-      | Ok r ->
-        this.State <-
-          (
-            if this.State |> Map.containsKey r.StreamId |> not then
-              this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
-            else
-              this.State
-          )
-          |> Map.change
-            r.StreamId
-            (Option.map(fun (h, s) ->
-              let nextState = actor.Aggregate.Apply s r.Data
-              let startHeight =
-                match r.Data with
-                | Swap.Event.NewLoopOutAdded { Height = h }
-                | Swap.Event.NewLoopInAdded { Height = h } -> h
-                | _ -> h
-              (startHeight, nextState)
-            ))
-          // We don't hold finished swaps on-memory for the scalability.
-          |> Map.filter(fun _ (_, state) -> match state with | Swap.State.Finished _ -> false | _ -> true)
-        log.LogTrace($"Publishing RecordedEvent {r}")
-
-        eventAggregator.Publish<RecordedEvent<Swap.Event>> r
+      try
+        if not <| event.StreamId.Value.StartsWith(Swap.entityType) then () else
+        printfn $"OnGoingSwapStateProjection: handling event: {event}"
+        match event.ToRecordedEvent(Swap.serializer) with
+        | Error e ->
+          log.LogCritical $"Failed to deserialize event {e}"
+          ()
+        | Ok r ->
+          this.State <-
+            (
+              if this.State |> Map.containsKey r.StreamId |> not then
+                this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
+              else
+                this.State
+            )
+            |> Map.change
+              r.StreamId
+              (Option.map(fun (h, s) ->
+                let nextState = actor.Aggregate.Apply s r.Data
+                let startHeight =
+                  match r.Data with
+                  | Swap.Event.NewLoopOutAdded { Height = h }
+                  | Swap.Event.NewLoopInAdded { Height = h } -> h
+                  | _ -> h
+                (startHeight, nextState)
+              ))
+            // We don't hold finished swaps on-memory for the scalability.
+            |> Map.filter(fun _ (_, state) -> match state with | Swap.State.Finished _ -> false | _ -> true)
+          log.LogDebug($"Publishing RecordedEvent {r}")
+          eventAggregator.Publish<RecordedEvent<Swap.Event>> r
+        with
+        | ex -> log.LogCritical $"{ex}"
     }
 
-  let mutable catchupCompletion = TaskCompletionSource()
-  let onFinishCatchup _ =
-    catchupCompletion.SetResult()
-    ()
   let subscription =
     EventStoreDBSubscription(
       { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
@@ -74,7 +74,6 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent eventAggregator,
-      onFinishCatchup,
       conn)
 
   member this.State
@@ -84,12 +83,12 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         _state <- v
 
   interface IOnGoingSwapStateProjection with
-    member this.State = this.State
-    member this.FinishCatchup = catchupCompletion.Task
+    member this.State = (this :> OnGoingSwapStateProjection).State
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let checkpoint =
       Checkpoint.StreamStart
+    log.LogInformation $"Starting {nameof(OnGoingSwapStateProjection)} from checkpoint {checkpoint}..."
     try
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with

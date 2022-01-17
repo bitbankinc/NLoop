@@ -24,9 +24,12 @@ type ExchangeRateHelpers =
 
 type ExchangeName = string
 type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<ExchangeRateProvider>) =
+  inherit BackgroundService()
   let exchangeRates = ConcurrentDictionary<PairId * ExchangeName, ExchangeRate>()
   let mutable _executingTask = null
-  let _stoppingCts = new CancellationTokenSource()
+  let mutable _stoppingCts = null
+  do
+    logger.LogInformation "ExchangeRateProvider instantiated"
 
   let checkClientsSupported(ct: CancellationToken) = unitTask {
     let pairs =
@@ -112,18 +115,13 @@ type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Exchange
     a.[a.Length / 2]
     |> Some
 
-  interface IHostedService with
-    member this.StartAsync(_cancellationToken) =
-      logger.LogInformation $"Starting exchange rate provider service..."
-      _executingTask <- checkClientsSupported(_stoppingCts.Token)
-      Task.CompletedTask
-    member this.StopAsync(_cancellationToken) = unitTask {
-      if _executingTask = null then () else
-      try
-        _stoppingCts.Cancel()
-      with
-      | _ -> ()
-      let! _ = Task.WhenAny(_executingTask, Task.Delay(Timeout.Infinite, _cancellationToken))
-      ()
-    }
+  override this.ExecuteAsync(ct) =
+    checkClientsSupported(ct)
 
+  override this.StartAsync(_cancellationToken) =
+    logger.LogInformation $"Starting exchange rate provider service..."
+    base.StartAsync(_cancellationToken)
+
+  override this.StopAsync(ct) =
+    logger.LogInformation $"Stopping exchange rate provider service..."
+    base.StopAsync(ct)

@@ -28,6 +28,8 @@ open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
+open NLoop.Server.SwapServerClient
+open NLoop.Server.SwapServerClient
 open Xunit
 
 
@@ -170,7 +172,7 @@ module private Constants =
     }
 
 
-type AutoLoopTests() =
+type LiquidityTest() =
   let mockRecentSwapFailureProjection = {
     new IRecentSwapFailureProjection with
       member this.FailedLoopIns = Map.empty
@@ -185,7 +187,6 @@ type AutoLoopTests() =
   let mockOnGoingSwapProjection = {
     new IOnGoingSwapStateProjection with
       member this.State = Map.empty
-      member this.FinishCatchup = Task.CompletedTask
   }
 
   let defaultTestRestrictions = {
@@ -194,7 +195,7 @@ type AutoLoopTests() =
   }
   [<Fact>]
   member this.TestParameters() = task {
-    use server = new TestServer(TestHelpers.GetTestHost(fun services ->
+    use sp = TestHelpers.GetTestServiceProvider(fun services ->
       services
         .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
         .AddSingleton<IBlockChainListener>(mockBlockchainListener)
@@ -202,15 +203,13 @@ type AutoLoopTests() =
         .AddSingleton<IRecentSwapFailureProjection>(mockRecentSwapFailureProjection)
         .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient())
         |> ignore
-    ))
-    let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
-    Assert.NotNull(man)
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
+    )
+    let getManager = sp.GetRequiredService<TryGetAutoLoopManager>()
+    let onChainAsset = SupportedCryptoCode.BTC
+    let offChainAsset = SupportedCryptoCode.BTC
+    let man = getManager(offChainAsset).Value
 
-    match! man.SetParameters(group, Parameters.Default(group.PairId)) with
+    match! man.SetParameters(Parameters.Default(onChainAsset)) with
     | Error e -> failwith $"{e}"
     | Ok() ->
     let setChanRule chanId newRule (p: Parameters) =
@@ -223,17 +222,17 @@ type AutoLoopTests() =
                 |> Map.add(chanId) newRule
           }
       }
-    let startParams = man.Parameters.[group]
+    let startParams = man.Parameters.Value
     let newParams =
       let chanId = ShortChannelId.FromUInt64(1UL)
       let newRule = { ThresholdRule.MinimumIncoming = 1s<percent>
                       MinimumOutGoing = 1s<percent> }
       setChanRule chanId newRule startParams
 
-    match! man.SetParameters(group, newParams) with
+    match! man.SetParameters(newParams) with
     | Error e -> failwith $"{e}"
     | Ok () ->
-    let p = man.Parameters.[group]
+    let p = man.Parameters.Value
     Assert.NotEqual(startParams, p)
     Assert.Equal(newParams, p)
 
@@ -245,7 +244,7 @@ type AutoLoopTests() =
         ThresholdRule.MinimumOutGoing = 1s<percent>
       }
       setChanRule invalidChanId rule p
-    match! man.SetParameters(group, invalidParams) with
+    match! man.SetParameters invalidParams with
     | Ok () -> ()
     | Error e ->
       Assert.Equal(AutoLoopError.InvalidParameters "Channel has 0 channel id", e)
@@ -259,7 +258,10 @@ type AutoLoopTests() =
       ("minimum less than server", Some 500, None, 1000, 1500, RestrictionError.MinLessThenServer(500L |> Money.Satoshis, 1000L |> Money.Satoshis) |> Some)
     }
     |> Seq.map(fun (name, cMin, cMax, sMin, sMax, maybeExpectedErr) ->
-      let cli = { ClientRestrictions.Maximum = cMax |> Option.map(int64 >> Money.Satoshis); Minimum = cMin |> Option.map(int64 >> Money.Satoshis)}
+      let cli =
+        ClientRestrictions.FromMaybeUnaryMinMax
+          (cMin |> Option.map(int64 >> Money.Satoshis))
+          (cMax |> Option.map(int64 >> Money.Satoshis))
       let server = { ServerRestrictions.Maximum = sMax |> int64 |> Money.Satoshis; Minimum = sMin |> int64 |> Money.Satoshis }
       [|
          name |> box
@@ -270,9 +272,9 @@ type AutoLoopTests() =
     )
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.RestrictionsValidationTestData))>]
-  member this.TestValidateRestrictions(name: string, client, server, maybeExpectedErr: RestrictionError option) =
-    match ServerRestrictions.Validate(server, client), maybeExpectedErr with
+  [<MemberData(nameof(LiquidityTest.RestrictionsValidationTestData))>]
+  member this.TestValidateRestrictions(name: string, client: ClientRestrictions, server: ServerRestrictions, maybeExpectedErr: RestrictionError option) =
+    match server.Validate(client), maybeExpectedErr with
     | Ok (), None -> ()
     | Ok (), Some e ->
       failwith $"{name}: expected error ({e}), but there was none."
@@ -281,14 +283,18 @@ type AutoLoopTests() =
     | Error actualErr, Some expectedErr ->
       Assert.Equal(expectedErr, actualErr)
 
-  member private this.TestSuggestSwapsCore(name: string, injection: IServiceCollection -> unit, group, parameters: Parameters, channels, expected: Result<SwapSuggestions, AutoLoopError>) = task {
-    let i = fun (services: IServiceCollection) ->
+  member private this.TestSuggestSwapsCore(name: string,
+                                           injection: IServiceCollection -> unit,
+                                           parameters: Parameters,
+                                           channels,
+                                           expected: Result<SwapSuggestions, AutoLoopError>) = task {
+    let configureServices = fun (services: IServiceCollection) ->
       let dummySwapServerClient =
         TestHelpers.GetDummySwapServerClient
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> testQuote
+              LoopOutQuote = fun _ -> testQuote |> Task.FromResult
           }
       let dummyLnClientProvider =
         TestHelpers.GetDummyLightningClientProvider
@@ -314,10 +320,12 @@ type AutoLoopTests() =
         .AddSingleton<ILightningClientProvider>(dummyLnClientProvider)
         |> ignore
       injection services
-    use server = new TestServer(TestHelpers.GetTestHost(i))
-    let man = server.Services.GetService(typeof<AutoLoopManager>) :?> AutoLoopManager
+    use sp = TestHelpers.GetTestServiceProvider(configureServices)
+    let getManager = sp.GetRequiredService<TryGetAutoLoopManager>()
+    let offChainAsset = SupportedCryptoCode.BTC
+    let man = getManager(offChainAsset).Value
     Assert.NotNull(man)
-    match! man.SetParameters(group, parameters) with
+    match! man.SetParameters parameters with
     | Error e ->
       match expected with
       | Error expectedErr ->
@@ -325,7 +333,7 @@ type AutoLoopTests() =
       | _  ->
         failwith $"{name}: Failed to set parameters {e}"
     | Ok() ->
-      let! actual = man.SuggestSwaps(false, group)
+      let! actual = man.SuggestSwaps(false)
       Assertion.isSame(expected, actual)
   }
 
@@ -430,7 +438,7 @@ type AutoLoopTests() =
       |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.RestrictedSuggestionTestData))>]
+  [<MemberData(nameof(LiquidityTest.RestrictedSuggestionTestData))>]
   member this.RestrictedSuggestions(name: string,
                                     channels: ListChannelResponse seq,
                                     ongoingSwaps: Swap.State seq,
@@ -439,12 +447,8 @@ type AutoLoopTests() =
                                     recentFailureIn: Map<NodeId, DateTimeOffset>,
                                     maxAutoInFlight: int,
                                     expected: SwapSuggestions) =
-    let group = {
-      Swap.Group.PairId = pairId
-      Swap.Group.Category = Swap.Category.Out
-    }
     let parameters = {
-      Parameters.Default(group.PairId)
+      Parameters.Default(SupportedCryptoCode.BTC)
         with
         Rules = rules
         MaxAutoInFlight = maxAutoInFlight
@@ -455,7 +459,6 @@ type AutoLoopTests() =
             member this.State =
               ongoingSwaps
               |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
-            member this.FinishCatchup = Task.CompletedTask
       }
       let failureView = {
         new IRecentSwapFailureProjection with
@@ -466,7 +469,7 @@ type AutoLoopTests() =
         .AddSingleton<IOnGoingSwapStateProjection>(stateView)
         .AddSingleton<IRecentSwapFailureProjection>(failureView)
         |> ignore
-    this.TestSuggestSwapsCore(name, setup, group, parameters, channels |> Seq.toList, Ok expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, channels |> Seq.toList, Ok expected)
 
   static member TestSweepFeeLimitTestData =
     let quote = {
@@ -505,8 +508,10 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSweepFeeLimitTestData))>]
-  member this.TestSweepFeeLimit(name: string, feeRate: FeeRate, quote, expected) =
+  [<MemberData(nameof(LiquidityTest.TestSweepFeeLimitTestData))>]
+  member this.TestSweepFeeLimit(name: string,
+                                feeRate: FeeRate,
+                                quote: SwapDTO.LoopOutQuote, expected) =
     let setup (services: IServiceCollection) =
       let f = {
         new IFeeEstimator
@@ -519,23 +524,21 @@ type AutoLoopTests() =
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> quote
+              LoopOutQuote = fun _ -> quote |> Task.FromResult
           }
       services
         .AddSingleton<IFeeEstimator>(f)
         .AddSingleton<ISwapServerClient>(dummyLoopServerClient)
         |> ignore
-    let group = {
-      Swap.Group.Category = Swap.Category.Out
-      Swap.Group.PairId = pairId
-    }
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default(SupportedCryptoCode.BTC)
         with
-        FeeLimit = FeeCategoryLimit.Default pairId
+        FeeLimit =
+          FeeCategoryLimit.Default
+            (SupportedCryptoCode.BTC.DefaultParams.OffChain, SupportedCryptoCode.BTC.DefaultParams.OnChain)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, [channel1], Ok expected)
 
   static member TestSuggestSwapsTestData =
     seq[
@@ -610,7 +613,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSuggestSwapsTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestSuggestSwapsTestData))>]
   member this.TestSuggestSwaps(name: string,
                                channels: ListChannelResponse list,
                                rules: Rules,
@@ -618,17 +621,12 @@ type AutoLoopTests() =
     let setup (services: IServiceCollection) =
       ()
 
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
-
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default SupportedCryptoCode.BTC
         with
         Rules = rules
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, channels, expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, channels, expected)
 
   static member TestFeeLimitsTestData =
     seq [
@@ -698,31 +696,28 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestFeeLimitsTestData))>]
-  member this.TestFeeLimits(name: string, quote, expected: SwapSuggestions) =
+  [<MemberData(nameof(LiquidityTest.TestFeeLimitsTestData))>]
+  member this.TestFeeLimits(name: string, quote: SwapDTO.LoopOutQuote, expected: SwapSuggestions) =
     let setup (services: IServiceCollection) =
       let swapServerClient =
         TestHelpers.GetDummySwapServerClient
           {
             DummySwapServerClientParameters.Default
               with
-              LoopOutQuote = fun _ -> quote
+              LoopOutQuote = fun _ -> quote |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapServerClient)
         |> ignore
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
-
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default(SupportedCryptoCode.BTC)
         with
-        FeeLimit = FeeCategoryLimit.Default pairId
+        FeeLimit =
+          FeeCategoryLimit.Default
+            (SupportedCryptoCode.BTC.DefaultParams.OffChain, SupportedCryptoCode.BTC.DefaultParams.OnChain)
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, [channel1], Ok expected)
 
   static member TestInFlightLimitTestData =
     seq [
@@ -788,7 +783,7 @@ type AutoLoopTests() =
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestInFlightLimitTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestInFlightLimitTestData))>]
   member this.TestInFlightLimit(name, maxInFlight, existingSwaps: Swap.State seq, rules: Rules, expected) =
     let setup (services: IServiceCollection) =
       let swapState = {
@@ -796,17 +791,12 @@ type AutoLoopTests() =
           member this.State =
             existingSwaps
             |> Seq.fold(fun acc t -> acc |> Map.add (StreamId.Create "swap-" (Guid.NewGuid())) (BlockHeight.Zero, t)) Map.empty
-          member this.FinishCatchup = Task.CompletedTask
       }
       services
         .AddSingleton<IOnGoingSwapStateProjection>(swapState)
         |> ignore
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default SupportedCryptoCode.BTC
         with
         MaxAutoInFlight = maxInFlight
         Rules =
@@ -819,7 +809,7 @@ type AutoLoopTests() =
           else
             rules
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1; channel2], Ok expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, [channel1; channel2], Ok expected)
 
   static member TestSizeRestrictionsTestData =
     seq [
@@ -869,14 +859,16 @@ type AutoLoopTests() =
     ]
     |> Seq.map(fun (name: string, clientMin: int64 option, clientMax: int64 option, serverR: SwapDTO.OutTermsResponse[], expected: Result<_, AutoLoopError>) -> [|
       name |> box
-      { ClientRestrictions.Minimum = clientMin |> Option.map Money.Satoshis;
-        Maximum = clientMax |> Option.map Money.Satoshis } |> box
+      ClientRestrictions.FromMaybeUnaryMinMax
+        (clientMin |> Option.map Money.Satoshis)
+        (clientMax |> Option.map Money.Satoshis)
+      |> box
       serverR |> box
       expected |> box
     |])
 
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestSizeRestrictionsTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestSizeRestrictionsTestData))>]
   member this.TestSizeRestrictions(name: string,
                                    clientR: ClientRestrictions,
                                    outTerms: SwapDTO.OutTermsResponse[],
@@ -888,27 +880,23 @@ type AutoLoopTests() =
           {
             DummySwapServerClientParameters.Default
               with
-                LoopOutQuote = fun _ -> testQuote
+                LoopOutQuote = fun _ -> testQuote |> Task.FromResult
                 LoopOutTerms = fun _ ->
                   let r = outTerms.[callCount]
                   callCount <- callCount + 1
-                  r
+                  r |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapClient)
         |> ignore
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default SupportedCryptoCode.BTC
         with
         ClientRestrictions = clientR
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
     }
     task {
-      do! this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], expected)
+      do! this.TestSuggestSwapsCore(name, setup, parameters, [channel1], expected)
       Assert.Equal(outTerms.Length, callCount)
     }
 
@@ -1005,7 +993,7 @@ type AutoLoopTests() =
   /// Our test is setup to require a 7500 sat swap, and we test this amount against
   /// various fee percentages and server quotes.
   [<Theory>]
-  [<MemberData(nameof(AutoLoopTests.TestFeePercentageTestData))>]
+  [<MemberData(nameof(LiquidityTest.TestFeePercentageTestData))>]
   member this.TestFeePercentage(name: string, feePPM: int64<ppm>, quote: SwapDTO.LoopOutQuote, expected) =
     let setup (services: IServiceCollection) =
       let swapClient =
@@ -1014,19 +1002,15 @@ type AutoLoopTests() =
             DummySwapServerClientParameters.Default
               with
                 LoopOutQuote = fun _ ->
-                  quote
+                  quote |> Task.FromResult
           }
       services
         .AddSingleton<ISwapServerClient>(swapClient)
         |> ignore
-    let group = {
-       Swap.Group.PairId = pairId
-       Swap.Group.Category = Swap.Category.Out
-     }
     let parameters = {
-      Parameters.Default(pairId)
+      Parameters.Default SupportedCryptoCode.BTC
         with
         Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
         FeeLimit = { FeePortion.PartsPerMillion = feePPM }
     }
-    this.TestSuggestSwapsCore(name, setup, group, parameters, [channel1], Ok expected)
+    this.TestSuggestSwapsCore(name, setup, parameters, [channel1], Ok expected)

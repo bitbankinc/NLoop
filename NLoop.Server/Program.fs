@@ -32,6 +32,7 @@ open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
+open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
@@ -68,28 +69,18 @@ module App =
         ])
         subRoute "/auto" (choose [
           GET >=>
-            routef "/suggest/%s/%s" (fun (b, q) ->
-              let b = SupportedCryptoCode.Parse(b)
-              let q = SupportedCryptoCode.Parse(q)
-              AutoLoopHandlers.suggestSwaps(Some (PairId(b, q)))
-            )
+            route "/suggest" >=> (AutoLoopHandlers.suggestSwaps None)
+            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopHandlers.suggestSwaps)
         ])
         subRoute "/liquidity" (choose [
           route "/params" >=> choose [
             POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
-            GET >=> AutoLoopHandlers.getLiquidityParams None
+            GET >=> AutoLoopHandlers.getLiquidityParams SupportedCryptoCode.BTC
           ]
-          GET >=> routef "/params/%s/%s" (fun (b, q) ->
-            let b = SupportedCryptoCode.Parse(b)
-            let q = SupportedCryptoCode.Parse(q)
-            AutoLoopHandlers.getLiquidityParams(Some(PairId(b, q)))
-          )
-          POST >=> routef "/params/%s/%s" (fun (b, q) ->
-             let b = SupportedCryptoCode.Parse(b)
-             let q = SupportedCryptoCode.Parse(q)
-             bindJson<SetLiquidityParametersRequest>
-               (AutoLoopHandlers.setLiquidityParams(Some(PairId(b, q))))
-           )
+          GET >=> routef "/params/%s" (SupportedCryptoCode.Parse >> AutoLoopHandlers.getLiquidityParams)
+          POST >=> routef "/params/%s" (fun offChain ->
+            let p = SupportedCryptoCode.Parse offChain |> Some
+            bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams p))
         ])
       ])
       setStatusCode 404 >=> text "Not Found"
@@ -137,8 +128,7 @@ module App =
       .UseEndpoints(Action<_>(configureSignalR))
       .UseGiraffe(webApp)
 
-  let configureServices test (env: IHostEnvironment) (services : IServiceCollection) =
-
+  let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
       // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters()
@@ -148,7 +138,7 @@ module App =
 
       services.AddNLoopServices(test) |> ignore
 
-      if (env.IsDevelopment()) then
+      if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
         services.AddSingleton<RecyclableMemoryStreamManager>() |> ignore
 
@@ -163,13 +153,14 @@ module App =
 
       services.AddGiraffe() |> ignore
 
+  let configureServicesTest services = configureServices true None services
 
 type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
     App.configureApp(appBuilder)
 
   member this.ConfigureServices(services) =
-    App.configureServices false env services
+    App.configureServices false (Some env) services
 
 module Main =
 

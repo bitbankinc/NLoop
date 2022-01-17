@@ -120,7 +120,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
   }
   interface ISwapActor with
-    member this.Aggregate = failwith "todo"
+    member this.Aggregate = this.Aggregate
     member this.Execute(i, cmd, s) =
       match s with
       | Some s -> this.Execute(i, cmd, s)
@@ -138,7 +138,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
         events
         |> Result.map eventListToStateMap
     }
-    member this.Handler = failwith "todo"
+    member this.Handler = this.Handler
 
 type ISwapExecutor =
   abstract member ExecNewLoopOut:
@@ -161,6 +161,7 @@ type SwapExecutor(
                   lightningClientProvider: ILightningClientProvider,
                   getSwapKey: GetSwapKey,
                   getSwapPreimage: GetSwapPreimage,
+                  getNetwork: GetNetwork,
                   swapActor: ISwapActor
   )=
 
@@ -187,7 +188,7 @@ type SwapExecutor(
         let pairId =
           req.PairIdValue
 
-        let n = opts.Value.GetNetwork(pairId.Base)
+        let n = getNetwork(pairId.Base)
         let! outResponse =
           let req =
             { SwapDTO.LoopOutRequest.InvoiceAmount = req.Amount
@@ -278,12 +279,29 @@ type SwapExecutor(
         let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let onChainNetwork = opts.Value.GetNetwork(pairId.Quote)
+        let onChainNetwork = getNetwork(pairId.Quote)
 
         let! refundKey = getSwapKey()
         let! preimage = getSwapPreimage()
 
         let mutable maybeSwapId = None
+        let lnClient = lightningClientProvider.GetClient(pairId.Base)
+        let! channels = lnClient.ListChannels()
+        let! maybeRouteHints =
+          match loopIn.ChannelId with
+          | Some cId ->
+            lnClient.GetRouteHints(cId, ct)
+            |> Task.map(Array.singleton)
+          | None ->
+            match loopIn.LastHop with
+            | None -> Task.FromResult([||])
+            | Some pk ->
+              channels
+              |> Seq.filter(fun c -> c.NodeId = pk)
+              |> Seq.map(fun c ->
+                lnClient.GetRouteHints(c.Id, ct)
+              )
+              |> Task.WhenAll
         let! invoice =
           let amt = loopIn.Amount.ToLNMoney()
           let onPaymentFinished = fun (amt: Money) ->
@@ -308,7 +326,7 @@ type SwapExecutor(
             preimage,
             amt,
             loopIn.Label |> Option.defaultValue(String.Empty),
-            loopIn.LndClientRouteHints,
+            maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 
         ct.ThrowIfCancellationRequested()
@@ -360,8 +378,7 @@ type SwapExecutor(
                 loopIn.Limits.MaxSwapFee
               IsOffChainPaymentReceived = false
               IsOurSuccessTxConfirmed = false
-              LastHop =
-                loopIn.LastHop
+              LastHop = maybeRouteHints.TryGetLastHop()
             }
             let obs =
               getObs(eventAggregator) swapId

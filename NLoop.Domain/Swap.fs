@@ -363,7 +363,7 @@ module Swap =
       | ClaimTxPublished _ -> "claim_tx_published"
       | OffChainOfferStarted _ -> "offchain_offer_started"
       | OffchainOfferResolved _ -> "offchain_offer_resolved"
-      | ClaimTxConfirmed _ -> "sweep_tx_confirmed"
+      | ClaimTxConfirmed _ -> "claim_tx_confirmed"
       | PrePayFinished _ -> "prepay_finished"
       | TheirSwapTxPublished _ -> "their_swap_tx_published"
       | OffChainPaymentReceived _ -> "offchain_payment_received"
@@ -891,6 +891,7 @@ module Swap =
                  Cost = updateCost state event x.Cost })
     | OffchainOfferResolved _, Out(h, x) ->
       Out(h, { x with
+                 IsOffchainOfferResolved = true
                  Cost = updateCost state event x.Cost })
     | ClaimTxConfirmed { TxId = txid }, Out(h, x) ->
       let cost = updateCost state event x.Cost
@@ -928,6 +929,7 @@ module Swap =
 
   type Aggregate = Aggregate<State, Command, Event, Error, uint16 * DateTime>
   type Handler = Handler<State, Command, Event, Error, SwapId>
+  type IActor = IActor<State, Command, Event, Error, SwapId, uint16 * DateTime>
 
   let getAggregate deps: Aggregate = {
     Zero = State.Zero
