@@ -698,12 +698,17 @@
             "format": "int16"
           },
           "pubkey": {
+            "description": "Peer id to apply the rule against. pubkey and channel_id fields are mutually exclusive.\n",
+            "nullable": true,
             "$ref": "#/components/schemas/PubKey"
           },
           "channel_id": {
+            "description": "channel id to apply the rule. pubkey and channel_id fields are mutually exclusive.\n",
+            "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "type": {
+            "description": "The type of the liquidity rule we apply. Currently, we only have Threshold\n",
             "$ref": "#/components/schemas/LiquidityRuleType"
           }
         }

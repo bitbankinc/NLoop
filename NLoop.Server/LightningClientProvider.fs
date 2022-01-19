@@ -29,10 +29,10 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider>,
         :> INLoopLightningClient
       clients.Add(c, cli)
 
-  member private this.CheckClientConnection(c: SupportedCryptoCode) = task {
+  member private this.CheckClientConnection(c: SupportedCryptoCode, ct) = task {
     let cli = clients.[c]
     try
-      let! _info = cli.GetInfo()
+      let! _info = cli.GetInfo(ct)
       ()
     with
     | ex ->
@@ -42,7 +42,7 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider>,
 
   interface IHostedService with
     member this.StartAsync(_ct) = unitTask {
-      let! _ = Task.WhenAll([for c in clients.Keys -> this.CheckClientConnection(c)])
+      let! _ = Task.WhenAll([for c in clients.Keys -> this.CheckClientConnection(c, _ct)])
       ()
     }
 

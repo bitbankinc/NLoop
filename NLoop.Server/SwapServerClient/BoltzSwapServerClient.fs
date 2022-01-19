@@ -16,7 +16,7 @@ open NLoop.Server.DTOs
 [<AutoOpen>]
 module private BoltzClientExtensionsHelpers =
   let inline percentToSat (amount: Money, percent: double) =
-    (amount.Satoshi * (percent / 100. |> int64)) |> Money.Satoshis
+    (amount.Satoshi |> double) * (percent / 100.) |> int64 |> Money.Satoshis
 
 /// Extensions to treat boltz client in the same way with the lightning loop
 [<AbstractClass;Sealed;Extension>]
@@ -30,18 +30,25 @@ type BoltzClientExtensions =
     let p = r.Pairs.[ps]
     let! nodes = this.GetNodesAsync(ct)
     let! timeoutResponse = this.GetTimeoutsAsync(ct)
+    let hasPrepay = r.Info |> Array.contains("prepay.minerfee")
+    let minerFee = p.Fees.MinerFees.BaseAsset.Reverse.Lockup |> Money.Satoshis
     return {
       SwapFee =
         // boltz fee is returned with percentage, we have to convert to absolute value.
         percentToSat(req.Amount, p.Fees.Percentage)
+        + if hasPrepay then Money.Zero else minerFee
       SweepMinerFee =
         p.Fees.MinerFees.BaseAsset.Reverse.Claim |> Money.Satoshis
       SwapPaymentDest =
         nodes.Nodes |> Seq.head |> fun i -> i.Value.NodeKey
-      CltvDelta = timeoutResponse.Timeouts.[ps].Quote |> uint |> BlockHeightOffset32
+      CltvDelta =
+        timeoutResponse.Timeouts.[ps].Quote |> uint |> BlockHeightOffset32
       PrepayAmount =
         // In boltz, what we have to pay as `prepay.minerfee` always equals to their (estimated) lockup tx fee
-        p.Fees.MinerFees.BaseAsset.Reverse.Lockup |> Money.Satoshis
+        if hasPrepay then
+          minerFee
+        else
+          Money.Zero
     }
   }
 

@@ -2,6 +2,7 @@ namespace NLoop.Server
 
 open System
 open System.IO
+open System.Reflection
 open DotNetLightning.Utils.Primitives
 open NLoop.Domain
 
@@ -47,10 +48,8 @@ module Constants =
   [<Literal>]
   let DefaultLightningConnectionString = "type=lnd-rest;server=http://localhost:8080;allowinsecure=true"
 
-  type private Foo = Bar
   let AssemblyVersion =
-    Bar.GetType().Assembly.GetName().Version.ToString()
-
+    Assembly.GetExecutingAssembly().GetName().Version.ToString()
 
   /// Minimum confirmation target user can specify.
   let [<Literal>] MinConfTarget = 2u

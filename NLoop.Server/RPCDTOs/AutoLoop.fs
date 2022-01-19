@@ -29,26 +29,30 @@ type SwapDisqualifiedReason =
     | SweepFeesTooHigh v ->
       $"Current estimated FeeRate is {v.Estimation.SatoshiPerByte |> int64} sat/vbyte. But our limit is {v.OurLimit.SatoshiPerByte |> int64} sats/vbyte"
     | MinerFeeTooHigh v  ->
-      $"miner fee: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+      $"miner fee: ({v.ServerRequirement.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | SwapFeeTooHigh v ->
-      $"swap fee: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+      $"swap fee: ({v.ServerRequirement.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | PrepayTooHigh v ->
-      $"prepay amount: {v.ServerRequirement} greater than our fee limit {v.OurLimit}"
+      $"prepay amount: ({v.ServerRequirement.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | FeePPMInsufficient v ->
-      $"Total required fees for the swap: ({v.Required}) greater than our fee limit ({v.OurLimit})"
+      $"Total required fees for the swap: ({v.Required.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | x -> $"{x}"
 
 type LiquidityRuleType =
   | Threshold
   | UnKnown
 type LiquidityRule = {
+  /// The channel id to apply this rule.
   /// PubKey and the ChannelId fields are mutually exclusive
   [<JsonPropertyName "channel_id">]
-  ChannelId: ShortChannelId
+  ChannelId: ShortChannelId voption
+
+  /// The peer id to apply this rule against.
   /// PubKey and the ChannelId fields are mutually exclusive
   [<JsonPropertyName "pubkey">]
-  PubKey: PubKey
+  PubKey: PubKey voption
 
+  [<JsonPropertyName "type">]
   Type: LiquidityRuleType
 
   // ----- For `LiquidityRuleType.Threshold` -----

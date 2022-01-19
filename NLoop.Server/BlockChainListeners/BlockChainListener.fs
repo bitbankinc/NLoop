@@ -4,6 +4,7 @@ open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
