@@ -61,6 +61,7 @@ docker-compose up -d # Start dependencies such as bitcoind and lnd
 # `sudo -E docker-compose up -d`
 
 cd ../..
+# You must run this as a same user with a `docker-compose`.
 ./scripts/start_with_local_docker.sh
 
 # Get general information about NLoop.
