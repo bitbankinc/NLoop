@@ -12,8 +12,7 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 * Supports multi-asset swap.
 * The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS. (Which is not the case for lightning loop.)
 * Complete immutable audit log with event-sourcing. Which enables you to easily audit how much you have paied as fee during swaps.
-* Minimum trust against the server.
-* Thorough validation which makes a swap more safe.
+* Minimum trust against the server. It validates every information we get from the server.
 * Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
 
 
@@ -54,21 +53,41 @@ docker run nloopd_master --help
 Note that this requires .NET SDK with compatible version installed.
 
 ```sh
+# --- prepare dependent services ---
 cd tests/NLoop.Server.Tests
 source env.sh
 docker-compose up -d # Start dependencies such as bitcoind and lnd
 # Or if you need sudo, run with -E option to retain the environment variables.
 # `sudo -E docker-compose up -d`
 
+# regtest blockchain is too empty that clients fails to estimate the fee.
+# So fill in some dummy tx's and funds by this command, it may take a while to complete.
+# This is necessary only for performing an actual swap and not for running the server itself.
+./cliutils/prepare_tx_for_fee.sh
+
+# you can also use these scripts for invoking RPC methods for bitcoind, lnd.
+./docker-bitcoin-cli.sh getblockchaininfo
+./docker-litecoin-cli.sh getblockchaininfo
+./docker-lncli-user.sh getinfo
+./docker-lncli-server.sh getinfo
+
 cd ../..
+# --- ---
+
+# --- start running nloopd ---
+
 # You must run this as a same user with a `docker-compose`.
 ./scripts/start_with_local_docker.sh
 
+# --- ---
+
 # Get general information about NLoop.
 curl http://localhost:5000/v1/info
+
 ```
 
-To reset the state, you can just run
+To reset the state, you can just run the following commands after stopping the docker-compose.
+
 ```sh
 cd tests/NLoop.Server.Tests
 rm -rf data
