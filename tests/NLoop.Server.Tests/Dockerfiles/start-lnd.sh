@@ -1,61 +1,74 @@
-#!/usr/bin/env bash
-
-# exit from script if error was raised.
+#!/bin/bash
 set -e
+# based on: https://github.com/btcpayserver/lnd/blob/7d676848cbd369318fc1d48ad7546ff5d21a703c/docker-entrypoint.sh
 
-# error function is used within a bash function in order to send the error
-# message directly to the stderr output and exit.
-error() {
-    echo "$1" > /dev/stderr
-    exit 0
-}
+if [[ "$1" == "lnd" || "$1" == "lncli" ]]; then
+	mkdir -p "$LND_DATA"
 
-# return is used within bash function in order to return the value.
-return() {
-    echo "$1"
-}
+    # removing noseedbackup=1 flag, adding it below if needed for legacy
+    LND_EXTRA_ARGS=${LND_EXTRA_ARGS/noseedbackup=1/}
+    
+	cat <<-EOF > "$LND_DATA/lnd.conf"
+	${LND_EXTRA_ARGS}
+    listen=0.0.0.0:${LND_PORT}
+	EOF
 
-# set_default function gives the ability to move the setting of default
-# env variable from docker file to the script thereby giving the ability to the
-# user override it durin container start.
-set_default() {
-    # docker initialized env variables with blank string and we can't just
-    # use -z flag as usually.
-    BLANK_STRING='""'
-
-    VARIABLE="$1"
-    DEFAULT="$2"
-
-    if [[ -z "$VARIABLE" || "$VARIABLE" == "$BLANK_STRING" ]]; then
-
-        if [ -z "$DEFAULT" ]; then
-            error "You should specify default variable"
-        else
-            VARIABLE="$DEFAULT"
-        fi
+    if [[ "${LND_EXTERNALIP}" ]]; then
+        echo "externalip=$LND_EXTERNALIP:${LND_PORT}" >> "$LND_DATA/lnd.conf"
     fi
 
-   return "$VARIABLE"
-}
+    if [[ "${LND_ALIAS}" ]]; then
+        # This allow to strip this parameter if LND_ALIAS is empty or null, and truncate it
+        LND_ALIAS="$(echo "$LND_ALIAS" | cut -c -32)"
+        echo "alias=$LND_ALIAS" >> "$LND_DATA/lnd.conf"
+        echo "alias=$LND_ALIAS added to $LND_DATA/lnd.conf"
+    fi
 
-# Set default variables if needed.
-RPCUSER=$(set_default "$RPCUSER" "devuser")
-RPCPASS=$(set_default "$RPCPASS" "devpass")
-DEBUG=$(set_default "$DEBUG" "debug")
-NETWORK=$(set_default "$NETWORK" "simnet")
-CHAIN=$(set_default "$CHAIN" "bitcoin")
-BACKEND="bitcoind"
-LND_REST_PORT=$(set_default $LND_REST_PORT 443)
+    if [[ $LND_CHAIN && $LND_ENVIRONMENT ]]; then
+        echo "LND_CHAIN=$LND_CHAIN"
+        echo "LND_ENVIRONMENT=$LND_ENVIRONMENT"
 
-if [[ "$CHAIN" == "litecoin" ]]; then
-    BACKEND="ltcd"
+        NETWORK=""
+
+        shopt -s nocasematch
+        if [[ $LND_CHAIN == "btc" ]]; then
+            NETWORK="bitcoin"
+        elif [[ $LND_CHAIN == "ltc" ]]; then
+            NETWORK="litecoin"
+        else
+            echo "Unknown value for LND_CHAIN, expected btc or ltc"
+        fi
+
+        ENV=""
+        # Make sure we use correct casing for LND_Environment
+        if [[ $LND_ENVIRONMENT == "mainnet" ]]; then
+            ENV="mainnet"
+        elif [[ $LND_ENVIRONMENT == "testnet" ]]; then
+            ENV="testnet"
+        elif [[ $LND_ENVIRONMENT == "regtest" ]]; then
+            ENV="regtest"
+        else
+            echo "Unknown value for LND_ENVIRONMENT, expected mainnet, testnet or regtest"
+        fi
+        shopt -u nocasematch
+    fi
+
+    # if it is legacy installation, then trigger warning and add noseedbackup=1 to config if needed
+    WALLET_FILE="$LND_DATA/data/chain/$NETWORK/$ENV/wallet.db"
+    LNDUNLOCK_FILE=${WALLET_FILE/wallet.db/walletunlock.json}
+    if [ -f "$WALLET_FILE" -a  ! -f "$LNDUNLOCK_FILE" ]; then
+        echo "[lnd_unlock_entrypoint] WARNING: UNLOCK FILE DOESN'T EXIST! MIGRATE LEGACY INSTALLATION TO NEW VERSION ASAP"
+        echo "noseedbackup=1" >> "$LND_DATA/lnd.conf"
+    fi
+
+    # hit up the auto initializer and unlocker on separate process to do it's work
+    ./initunlocklnd.sh $NETWORK $ENV &
+
+    ln -sfn "$LND_DATA" /root/.lnd
+    ln -sfn "$LND_BITCOIND" /root/.bitcoin
+    ln -sfn "$LND_LITECOIND" /root/.litecoin
+
+    exec "$@"
+else
+	exec "$@"
 fi
-
-./initunlocklnd.sh $CHAIN $NETWORK &
-
-exec lnd \
-    "--$CHAIN.active" \
-    "--$BACKEND.rpcuser"="$RPCUSER" \
-    "--$BACKEND.rpcpass"="$RPCPASS" \
-    --debuglevel="$DEBUG" \
-    "$@"
