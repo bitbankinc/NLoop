@@ -27,8 +27,9 @@ let getLiquidityParams (offChainAsset: SupportedCryptoCode) : HttpHandler =
     | None -> return! errorBadRequest [$"no parameter for {offChainAsset} has been set yet."] next ctx
     | Some p ->
     let resp = {
-      LiquidityParameters.Rules = [||]
-      FeePPM = ValueNone
+      LiquidityParameters.Rules = p.Rules.ToDTO()
+      FeePPM =
+        ValueNone
       SweepFeeRateSatPerKVByte = ValueNone
       MaxSwapFeePpm = ValueNone
       MaxRoutingFeePpm = ValueNone

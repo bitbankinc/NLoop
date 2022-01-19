@@ -1400,14 +1400,20 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("outgoing_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int Outgoing_threshold_percent { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        /// <summary>Peer id to apply the rule against. pubkey and channel_id fields are mutually exclusive.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
         public string Pubkey { get; set; }
     
-        [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        /// <summary>channel id to apply the rule. pubkey and channel_id fields are mutually exclusive.
+        /// </summary>
+        [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
+        /// <summary>The type of the liquidity rule we apply. Currently, we only have Threshold
+        /// </summary>
         [Newtonsoft.Json.JsonProperty("type", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public LiquidityRuleType Type { get; set; }
     

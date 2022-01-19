@@ -126,10 +126,13 @@ type GrpcClientExtensions =
         )
       this.Credentials <-
         let callCred = CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
-            maybeMacaroonHex
-            |> Option.iter(fun macaroon ->
-              metadata.Add("macaroon", macaroon)
-            )
+            try
+              maybeMacaroonHex
+              |> Option.iter(fun macaroon ->
+                metadata.Add("macaroon", macaroon)
+              )
+            with
+            | ex -> Console.WriteLine $"Unreachable! CallCredentials Interceptor failed {ex}"
         })
         ChannelCredentials.Create(SslCredentials(), callCred)
     | None ->

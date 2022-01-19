@@ -5,6 +5,7 @@
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
     <RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
+    <Version>0.0.8.1-alpha</Version>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\BoltzClient\BoltzClient.fsproj" />

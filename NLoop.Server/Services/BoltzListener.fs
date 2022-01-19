@@ -41,7 +41,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
             let! tx = ts.[index] :?> Task<Transaction>
             logger.LogInformation $"boltz notified about their swap tx {tx.ToHex()}"
             let swapId = statuses.Keys |> Seq.item index
-            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()))
+            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
             match statuses.TryRemove(swapId) with
             | true, _ -> ()
             | false, _ ->
@@ -56,12 +56,20 @@ type BoltzListener(swapServerClient: ISwapServerClient,
     }
 
   interface IHostedService with
-    member this.StartAsync(ct) =
+    member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting {nameof(BoltzListener)}"
+      try
+        let! _ = swapServerClient.CheckConnection()
+        ()
+      with
+      | ex ->
+        logger.LogError $"Failed to connect to boltz-server {ex}"
+        raise <| ex
       _stoppingCts <- CancellationTokenSource.CreateLinkedTokenSource(ct)
       _executingTask <- this.ExecuteAsync(_stoppingCts.Token)
-      if _executingTask.IsCompleted then _executingTask else
-      Task.CompletedTask
+      if _executingTask.IsCompleted then return! _executingTask else
+      return ()
+    }
 
     member this.StopAsync(_cancellationToken) = unitTask {
       if _executingTask = null then () else

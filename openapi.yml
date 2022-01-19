@@ -565,10 +565,21 @@ components:
             less than this, we will dispatch the loop-in swap
         pubkey:
           $ref: '#/components/schemas/PubKey'
+          description: >
+            Peer id to apply the rule against.
+            pubkey and channel_id fields are mutually exclusive.
+          nullable: true
         channel_id:
           $ref: "#/components/schemas/ShortChannelId"
+          description: >
+            channel id to apply the rule.
+            pubkey and channel_id fields are mutually exclusive.
+          nullable: true
         type:
           $ref:  "#/components/schemas/LiquidityRuleType"
+          description: >
+            The type of the liquidity rule we apply.
+            Currently, we only have Threshold
 
     LiquidityParameters:
       type: object

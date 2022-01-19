@@ -55,8 +55,7 @@ module internal AutoLoopHelpers =
     prepayMaxFee, routeMaxFee
 
   let scaleMinerFee (fee: Money) =
-    100 * fee
-
+    30 * fee
 
   let worstCaseInFees
     ({ LoopInLimits.MaxMinerFee = maxMinerFee
@@ -306,16 +305,60 @@ type Rules = {
   PeerRules: Map<NodeId, ThresholdRule>
 }
   with
+  member this.ToDTO() =
+    let channelRulesDTO =
+      this.ChannelRules
+      |> Seq.map(fun kv ->
+        {
+          LiquidityRule.ChannelId = kv.Key |> ValueSome
+          PubKey = ValueNone
+          Type = LiquidityRuleType.Threshold
+          IncomingThreshold = kv.Value.MinimumIncoming
+          OutgoingThreshold = kv.Value.MinimumOutGoing
+        }
+      )
+
+    let peerRulesDTO =
+      this.PeerRules
+      |> Seq.map(fun kv ->
+        {
+          LiquidityRule.ChannelId = ValueNone
+          PubKey = kv.Key.Value |> ValueSome
+          Type = LiquidityRuleType.Threshold
+          IncomingThreshold = kv.Value.MinimumIncoming
+          OutgoingThreshold = kv.Value.MinimumOutGoing
+        }
+      )
+    Seq.concat [channelRulesDTO; peerRulesDTO]
+    |> Seq.toArray
   static member FromDTOs(dtos: LiquidityRule[]) = {
     ChannelRules =
       dtos
-      |> Array.map(fun dto -> (dto.ChannelId, { ThresholdRule.MinimumIncoming = dto.IncomingThreshold
-                                                MinimumOutGoing = dto.OutgoingThreshold }))
+      |> Array.choose(fun dto ->
+           match dto.ChannelId with
+           | ValueSome cId ->
+             let rule = {
+               ThresholdRule.MinimumIncoming = dto.IncomingThreshold
+               MinimumOutGoing = dto.OutgoingThreshold
+             }
+             (cId, rule)
+             |> Some
+           | ValueNone -> None
+      )
       |> Map.ofArray
     PeerRules =
       dtos
-      |> Array.map(fun dto -> (dto.PubKey |> NodeId, { ThresholdRule.MinimumIncoming = dto.IncomingThreshold
-                                                       MinimumOutGoing = dto.OutgoingThreshold }))
+      |> Array.choose(fun dto ->
+           match dto.PubKey with
+           | ValueSome pk ->
+             let rule = {
+               ThresholdRule.MinimumIncoming = dto.IncomingThreshold
+               MinimumOutGoing = dto.OutgoingThreshold
+             }
+             (pk |> NodeId, rule)
+             |> Some
+           | ValueNone -> None
+      )
       |> Map.ofArray
   }
 
@@ -904,6 +947,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       let! channels =
         lnClient
           .ListChannels(ct)
+      ct.ThrowIfCancellationRequested()
       let peerToChannelBalance: Map<NodeId, Balances> =
         channels
         |> List.map(Balances.FromLndResponse)
@@ -944,7 +988,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         }
 
       for nodeId, balances, rule in peersWithRules do
-        match! this.SuggestSwap(traffic, balances, rule, restrictions, group.Category, autoloop) with
+        match! this.SuggestSwap(traffic, balances, rule, restrictions, group.Category, autoloop, ct) with
         | Error e ->
           resp <- { resp with DisqualifiedPeers = resp.DisqualifiedPeers |> Map.add nodeId e }
         | Ok (SwapSuggestion.In s) ->
@@ -957,7 +1001,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         match par.Rules.ChannelRules.TryGetValue c.Id with
         | false, _ -> ()
         | true, rule ->
-          match! this.SuggestSwap(traffic, balance, rule, restrictions, group.Category, autoloop) with
+          match! this.SuggestSwap(traffic, balance, rule, restrictions, group.Category, autoloop, ct) with
           | Error e ->
             resp <- { resp with DisqualifiedChannels = resp.DisqualifiedChannels |> Map.add c.Id e }
           | Ok s ->
@@ -1034,14 +1078,17 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     | Error e -> return Error e
   }
 
-  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, category: Swap.Category, autoloop: bool): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
+  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, category: Swap.Category, autoloop: bool, ?ct: CancellationToken): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
+    let ct = defaultArg ct CancellationToken.None
     taskResult {
       let builder =
         this.Builder category
       let par = this.Parameters.Value
       do! builder.MaySwap(par)
+      ct.ThrowIfCancellationRequested()
       let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
       do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
+      ct.ThrowIfCancellationRequested()
       let amount =
         rule.SwapAmount(balance, restrictions, category, opts.Value.TargetIncomingLiquidityRatio)
       if amount = Money.Zero then

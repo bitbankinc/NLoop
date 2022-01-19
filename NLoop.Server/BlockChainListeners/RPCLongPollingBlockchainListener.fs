@@ -21,7 +21,7 @@ type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>,
   inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cc, getNetwork, actor)
   let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
-  let _stoppingCts = new CancellationTokenSource()
+  let mutable _stoppingCts = null
 
   member private this.ExecuteAsync(ct) = unitTask {
     while true do
@@ -33,7 +33,10 @@ type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>,
 
   interface IHostedService with
     member this.StartAsync(_cancellationToken) = unitTask {
+      _stoppingCts <- CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken)
       _executingTask <- this.ExecuteAsync(_stoppingCts.Token)
+      if _executingTask.IsCompleted then return! _executingTask else
+      return ()
     }
     member this.StopAsync(_cancellationToken) = unitTask {
       if _executingTask = null then () else

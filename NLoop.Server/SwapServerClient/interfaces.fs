@@ -57,9 +57,16 @@ module SwapDTO =
         Error $"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match"
       else if this.Invoice.PaymentHash <> PaymentHash(preimageHash) then
         Error "Payment Hash in invoice does not match preimage hash we specified in request"
-      else if (this.Invoice.AmountValue.IsSome && this.Invoice.AmountValue.Value.Satoshi <> offChainAmountWePay.Satoshi) then
-        Error $"What they requested in invoice ({this.Invoice.AmountValue.Value.Satoshi} sats) does not match the amount we are expecting to pay ({offChainAmountWePay.Satoshi} sats)."
       else
+      let minerFee =
+        this.MinerFeeInvoice
+        |> Option.bind(fun i -> i.AmountValue)
+        |> Option.map(fun a -> a.Satoshi)
+        |> Option.defaultValue 0L
+      match this.Invoice.AmountValue with
+      | Some amt when amt.Satoshi + minerFee <> offChainAmountWePay.Satoshi  ->
+        Error $"What they requested in invoice ({this.Invoice.AmountValue.Value.Satoshi} sats) does not match the amount we are expecting to pay ({offChainAmountWePay.Satoshi} sats)."
+      | _ ->
         let prepayAmount =
           this.MinerFeeInvoice
           |> Option.bind(fun invoice -> invoice.AmountValue)
@@ -68,12 +75,14 @@ module SwapDTO =
           Error $"The amount specified in invoice ({prepayAmount.Satoshi} sats) was larger than the max we can accept ({maxPrepay.Satoshi} sats)"
         else
         let swapServiceFee =
-          decimal (offChainAmountWePay.Satoshi + prepayAmount.Satoshi) - (decimal(this.OnchainAmount.Satoshi) * rate)
+          decimal (offChainAmountWePay.Satoshi - minerFee - this.OnchainAmount.Satoshi) * rate
           |> Money.Satoshis
+           // we extract 10 sats as a buffer for compensating the floating-point calculation precision
+          |> fun x -> x - Money.Satoshis 10L
         if maxSwapServiceFee < swapServiceFee then
           let msg =
             $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable" +
-            $"fee rate ({maxSwapServiceFee.Satoshi} sats). you may want to set max_swap_fee in request."
+            $"fee rate ({maxSwapServiceFee.Satoshi} sats). you may want set a bigger amount to max_swap_fee in request."
           Error msg
         elif maxPrepay.Satoshi < prepayAmount.Satoshi then
           Error $"The counterparty-specified amount for prepayment miner fee ({prepayAmount}) is larger than our maximum ({maxPrepay})"
