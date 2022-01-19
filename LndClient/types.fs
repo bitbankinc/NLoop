@@ -19,11 +19,6 @@ type MacaroonInfo =
   | FilePath of string
 
 [<RequireQualifiedAccess>]
-type LndAuth=
-  | FixedMacaroon of Macaroon
-  | MacaroonFile of string
-  | Null
-
 [<AutoOpen>]
 module private Helpers =
   do Environment.SetEnvironmentVariable("GRPC_SSL_CIPHER_SUITES", "HIGH+ECDSA");

@@ -102,33 +102,8 @@ type LndGrpcSettings = internal {
 
       handler |> updateHandler
 
-  member this.CreateLndAuth() =
-    match this.Macaroon with
-    | Some (MacaroonInfo.Raw m) ->
-      m
-      |> LndAuth.FixedMacaroon
-    | Some (MacaroonInfo.FilePath m) when m |> String.IsNullOrEmpty |> not ->
-      m
-      |> LndAuth.MacaroonFile
-    | _ ->
-      LndAuth.Null
-
 [<AbstractClass;Sealed;Extension>]
 type GrpcClientExtensions =
-
-  [<Extension>]
-  static member AddLndAuthentication(this: Metadata, lndAuth: LndAuth) =
-    match lndAuth with
-    | LndAuth.FixedMacaroon macaroon ->
-      let macaroonHex = macaroon.SerializeToBytes() |> Encoders.Hex.EncodeData
-      this.Add("macaroon", macaroonHex)
-    | LndAuth.MacaroonFile filePath ->
-      if not <| filePath.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) then
-        raise <| ArgumentException($"filePath ({filePath}) is not a macaroon file", nameof(filePath))
-      else
-        let macaroonHex = filePath |> File.ReadAllBytes |> Encoders.Hex.EncodeData
-        this.Add("macaroon", macaroonHex)
-    | LndAuth.Null -> ()
 
   [<Extension>]
   static member ApplyLndSettings(this: GrpcChannelOptions, settings: LndGrpcSettings) =
@@ -137,9 +112,24 @@ type GrpcClientExtensions =
     | Some _ when settings.Url.Scheme <> "https" ->
       failwith $"The grpc url must be https when using certificate. It was {settings.Url.Scheme}"
     | Some _ ->
+      let maybeMacaroonHex =
+        settings.Macaroon
+        |> Option.map(
+          function
+          | MacaroonInfo.Raw macaroon ->
+            macaroon.SerializeToBytes() |> Encoders.Hex.EncodeData
+          | MacaroonInfo.FilePath filePath ->
+            if not <| filePath.EndsWith(".macaroon", StringComparison.OrdinalIgnoreCase) then
+              raise <| ArgumentException($"filePath ({filePath}) is not a macaroon file", nameof(filePath))
+            else
+              filePath |> File.ReadAllBytes |> Encoders.Hex.EncodeData
+        )
       this.Credentials <-
         let callCred = CallCredentials.FromInterceptor(fun ctx metadata -> unitTask {
-          settings.CreateLndAuth() |> metadata.AddLndAuthentication
+            maybeMacaroonHex
+            |> Option.iter(fun macaroon ->
+              metadata.Add("macaroon", macaroon)
+            )
         })
         ChannelCredentials.Create(SslCredentials(), callCred)
     | None ->
@@ -225,7 +215,6 @@ module Extensions =
 /// grpc-dotnet does not support specifying custom ssl credential which is necessary in case of using LND securely.
 /// ref: https://github.com/grpc/grpc/issues/21554
 /// So we must set custom HttpMessageHandler for HttpClient which performs validation.
-/// But if you pass `HttpClient` in constructor, the handler of this HttpClient instance will override the
 type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
   let channel =
     let opts = GrpcChannelOptions()
