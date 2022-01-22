@@ -95,6 +95,14 @@ module private ServerAPITestHelpers =
     }
     (peer1 |> NodeId, Route([hop1]))
 
+  let routeToNode2 =
+    let hop1 = {
+      RouteHop.Fee = LNMoney.Satoshis(10L)
+      PubKey = peer2
+      ShortChannelId = chanId2
+      CLTVExpiryDelta = 20u
+    }
+    (peer2 |> NodeId, Route([hop1]))
   let testBlockchainInfo = {
     BlockChainInfo.Height = BlockHeight.Zero
     Progress = 1.0f
@@ -196,6 +204,7 @@ type ServerAPITest() =
       ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("We have channel but that is different from the one specified in request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
       let inprogressBlockchainInfo = {
         testBlockchainInfo
           with
@@ -203,7 +212,7 @@ type ServerAPITest() =
       }
       ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
       ("no connected nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
-      ("no routes to the nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no routes to the node", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
 
       let quote = {
         testLoopOutQuote
@@ -307,10 +316,13 @@ type ServerAPITest() =
           DummyLnClientParameters.Default
             with
             ListChannels = channels
-            QueryRoutes = fun pk _amount ->
-              match routesToNodes.TryGetValue (pk |> NodeId) with
-              | true, v -> v
-              | false, _ -> Route([])
+            QueryRoutes = fun pk _amount maybeChanIdSpecified ->
+              match routesToNodes.TryGetValue (pk |> NodeId), maybeChanIdSpecified with
+              | (true, v), None ->
+                v
+              | (true, v), Some chanId when not <| v.Value.IsEmpty && v.Value.Head.ShortChannelId = chanId ->
+                v
+              | _ -> Route([])
         }
         sp
           .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())

@@ -83,7 +83,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         _state <- v
 
   interface IOnGoingSwapStateProjection with
-    member this.State = (this :> OnGoingSwapStateProjection).State
+    member this.State = this.State
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let checkpoint =

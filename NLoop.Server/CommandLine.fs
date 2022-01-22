@@ -303,14 +303,9 @@ module NLoopServerCommandLine =
 
   let getRootCommand() =
     let rc = RootCommand()
-    if rc.Name <> "nloopd" then
-      rc.Name <- "nloopd"
-    if rc.Description |> String.IsNullOrEmpty then
-      rc.Description <- "Daemon to manage your LN node with submarine swaps"
+    rc.Name <- "nloopd"
+    rc.Description <- "Daemon to manage your LN node with submarine swaps"
     for o in getOptions() do
-      // not sure why we need this, but System.Commandline sometimes complains that we are trying to add
-      // options with the same name twice in the test.
-      if rc.Options |> Seq.exists(fun existingO -> existingO.Name = o.Name) then () else
       rc.AddOption(o)
     for v in Validators.getValidators do
       rc.AddValidator(v)

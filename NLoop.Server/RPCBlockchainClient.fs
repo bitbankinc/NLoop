@@ -9,7 +9,7 @@ open NBitcoin.RPC
 
 type RPCBlockchainClient(rpc: RPCClient) =
   interface IBlockChainClient with
-    member this.GetBlock(blockHash, ?ct) = task {
+    member this.GetBlock(blockHash, ?_ct) = task {
       let! resp = rpc.GetBlockAsync(blockHash, GetBlockVerbosity.WithFullTx)
       return
         {
@@ -34,11 +34,11 @@ type RPCBlockchainClient(rpc: RPCClient) =
     member this.GetBestBlockHash(_ct) =
       rpc.GetBestBlockHashAsync()
 
-    member this.EstimateFee(target, ct) = task {
+    member this.EstimateFee(target, _ct) = task {
       let! resp = rpc.EstimateSmartFeeAsync(target.Value |> int)
       return resp.FeeRate
     }
-    member this.SendRawTransaction(tx, ct) =
+    member this.SendRawTransaction(tx, _ct) =
       rpc.SendRawTransactionAsync(tx)
 
 

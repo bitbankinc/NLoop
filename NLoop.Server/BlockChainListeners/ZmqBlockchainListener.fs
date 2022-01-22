@@ -62,7 +62,7 @@ type ZmqClient(logger: ILogger<ZmqClient>, address) =
   member private this.WorkerThread (onBlock: OnBlock, ct: CancellationToken) () =
     while not <| ct.IsCancellationRequested do
       let m = sock.ReceiveMultipartMessage(3)
-      let topic, body, sequence = (m.Item 0), (m.Item 1), (m.Item 2)
+      let topic, body, _sequence = (m.Item 0), (m.Item 1), (m.Item 2)
       if topic.Buffer = rawblockB then
         let b = Block.Parse(body.Buffer |> hex.EncodeData, Network.RegTest)
         onBlock b
@@ -80,15 +80,15 @@ type ZmqClient(logger: ILogger<ZmqClient>, address) =
       | ex ->
         logger.LogError $"Failed to dispose {nameof(ZmqClient)}. this should never happen: {ex}"
 
-type ZmqBlockchainListener(opts: IOptions<NLoopOptions>,
+type ZmqBlockchainListener(
                            zmqAddress,
                            loggerFactory,
                            getBlockchainClient,
                            getNetwork,
                            actor,
                            cryptoCode,
-                           rewindLimit: unit -> StartHeight) as this =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cryptoCode, getNetwork, actor)
+                           rewindLimit: unit -> StartHeight) =
+  inherit BlockchainListener(loggerFactory, getBlockchainClient, cryptoCode, getNetwork, actor)
   let zmqClient = new ZmqClient(loggerFactory.CreateLogger<_>(), zmqAddress)
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
 

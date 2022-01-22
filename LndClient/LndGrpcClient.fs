@@ -398,12 +398,16 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
             }
             |> Error
       }
-    member this.QueryRoutes(nodeId, amount, ct) =
+    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = QueryRoutesRequest()
         req.PubKey <- nodeId.ToHex()
         req.Amt <- amount.Satoshi
+        maybeOutgoingChanId
+        |> Option.iter(fun chanId ->
+          req.OutgoingChanId <- chanId.ToUInt64()
+        )
         let! resp = client.QueryRoutesAsync(req, this.DefaultHeaders, this.Deadline, ct)
         let r = resp.Routes.[0]
         return

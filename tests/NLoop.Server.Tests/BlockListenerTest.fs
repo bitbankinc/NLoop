@@ -172,7 +172,6 @@ type BlockchainListenerTest() =
           BlockchainListener(
             sp.GetRequiredService<_>(),
             sp.GetRequiredService<_>(),
-            sp.GetRequiredService<_>(),
             SupportedCryptoCode.BTC,
             sp.GetRequiredService<_>(),
             sp.GetRequiredService<_>()

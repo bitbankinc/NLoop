@@ -1,8 +1,6 @@
 namespace NLoop.Server
 
-open System
 open System.Collections.Concurrent
-open System.Collections.Generic
 open System.Threading.Tasks
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
@@ -49,7 +47,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         let cOpts = opts.Value.ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
-            RPCLongPollingBlockchainListener(opts, loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), getNetwork, swapActor, cc)
+            RPCLongPollingBlockchainListener(loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), getNetwork, swapActor, cc)
           do! (rpcListener :> IHostedService).StartAsync(ct)
           match listeners.TryAdd(cc, rpcListener :> BlockchainListener) with
           | true -> ()
@@ -60,7 +58,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         | None ->
           do! startRPCListener cc
         | Some addr ->
-          let zmqListener = ZmqBlockchainListener(opts, addr, loggerFactory, getBlockchainClient, getNetwork, swapActor, cc, (fun () -> this.GetRewindLimit(cc)))
+          let zmqListener = ZmqBlockchainListener(addr, loggerFactory, getBlockchainClient, getNetwork, swapActor, cc, (fun () -> this.GetRewindLimit(cc)))
           match! zmqListener.CheckConnection ct with
           | true ->
             do! (zmqListener :> IHostedService).StartAsync(ct)

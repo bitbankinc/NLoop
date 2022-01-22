@@ -62,7 +62,7 @@ module private BlockchainListenerHelpers =
           return failwith "unreachable!"
       }
     loop getBlock [] oldTip newTip
-type BlockchainListener(opts: IOptions<NLoopOptions>,
+type BlockchainListener(
                         loggerFactory: ILoggerFactory,
                         getBlockchainClient: GetBlockchainClient,
                         cc: SupportedCryptoCode,
