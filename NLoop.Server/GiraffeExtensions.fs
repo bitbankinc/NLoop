@@ -68,32 +68,21 @@ module CustomHandlers =
     fun (next: HttpFunc) ( ctx: HttpContext) -> task {
       let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
       let boltzCli = ctx.GetService<ISwapServerClient>()
-      let nodesT = boltzCli.GetNodes()
-      let! nodes = nodesT
-      let mutable maybeResult = None
+      let! nodes = boltzCli.GetNodes()
       let logger =
         ctx
           .GetLogger<_>()
-      for kv in nodes.Nodes do
-        if maybeResult.IsSome then () else
-        try
-          let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
-          if (r.Value.Length > 0) then
-            maybeResult <- Some r
-        with
-        | ex ->
-          logger
-            .LogError $"{ex}"
-
-      if maybeResult.IsNone then
-        return! error503 $"Failed to find route to Boltz server. Make sure the channel is open and active" next ctx
-      else
-        let chanIds =
-          maybeResult.Value.Value
-          |> List.head
-          |> fun firstRoute -> firstRoute.ShortChannelId
-        logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
-        return! next ctx
+      match nodes.Nodes |> Seq.tryFind(fun kv -> kv.Key = offChainCryptoCode.ToString()) with
+      | None ->
+          return! errorBadRequest [$"server does not support {offChainCryptoCode.ToString()} as an off-chain currency"] next ctx
+      | Some kv ->
+        let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
+        if (r.Value.Length > 0) then
+          let chanIds = r.Value.Head.ShortChannelId
+          logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
+          return! next ctx
+        else
+          return! error503 $"Failed to find route to Boltz server. Make sure the channel is open and active" next ctx
     }
 
   let internal validateFeeLimitAgainstServerQuote(req: LoopOutRequest) =

@@ -733,7 +733,6 @@ module Swap =
                   return []
               }
             return events @ additionalEvents
-
         | NewBlock ({ Height = height; Block = block }, cc), In(oldHeight, loopIn) when loopIn.PairId.Quote = cc ->
           let! events = (height, oldHeight) ||> checkHeight (block.Header.GetHash())
           let! e =
@@ -833,6 +832,10 @@ module Swap =
                 return []
             }
           return events @ (e |> enhance)
+        | NewBlock _, Out _
+        | NewBlock _, In _ ->
+          // ignore if it is the cryptocode that we are not interested in.
+          return []
         | UnConfirmBlock(blockHash), Out(_heightBefore, _)
         | UnConfirmBlock(blockHash), In (_heightBefore, _) ->
             return [BlockUnConfirmed { BlockHash = blockHash }] |> enhance

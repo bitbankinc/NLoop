@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open System
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
@@ -49,4 +50,6 @@ type BitcoindWalletClient(rpc: RPCClient) =
       return resp.PSBT
     }
     member this.GetDepositAddress() =
-      rpc.GetNewAddressAsync()
+      let req = GetNewAddressRequest()
+      req.AddressType <- Nullable(AddressType.P2SHSegwit)
+      rpc.GetNewAddressAsync(req)
