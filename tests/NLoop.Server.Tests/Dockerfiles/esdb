@@ -21,8 +21,6 @@ RUN dotnet restore --runtime=${RUNTIME}
 RUN dotnet build --configuration=Release --no-restore
 
 
-
-
 FROM build as publish
 ARG RUNTIME=linux-x64
 

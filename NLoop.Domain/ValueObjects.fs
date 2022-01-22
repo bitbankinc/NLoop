@@ -69,6 +69,9 @@ module SupportedCryptoCode =
 type PairId =
   PairId of (struct (SupportedCryptoCode * SupportedCryptoCode))
   with
+  member this.Reverse =
+    let struct (b, q) = this.Value
+    PairId(q, b)
   member this.Value =
     match this with
     | PairId(a, b) -> struct(a, b)

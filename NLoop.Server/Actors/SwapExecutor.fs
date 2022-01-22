@@ -162,6 +162,7 @@ type SwapExecutor(
                   getSwapKey: GetSwapKey,
                   getSwapPreimage: GetSwapPreimage,
                   getNetwork: GetNetwork,
+                  getAddress: GetAddress,
                   swapActor: ISwapActor
   )=
 
@@ -196,18 +197,17 @@ type SwapExecutor(
               SwapDTO.LoopOutRequest.ClaimPublicKey = claimKey.PubKey
               SwapDTO.LoopOutRequest.PreimageHash = preimageHash.Value }
           swapServerClient.LoopOut req
-        let lnClient = lightningClientProvider.GetClient(pairId.Quote)
 
         ct.ThrowIfCancellationRequested()
         let! addr =
           match req.Address with
-          | Some a -> Task.FromResult a
+          | Some a -> Task.FromResult (Ok a)
           | None ->
-            lnClient.GetDepositAddress()
+            getAddress.Invoke(pairId.Base)
         ct.ThrowIfCancellationRequested()
         let loopOut = {
           LoopOut.Id = outResponse.Id |> SwapId
-          LoopOut.ClaimKey = claimKey
+          ClaimKey = claimKey
           OutgoingChanIds = req.OutgoingChannelIds
           Preimage = preimage
           RedeemScript = outResponse.RedeemScript
@@ -342,7 +342,7 @@ type SwapExecutor(
           maybeSwapId <- swapId |> Some
           let! exchangeRate =
             tryGetExchangeRate(pairId, ct)
-            |> Task.map(Result.requireSome $"exchange rate for {pairId} is not available")
+            |> Task.map(Result.requireSome $"exchange rate for {PairId.toString(&pairId)} is not available")
           match inResponse.Validate(invoice.PaymentHash.Value,
                                     refundKey.PubKey,
                                     loopIn.Amount,

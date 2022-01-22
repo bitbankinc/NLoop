@@ -35,12 +35,12 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     fun event -> unitTask {
       try
         if not <| event.StreamId.Value.StartsWith(Swap.entityType) then () else
-        printfn $"OnGoingSwapStateProjection: handling event: {event}"
         match event.ToRecordedEvent(Swap.serializer) with
         | Error e ->
           log.LogCritical $"Failed to deserialize event {e}"
           ()
         | Ok r ->
+          log.LogInformation($"Handling Recorded Event {r.Type.Value}")
           this.State <-
             (
               if this.State |> Map.containsKey r.StreamId |> not then
@@ -61,7 +61,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
               ))
             // We don't hold finished swaps on-memory for the scalability.
             |> Map.filter(fun _ (_, state) -> match state with | Swap.State.Finished _ -> false | _ -> true)
-          log.LogDebug($"Publishing RecordedEvent {r}")
+          log.LogTrace($"Publishing RecordedEvent {r}")
           eventAggregator.Publish<RecordedEvent<Swap.Event>> r
         with
         | ex -> log.LogCritical $"{ex}"
@@ -83,7 +83,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         _state <- v
 
   interface IOnGoingSwapStateProjection with
-    member this.State = (this :> OnGoingSwapStateProjection).State
+    member this.State = this.State
 
   override this.ExecuteAsync(stoppingToken) = unitTask {
     let checkpoint =

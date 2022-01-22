@@ -162,10 +162,10 @@ type SwapSuggestions = {
     {
       DisqualifiedChannels =
         // a channel is disqualified iff it is disqualified both a and b
-        a.DisqualifiedChannels |> Map.filter(fun k v -> Map.containsKey k b.DisqualifiedChannels)
+        a.DisqualifiedChannels |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedChannels)
       DisqualifiedPeers =
         // a peer is disqualified iff it is disqualified both a and b
-        a.DisqualifiedPeers |> Map.filter(fun k v -> Map.containsKey k b.DisqualifiedPeers)
+        a.DisqualifiedPeers |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedPeers)
       OutSwaps = a.OutSwaps @ b.OutSwaps
       InSwaps = a.InSwaps @ b.InSwaps
     }

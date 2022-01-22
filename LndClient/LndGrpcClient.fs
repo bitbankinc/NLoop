@@ -342,7 +342,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           req.PaymentRequest <- param.Invoice.ToString()
           req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
           req.FeeLimitSat <- param.MaxFee.Satoshi
-          req.TimeoutSeconds <- param.Invoice.Expiry.Second |> int
+          req.TimeoutSeconds <-
+            param.Invoice.Expiry.Second |> int
           routerClient.SendPaymentV2(req).ResponseStream
 
         let f (s:Payment) =
@@ -397,12 +398,16 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
             }
             |> Error
       }
-    member this.QueryRoutes(nodeId, amount, ct) =
+    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
         let req = QueryRoutesRequest()
         req.PubKey <- nodeId.ToHex()
         req.Amt <- amount.Satoshi
+        maybeOutgoingChanId
+        |> Option.iter(fun chanId ->
+          req.OutgoingChanId <- chanId.ToUInt64()
+        )
         let! resp = client.QueryRoutesAsync(req, this.DefaultHeaders, this.Deadline, ct)
         let r = resp.Routes.[0]
         return

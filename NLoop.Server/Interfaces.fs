@@ -18,7 +18,7 @@ open NLoop.Domain.Utils
 open NLoop.Server.DTOs
 
 type ISwapEventListener =
-  abstract member RegisterSwap: swapId: SwapId -> unit
+  abstract member RegisterSwap: swapId: SwapId * group: Swap.Group -> unit
   abstract member RemoveSwap: swapId: SwapId -> unit
 
 type ILightningClientProvider =

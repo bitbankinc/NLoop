@@ -36,11 +36,11 @@ services:
       - "28332" # ZMQ
       - "28333" # ZMQ
     ports:
-      - "${BITCOIND_RPC_PORT:?no_bitcoind_rpc_port_set}:43782" # RPC
-      - "${BITCOIND_ZMQ_BLOCK_PORT:?no_bitcoind_zmq_block_port_set}:28332"
-      - "${BITCOIND_ZMQ_TX_PORT:?no_bitcoind_zmq_tx_port_set}:28333"
+      - "43782:43782" # RPC
+      - "28332:28332"
+      - "28333:28333"
     volumes:
-      - "${DATA_PATH:?no_data_path}/bitcoin:/data"
+      - "./data/bitcoin:/data"
   litecoind:
     restart: unless-stopped
     build:
@@ -73,9 +73,9 @@ services:
       - "43783" # RPC
       - "39388" # P2P
     ports:
-      - "${LITECOIND_RPC_PORT:?no_litecoind_rpc_port_set}:43783" # RPC
+      - "43783:43783" # RPC
     volumes:
-      - "${DATA_PATH:?no_data_path}/litecoin:/data"
+      - "./data/litecoin:/data"
   lnd_user:
     restart: unless-stopped
     image: nloop/lnd
@@ -84,15 +84,20 @@ services:
       dockerfile: lnd
       cache_from:
         - nloop/lnd:latest
-    entrypoint: [ "./start-lnd.sh" ]
     environment:
-      NETWORK: regtest
+      LND_ENVIRONMENT: regtest
       LND_REST_PORT: 32736
       CHAIN: "bitcoin"
+      LND_EXTERNAL_HOST: lnd_user
+      LND_PORT: 9735
+      LND_CHAIN: btc
+      LND_REST_LISTEN_HOST: https://lnd_user:32736
     command:
+      - lnd
       - --restlisten=0.0.0.0:32736
       - --rpclisten=0.0.0.0:32777
 
+      - --bitcoin.active
       - --bitcoin.regtest
       - --bitcoin.node=bitcoind
       - --bitcoind.rpchost=bitcoind:43782
@@ -104,6 +109,9 @@ services:
       - --trickledelay=1000
       - --externalip=lnd_user:9735
       #- --no-macaroons
+      - --adminmacaroonpath=/data/admin.macaroon
+      - --invoicemacaroonpath=/data/invoice.macaroon
+      - --readonlymacaroonpath=/data/readonly.macaroon
       - --datadir=/data
       - --debuglevel=info
       #- --no-rest-tls
@@ -118,12 +126,12 @@ services:
       - bitcoind
       - litecoind
     ports:
-      - "${LND_USER_REST_PORT:?no_lnd_user_rest_port_set}:32736"
-      - "${LND_USER_RPC_PORT:?no_lnd_user_rpc_port_set}:32777"
+      - "32736:32736"
+      - "32777:32777"
     volumes:
-      - "${DATA_PATH}/lnd_user:/data"
-      - "${DATA_PATH}/bitcoin:/deps/.bitcoin"
-  lnd_server:
+      - "./data/lnd_user:/data"
+      - "./data/bitcoin:/deps/.bitcoin"
+  lnd_server_btc:
     restart: unless-stopped
     image: nloop/lnd
     build:
@@ -131,14 +139,19 @@ services:
       dockerfile: lnd
       cache_from:
         - nloop/lnd:latest
-    entrypoint: [ "./start-lnd.sh" ]
     environment:
-      NETWORK: regtest
+      LND_ENVIRONMENT: regtest
       LND_REST_PORT: 32737
       CHAIN: "bitcoin"
+      LND_EXTERNAL_HOST: lnd_server_btc
+      LND_PORT: 9735
+      LND_CHAIN: btc
+      LND_REST_LISTEN_HOST: https://lnd_server_btc:32737
     command:
+      - lnd
       - --restlisten=0.0.0.0:32737
       - --rpclisten=0.0.0.0:32778
+      - --bitcoin.active
       - --bitcoin.regtest
       - --bitcoin.node=bitcoind
       - --bitcoind.rpchost=bitcoind:43782
@@ -147,14 +160,17 @@ services:
       - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
       - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
       - --trickledelay=1000
-      - --externalip=lnd_server:9735
+      - --externalip=lnd_server_btc:9735
       #- --no-macaroons
+      - --adminmacaroonpath=/data/admin.macaroon
+      - --invoicemacaroonpath=/data/invoice.macaroon
+      - --readonlymacaroonpath=/data/readonly.macaroon
       - --datadir=/data
       - --debuglevel=info
       # - --noseedbackup
       - --tlscertpath=/data/tls.cert
       - --tlskeypath=/data/tls.key
-      - --tlsextradomain=lnd_server
+      - --tlsextradomain=lnd_server_btc
     expose:
       - "9735"
       - "32737"
@@ -163,10 +179,62 @@ services:
       - bitcoind
       - litecoind
     ports:
-      - "${LND_SERVER_REST_PORT:?no_lnd_server_rest_port_set}:32737"
+      - "32737:32737"
     volumes:
-      - "${DATA_PATH}/lnd_server:/data"
-      - "${DATA_PATH}/bitcoin:/deps/.bitcoin"
+      - "./data/lnd_server_btc:/data"
+      - "./data/bitcoin:/deps/.bitcoin"
+
+  lnd_server_ltc:
+    restart: unless-stopped
+    image: nloop/lnd
+    build:
+      context: ./Dockerfiles
+      dockerfile: lnd
+      cache_from:
+        - nloop/lnd:latest
+    environment:
+      LND_ENVIRONMENT: regtest
+      LND_REST_PORT: 32737
+      LND_EXTERNAL_HOST: lnd_server_ltc
+      LND_PORT: 9736
+      LND_CHAIN: "ltc"
+      LND_REST_LISTEN_HOST: https://lnd_server_ltc:32737
+    command:
+      - lnd
+      - --restlisten=0.0.0.0:32737
+      - --rpclisten=0.0.0.0:32778
+      - --litecoin.active
+      - --litecoin.regtest
+      - --litecoin.node=litecoind
+      - --litecoind.rpchost=litecoind:43783
+      - --litecoind.rpcuser=johndoe
+      - --litecoind.rpcpass=unsafepassword
+      - --litecoind.zmqpubrawblock=tcp://litecoind:28332
+      - --litecoind.zmqpubrawtx=tcp://litecoind:28333
+      - --trickledelay=1000
+      - --externalip=lnd_server_ltc:9735
+      #- --no-macaroons
+      - --adminmacaroonpath=/data/admin.macaroon
+      - --invoicemacaroonpath=/data/invoice.macaroon
+      - --readonlymacaroonpath=/data/readonly.macaroon
+      - --datadir=/data
+      - --debuglevel=info
+      # - --noseedbackup
+      - --tlscertpath=/data/tls.cert
+      - --tlskeypath=/data/tls.key
+      - --tlsextradomain=lnd_server_ltc
+    expose:
+      - "9735"
+      - "32737"
+      - "32778"
+    depends_on:
+      - litecoind
+    ports:
+      - "32738:32738"
+    volumes:
+      - "./data/lnd_server_ltc:/data"
+      - "./data/litecoin:/deps/.litecoin"
+
   boltz:
     image: nloop/boltz
     container_name: boltz
@@ -181,14 +249,16 @@ services:
     expose:
       - "9000" # grpc API
     ports:
-      - "${BOLTZ_PORT}:9001" # REST API
+      - "6028:9001" # REST API
     volumes:
-      - "${DATA_PATH}/boltz:/data/boltz"
-      - "${DATA_PATH}/lnd_server:/data/lnd"
-    links:
+      - "./data/boltz:/data/boltz"
+      - "./data/lnd_server_btc:/data/lnd_server_btc"
+      - "./data/lnd_server_ltc:/data/lnd_server_ltc"
+    depends_on:
       - "bitcoind"
       - "litecoind"
-      - "lnd_server"
+      - "lnd_server_btc"
+      - "lnd_server_ltc"
 
   esdb:
     image: nloop/esdb
@@ -213,12 +283,12 @@ services:
       - EVENTSTORE_EXT_HTTP_PORT=2113
       - EVENTSTORE_HTTP_PORT=2113
     ports:
-      - "${ESDB_TCP_PORT}:1113"
-      - "${ESDB_HTTP_PORT}:2113"
+      - "1113:1113"
+      - "2113:2113"
     command: --enable-external-tcp --ext-ip=0.0.0.0 --int-ip=0.0.0.0 --ext-host-advertise-as=esdb --advertise-host-to-client-as=localhost
       #- --enable-external-tcp
       #- --enable-external-http
     volumes:
-      - "${DATA_PATH}/esdb:/etc/eventstore"
+      - "./data/esdb:/etc/eventstore"
 
 

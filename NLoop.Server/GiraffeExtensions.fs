@@ -1,13 +1,11 @@
 namespace NLoop.Server
 
+open System.Threading.Tasks
 open FsToolkit.ErrorHandling
-open System.Text.Json
 open DotNetLightning.Utils
 open Giraffe
-open LndClient
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
-open Microsoft.Extensions.Options
 open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
@@ -63,37 +61,44 @@ module CustomHandlers =
         return! error503 errorMsg next ctx
     }
 
-  open System.Threading.Tasks
   let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) (chanIdsSpecified: ShortChannelId[]) =
     fun (next: HttpFunc) ( ctx: HttpContext) -> task {
       let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
       let boltzCli = ctx.GetService<ISwapServerClient>()
-      let nodesT = boltzCli.GetNodes()
-      let! nodes = nodesT
-      let mutable maybeResult = None
+      let! nodes = boltzCli.GetNodes()
       let logger =
         ctx
           .GetLogger<_>()
-      for kv in nodes.Nodes do
-        if maybeResult.IsSome then () else
-        try
-          let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
+      match nodes.Nodes |> Seq.tryFind(fun kv -> kv.Key = offChainCryptoCode.ToString()) with
+      | None ->
+          return! errorBadRequest [$"counterparty server does not support {offChainCryptoCode.ToString()} as an off-chain currency"] next ctx
+      | Some kv ->
+        if chanIdsSpecified.Length = 0 then
+          let! r = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
           if (r.Value.Length > 0) then
-            maybeResult <- Some r
-        with
-        | ex ->
-          logger
-            .LogError $"{ex}"
-
-      if maybeResult.IsNone then
-        return! error503 $"Failed to find route to Boltz server. Make sure the channel is open and active" next ctx
-      else
-        let chanIds =
-          maybeResult.Value.Value
-          |> List.head
-          |> fun firstRoute -> firstRoute.ShortChannelId
-        logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
-        return! next ctx
+            let chanIds = r.Value.Head.ShortChannelId
+            logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
+            return! next ctx
+          else
+            return! error503 $"Failed to find route to Boltz server. Make sure you have open and active channel" next ctx
+        else
+          let! routes =
+            chanIdsSpecified
+            |> Array.map(fun chanId ->
+              cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney(), chanId)
+            )
+            |> Task.WhenAll
+          let foundRoutes = routes |> Array.filter(fun r -> r.Value.Length > 0)
+          if foundRoutes.Length > 0 then
+            let chanIds =
+              foundRoutes
+              |> Array.map(fun r -> r.Value.Head.ShortChannelId)
+              |> Array.toList
+            logger.LogDebug($"paying through the channel {chanIds} ({chanIds |> List.map(fun cId -> cId.ToUInt64())})")
+            return! next ctx
+          else
+            let msg = $"Failed to find route to Boltz server. Make sure the channels you specified is open and active"
+            return! error503 msg next ctx
     }
 
   let internal validateFeeLimitAgainstServerQuote(req: LoopOutRequest) =

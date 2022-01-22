@@ -66,14 +66,31 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
         obs
         |> Observable.subscribe(fun e ->
           match e.Data with
-          | Swap.Event.NewLoopOutAdded { LoopOut = { Id = swapId } }
-          | Swap.Event.NewLoopInAdded { LoopIn = { Id = swapId } } ->
+          | Swap.Event.NewLoopOutAdded { LoopOut = { Id = swapId; PairId = pairId } } ->
             // TODO: re-registering everything from start is not very performant nor scalable.
             // Ideally we should register only the one which is not finished.
             logger.LogDebug($"Registering new Swap {swapId}")
+            let group = {
+              Swap.Group.Category = Swap.Category.Out
+              Swap.Group.PairId = pairId
+            }
             try
               for l in listeners do
-                l.RegisterSwap(swapId)
+                l.RegisterSwap(swapId, group)
+            with
+            | ex ->
+              logger.LogError $"Failed to register swap (id: {swapId}, group: {group}) {ex}"
+          | Swap.Event.NewLoopInAdded { LoopIn = { Id = swapId; PairId = pairId} } ->
+            // TODO: re-registering everything from start is not very performant nor scalable.
+            // Ideally we should register only the one which is not finished.
+            logger.LogDebug($"Registering new Swap {swapId}")
+            let group = {
+              Swap.Group.Category = Swap.Category.In
+              Swap.Group.PairId = pairId
+            }
+            try
+              for l in listeners do
+                l.RegisterSwap(swapId, group)
             with
             | ex ->
               logger.LogError $"Failed to register swap (id: {swapId}) {ex}"

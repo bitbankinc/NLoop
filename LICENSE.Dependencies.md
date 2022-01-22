@@ -1,14 +1,14 @@
 ## Dependent Softwares and its licenses.
 
 
-| Name of the software | Its license | Usage in NLoop |
-| :---: | :---: | :---: |
-| [EventStoreDB][esdb] | [3-Clause BSD License][esdb-license] | To store everything including Swap state, secret keys, etc. |
-| [NBitcon][nbitcoin] | [MIT License][nbitcoin-license] | To use Bitcoin-related types |
-| [DotNetLightning][dnl] | MIT License | To use LN-related primitive types | 
-| [FsToolKit.ErrorHandling][fstoolkit] | [MIT license][fstoolkit-license] | For handling `Result`, `TaskResult` effectively |
-| [FSharp.Contro.AsyncSeq][asyncseq] | [Apache License 2.0](asyncseq-license)  | To use asynchronous sequences |
-| [FSharp.SystemTextJson][fsharp-stj] | [MIT license][fsharp-stj-license] | For Json (de)serialization of F# Specific types such as Records and Unions
+| Name of the software | Its license | Copyright | Usage in NLoop |
+| :---: | :---: | :---: | :---: |
+| [EventStoreDB][esdb] | [3-Clause BSD License][esdb-license] |  | To store everything including Swap state, secret keys, etc. |
+| [NBitcon][nbitcoin] | [MIT License][nbitcoin-license] |  | To use Bitcoin-related types |
+| [DotNetLightning][dnl] | MIT License |  | To use LN-related primitive types | 
+| [FsToolKit.ErrorHandling][fstoolkit] |  | [MIT license][fstoolkit-license] | For handling `Result`, `TaskResult` effectively |
+| [FSharp.Contro.AsyncSeq][asyncseq] |  | [Apache License 2.0](asyncseq-license)  | To use asynchronous sequences |
+| [FSharp.SystemTextJson][fsharp-stj] |  | [MIT license][fsharp-stj-license] | For Json (de)serialization of F# Specific types such as Records and Unions
 
 
 [esdb]:https://github.com/EventStore/EventStore

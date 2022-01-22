@@ -11,15 +11,15 @@ open Microsoft.Extensions.Logging
 open NLoop.Domain
 open NLoop.Server
 
-type RPCLongPollingBlockchainListener(opts: IOptions<NLoopOptions>,
+type RPCLongPollingBlockchainListener(
                                       loggerFactory,
                                       getBlockchainClient,
                                       getRewindLimit,
                                       getNetwork,
                                       actor,
                                       cc) =
-  inherit BlockchainListener(opts, loggerFactory, getBlockchainClient, cc, getNetwork, actor)
-  let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
+  inherit BlockchainListener(loggerFactory, getBlockchainClient, cc, getNetwork, actor)
+  let _logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
   let mutable _stoppingCts = null
 

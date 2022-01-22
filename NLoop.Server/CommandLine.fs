@@ -284,6 +284,20 @@ module NLoopServerCommandLine =
         a
       o
        // --- ---
+
+      let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.Exchanges).ToLowerInvariant()}",
+                               "The name of exchanges you want to use, nloop will use its public api to get the current\n" +
+                               "exchange rate in case of multi-asset swap. (e.g. for validating fee after adjusting the price)\n" +
+                               "The list of possible exchanges are those which supported by NuGetPackage named ExchangeSharp: " +
+                               "https://github.com/jjxtra/ExchangeSharp \n" +
+                               "you can specify this option multiple times. "+
+                               "In that case, the median value of all exchanges will be used.\n" +
+                               $"default is {NLoopOptions.Instance.Exchanges}")
+      o.Argument <-
+        let a = Argument<string[]>()
+        a.Arity <- ArgumentArity.ZeroOrMore
+        a
+      o
     ]
 
 

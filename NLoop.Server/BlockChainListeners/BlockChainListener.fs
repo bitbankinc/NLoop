@@ -62,7 +62,7 @@ module private BlockchainListenerHelpers =
           return failwith "unreachable!"
       }
     loop getBlock [] oldTip newTip
-type BlockchainListener(opts: IOptions<NLoopOptions>,
+type BlockchainListener(
                         loggerFactory: ILoggerFactory,
                         getBlockchainClient: GetBlockchainClient,
                         cc: SupportedCryptoCode,
@@ -76,7 +76,7 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
 
   let _currentTipLockObj = obj()
 
-  let swaps = ConcurrentDictionary<SwapId, _>()
+  let swaps = ConcurrentDictionary<SwapId, unit>()
 
   let newChainTipAsync newB = task {
       logger.LogDebug $"New blockchain tip {newB} for {cc}"
@@ -158,14 +158,8 @@ type BlockchainListener(opts: IOptions<NLoopOptions>,
         logger.LogError($"Error while handling block {ex}")
   }
 
-  interface ISwapEventListener with
-    member this.RegisterSwap(id: SwapId) =
-      if not <| swaps.TryAdd(id, ()) then
-        logger.LogError($"Failed to add swap id {id}")
-
-    member this.RemoveSwap(swapId) =
-      if swaps.TryRemove(swapId) |> fst then
-        ()
-      else
-        logger.LogError($"Failed to stop listening to {swapId}. This should never happen")
-
+  member this.RegisterSwap(id: SwapId) =
+    if not <| swaps.TryAdd(id, ()) then
+      logger.LogError($"Failed to add swap id {id}")
+  member this.RemoveSwap(swapId: SwapId) =
+    swaps.TryRemove(swapId) |> ignore

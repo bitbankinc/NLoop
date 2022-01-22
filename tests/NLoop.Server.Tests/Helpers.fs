@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.CommandLine.Parsing
 open System.Net
 open System.Net.Http
 open System.Net.Sockets
@@ -95,7 +96,7 @@ module Helpers =
 
 type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
-  QueryRoutes: PubKey -> LNMoney -> Route
+  QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
   SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
@@ -103,7 +104,7 @@ type DummyLnClientParameters = {
   with
   static member Default = {
     ListChannels = []
-    QueryRoutes = fun _ _ -> Route[]
+    QueryRoutes = fun _ _ _ -> Route[]
     GetInvoice = fun preimage amount expiry memo hint ->
       let tags: TaggedFields = {
         Fields = [ TaggedField.DescriptionTaggedField(memo) ]
@@ -222,8 +223,8 @@ type TestHelpers =
       member this.GetInfo(?ct: CancellationToken): Task<obj> =
         Task.FromResult(obj())
 
-      member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?ct: CancellationToken): Task<Route> =
-        parameters.QueryRoutes nodeId amount
+      member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?chanId: ShortChannelId, ?ct: CancellationToken): Task<Route> =
+        parameters.QueryRoutes nodeId amount chanId
         |> Task.FromResult
 
       member this.OpenChannel(request: LndOpenChannelRequest, ?ct: CancellationToken): Task<Result<OutPoint, LndOpenChannelError>> =
@@ -373,10 +374,6 @@ type TestHelpers =
 
   static member private ConfigureTestServices(services: IServiceCollection, ?configureServices: IServiceCollection -> unit) =
     let rc = NLoopServerCommandLine.getRootCommand()
-    let p =
-      CommandLineBuilder(rc)
-        .UseMiddleware(Main.useWebHostMiddleware)
-        .Build()
     services
       .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
       .AddHttpClient<BoltzClient>()
@@ -384,6 +381,7 @@ type TestHelpers =
         () // TODO: Inject Mock ?
         )
       |> ignore
+    let p = Parser()
     services
       .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
       .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())

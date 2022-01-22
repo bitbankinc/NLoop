@@ -172,7 +172,6 @@ type BlockchainListenerTest() =
           BlockchainListener(
             sp.GetRequiredService<_>(),
             sp.GetRequiredService<_>(),
-            sp.GetRequiredService<_>(),
             SupportedCryptoCode.BTC,
             sp.GetRequiredService<_>(),
             sp.GetRequiredService<_>()
@@ -183,7 +182,7 @@ type BlockchainListenerTest() =
     let listener = sp.GetService<BlockchainListener>()
     Assert.NotNull(listener)
     let dummySwap = SwapId (Guid.NewGuid().ToString())
-    (listener :> ISwapEventListener).RegisterSwap(dummySwap)
+    listener.RegisterSwap(dummySwap)
 
     task {
       for b in inputBlocks do

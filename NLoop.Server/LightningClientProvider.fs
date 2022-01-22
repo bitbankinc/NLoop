@@ -18,8 +18,8 @@ open NLoop.Domain
 
 type LightningClientProvider(logger: ILogger<LightningClientProvider>,
                              opts: IOptions<NLoopOptions>,
-                             getNetwork: GetNetwork,
-                             httpClientFactory: IHttpClientFactory) =
+                             getNetwork: GetNetwork
+                             ) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
   let settings = opts.Value.GetLndGrpcSettings()
   do

@@ -80,7 +80,11 @@ module private ServerAPITestHelpers =
     PeerConnectionString.EndPoint = IPEndPoint(IPAddress.Loopback, 6028)
     NodeId = peer1
   }
-  let node1Info = ("node1", { SwapDTO.NodeInfo.Uris = [|node1Uri|] ; SwapDTO.NodeInfo.NodeKey = peer1 })
+  let node1Info =
+    Map.ofSeq
+      [
+        (SupportedCryptoCode.BTC.ToString(),{ SwapDTO.NodeInfo.Uris = [|node1Uri|] ; SwapDTO.NodeInfo.NodeKey = peer1 })
+      ]
 
   let routeToNode1 =
     let hop1 = {
@@ -91,6 +95,14 @@ module private ServerAPITestHelpers =
     }
     (peer1 |> NodeId, Route([hop1]))
 
+  let routeToNode2 =
+    let hop1 = {
+      RouteHop.Fee = LNMoney.Satoshis(10L)
+      PubKey = peer2
+      ShortChannelId = chanId2
+      CLTVExpiryDelta = 20u
+    }
+    (peer2 |> NodeId, Route([hop1]))
   let testBlockchainInfo = {
     BlockChainInfo.Height = BlockHeight.Zero
     Progress = 1.0f
@@ -189,17 +201,18 @@ type ServerAPITest() =
 
   static member TestValidateLoopOutData =
     [
-      ("valid request", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("We have channel but that is different from the one specified in request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
       let inprogressBlockchainInfo = {
         testBlockchainInfo
           with
             Progress = 0.99f
       }
-      ("Blockchain is not synced yet", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
-      ("no connected nodes", [channel1], chan1Rec, Map.empty, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
-      ("no routes to the nodes", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
+      ("no connected nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no routes to the node", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
 
       let quote = {
         testLoopOutQuote
@@ -211,7 +224,7 @@ type ServerAPITest() =
           with
           MaxSwapFee = ValueSome <| Money.Satoshis(9999L)
       }
-      ("They required expensive swap fee in loop-out quote", [channel1], req, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("Swap fee specified by the server is too high"))
+      ("They required expensive swap fee in loop-out quote", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("Swap fee specified by the server is too high"))
       let quote = {
         testLoopOutQuote
           with
@@ -222,26 +235,26 @@ type ServerAPITest() =
           with
           MaxPrepayAmount = ValueSome <| Money.Satoshis(99L)
       }
-      ("prepay miner fee too expensive", [channel1], req, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
+      ("prepay miner fee too expensive", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
 
       let resp = {
         loopOutResp1
           with
           LockupAddress = "foo"
       }
-      ("Invalid address (bogus)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address (bogus)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Network.Main).ToString()
       }
-      ("Invalid address (network mismatch)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address (network mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(NBitcoin.Altcoins.Litecoin.Instance.Regtest).ToString()
       }
-      ("Invalid address (cryptocode mismatch)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
 
       let err = "Payment Hash in invoice does not match preimage hash we specified in request"
       let resp = {
@@ -249,19 +262,19 @@ type ServerAPITest() =
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice (swapAmount.Satoshi |> LNMoney.Satoshis |> Some) (PaymentPreimage.Create(Array.zeroCreate 32)) Network.RegTest
       }
-      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(err))
+      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(err))
       let resp = {
         loopOutResp1
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice ((swapAmount.Satoshi - 1L) |> LNMoney.Satoshis |> Some) preimage Network.RegTest
       }
-      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, None)
+      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, None)
       let resp = {
         loopOutResp1
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice None preimage Network.RegTest
       }
-      ("Valid payment request (no amount)", [channel1], chan1Rec, Map.ofSeq[node1Info], Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("Valid payment request (no amount)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ()
     ]
     |> Seq.map(fun (name,
@@ -303,7 +316,13 @@ type ServerAPITest() =
           DummyLnClientParameters.Default
             with
             ListChannels = channels
-            QueryRoutes = fun pk _amount -> routesToNodes.[pk |> NodeId]
+            QueryRoutes = fun pk _amount maybeChanIdSpecified ->
+              match routesToNodes.TryGetValue (pk |> NodeId), maybeChanIdSpecified with
+              | (true, v), None ->
+                v
+              | (true, v), Some chanId when not <| v.Value.IsEmpty && v.Value.Head.ShortChannelId = chanId ->
+                v
+              | _ -> Route([])
         }
         sp
           .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
@@ -340,7 +359,6 @@ type ServerAPITest() =
     Assert.Equal(expectedStatusCode, resp.StatusCode)
     let! msg = resp.Content.ReadAsStringAsync()
     expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
-    ()
   }
 
   static member TestValidateLoopInData =

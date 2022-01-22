@@ -3,6 +3,7 @@ namespace NLoop.Server.Services
 
 open System
 open System.Collections.Concurrent
+open System.Net.Http
 open System.Threading
 open System.Threading.Tasks
 open BoltzClient
@@ -24,33 +25,32 @@ type BoltzListener(swapServerClient: ISwapServerClient,
                    opts: IOptions<NLoopOptions>,
                    actor: ISwapActor
                    ) =
-  let statuses = ConcurrentDictionary<SwapId, Task<Transaction>>()
+  let statuses = ConcurrentDictionary<SwapId, Task<SwapId * Transaction>>()
 
   let mutable _executingTask = null
   let mutable _stoppingCts = null
 
 
   member this.ExecuteAsync(ct: CancellationToken) = unitTask {
+      do! Task.Yield()
       try
         while not <| ct.IsCancellationRequested do
-          do! Task.Yield() // Without this, startup process hangs up by Task.WaitAny.
           ct.ThrowIfCancellationRequested()
           let ts = statuses.Values |> Seq.cast<_> |> Array.ofSeq
-          let index = Task.WaitAny(ts, -1, ct)
-          if index <> -1 then
-            let! tx = ts.[index] :?> Task<Transaction>
-            logger.LogInformation $"boltz notified about their swap tx {tx.ToHex()}"
-            let swapId = statuses.Keys |> Seq.item index
-            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
-            match statuses.TryRemove(swapId) with
-            | true, _ -> ()
-            | false, _ ->
-              logger.LogWarning($"Failed to remove swap {swapId} this should never happen.")
+          if ts.Length = 0 then () else
+          let! txAny = Task.WhenAny(ts)
+          let! swapId, tx = txAny :?> Task<SwapId * Transaction>
+          logger.LogInformation $"boltz notified about their swap tx ({tx.ToHex()}) for swap {swapId}"
+          do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
+          statuses.TryRemove(swapId) |> ignore
       with
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
-      | ex ->
+      | :? HttpRequestException as ex ->
         logger.LogCritical($"Connection to Boltz server {opts.Value.BoltzUrl} failed!")
+        logger.LogError($"{ex}")
+        raise <| ex
+      | ex ->
         logger.LogError($"{ex}")
         raise <| ex
     }
@@ -82,8 +82,11 @@ type BoltzListener(swapServerClient: ISwapServerClient,
     }
 
   interface ISwapEventListener with
-    member this.RegisterSwap(swapId: SwapId) =
-      let t = swapServerClient.ListenToSwapTx(swapId)
+    member this.RegisterSwap(swapId: SwapId, _group) =
+      let t = task {
+        let! tx = swapServerClient.ListenToSwapTx(swapId)
+        return swapId, tx
+      }
       statuses.TryAdd(swapId, t)
       |> ignore
 
