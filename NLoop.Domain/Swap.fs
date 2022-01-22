@@ -835,6 +835,7 @@ module Swap =
         | NewBlock _, Out _
         | NewBlock _, In _ ->
           // ignore if it is the cryptocode that we are not interested in.
+          assert false
           return []
         | UnConfirmBlock(blockHash), Out(_heightBefore, _)
         | UnConfirmBlock(blockHash), In (_heightBefore, _) ->

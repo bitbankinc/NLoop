@@ -88,7 +88,12 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
     member this.CurrentHeight cc = this.CurrentHeight cc
 
   interface ISwapEventListener with
-    member this.RegisterSwap(swapId) =
-      listeners |> Seq.iter(fun l -> (l.Value :> ISwapEventListener).RegisterSwap(swapId))
+    member this.RegisterSwap(swapId, group) =
+      match listeners.TryGetValue group.OnChainAsset with
+      | false, _ ->
+        ()
+      | true, listener ->
+        listener.RegisterSwap(swapId)
     member this.RemoveSwap(swapId) =
-      listeners |> Seq.iter(fun l -> (l.Value :> ISwapEventListener).RemoveSwap(swapId))
+      for l in listeners.Values do
+        l.RemoveSwap(swapId)

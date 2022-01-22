@@ -42,10 +42,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
           let! swapId, tx = txAny :?> Task<SwapId * Transaction>
           logger.LogInformation $"boltz notified about their swap tx ({tx.ToHex()}) for swap {swapId}"
           do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
-          match statuses.TryRemove(swapId) with
-          | true, _ -> ()
-          | false, _ ->
-            logger.LogWarning($"Failed to remove swap {swapId} this should never happen.")
+          statuses.TryRemove(swapId) |> ignore
       with
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
@@ -85,7 +82,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
     }
 
   interface ISwapEventListener with
-    member this.RegisterSwap(swapId: SwapId) =
+    member this.RegisterSwap(swapId: SwapId, _group) =
       let t = task {
         let! tx = swapServerClient.ListenToSwapTx(swapId)
         return swapId, tx

@@ -28,8 +28,6 @@ type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Exchange
   let exchangeRates = ConcurrentDictionary<PairId * ExchangeName, ExchangeRate>()
   let mutable _executingTask = null
   let mutable _stoppingCts = null
-  do
-    logger.LogInformation "ExchangeRateProvider instantiated"
 
   let checkClientsSupported(ct: CancellationToken) = unitTask {
     let pairs =
@@ -67,7 +65,7 @@ type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Exchange
             raise <| ex
             return failwith "unreachable"
           // fallback to long-polling
-          | ex ->
+          | _ex ->
             let! c = ExchangeAPI.GetExchangeAPIAsync(exchange)
             let run() = unitTask {
               while not <| ct.IsCancellationRequested do
@@ -106,12 +104,30 @@ type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Exchange
     let struct (b, q) = pairId.Value
     if b = q then Some(1m) else
     // Take the median value of all exchanges
-    let values =
-      exchangeRates
-      |> Seq.choose(fun kv -> let p, _exchangeName = kv.Key in if p = pairId then Some (kv.Value) else None)
+    let rates =
+      let ratesStraight =
+        exchangeRates
+        |> Seq.choose(fun kv ->
+          let p, _exchangeName = kv.Key
+          if p = pairId then
+            Some kv.Value
+          else
+            None
+          )
+      let ratesReversed =
+        exchangeRates
+        |> Seq.choose(fun kv ->
+          let p, _exchangeName = kv.Key
+          if p.Reverse = pairId then
+            Some (1m / kv.Value)
+          else
+            None
+          )
+      seq [ratesStraight; ratesReversed]
+      |> Seq.concat
       |> Seq.toArray
-    if values.Length = 0 then None else
-    let a = values |> Array.sort
+    if rates.Length = 0 then None else
+    let a = rates |> Array.sort
     a.[a.Length / 2]
     |> Some
 
