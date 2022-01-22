@@ -74,7 +74,7 @@ module CustomHandlers =
           .GetLogger<_>()
       match nodes.Nodes |> Seq.tryFind(fun kv -> kv.Key = offChainCryptoCode.ToString()) with
       | None ->
-          return! errorBadRequest [$"server does not support {offChainCryptoCode.ToString()} as an off-chain currency"] next ctx
+          return! errorBadRequest [$"counterparty server does not support {offChainCryptoCode.ToString()} as an off-chain currency"] next ctx
       | Some kv ->
         let! r  = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
         if (r.Value.Length > 0) then
