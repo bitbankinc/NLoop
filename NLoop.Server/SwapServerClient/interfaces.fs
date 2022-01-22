@@ -130,7 +130,10 @@ module SwapDTO =
           (decimal ourInvoiceAmount.Satoshi) - (decimal this.ExpectedAmount.Satoshi / rate)
           |> Money.Satoshis
         if maxSwapServiceFee < swapServiceFee then
-          Error $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable fee ({maxSwapServiceFee.Satoshi} sats)"
+          let msg =
+            $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable fee ({maxSwapServiceFee.Satoshi} sats)\n" +
+            "You may want to specify higher max swap fee in your request."
+          Error msg
         else
           (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
 

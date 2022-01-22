@@ -1,6 +1,7 @@
 namespace NLoop.Server.Services
 
 open System
+open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading.Tasks

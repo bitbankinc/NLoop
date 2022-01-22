@@ -85,7 +85,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
             // Ideally we should register only the one which is not finished.
             logger.LogDebug($"Registering new Swap {swapId}")
             let group = {
-              Swap.Group.Category = Swap.Category.Out
+              Swap.Group.Category = Swap.Category.In
               Swap.Group.PairId = pairId
             }
             try
