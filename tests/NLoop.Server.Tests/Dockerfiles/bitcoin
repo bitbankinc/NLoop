@@ -5,24 +5,31 @@ RUN set -ex \
 	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr gosu gpg wget \
 	&& rm -rf /var/lib/apt/lists/*
 
-ENV BITCOIN_VERSION 0.20.1
-ENV BITCOIN_FILE bitcoin-0.20.1-x86_64-linux-gnu.tar.gz
-ENV BITCOIN_URL https://bitcoin.org/bin/bitcoin-core-0.20.1/
-ENV BITCOIN_SHA256 376194f06596ecfa40331167c39bc70c355f960280bd2a645fdbf18f66527397
-ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-0.20.1/SHA256SUMS.asc
-ENV BITCOIN_PGP_KEY 01EA5486DE18A882D4C2684590C8019E36C2E964
+ARG VERSION=22.0
+ARG ARCH=x86_64
+ARG BITCOIN_CORE_SIGNATURE=71A3B16735405025D447E8F274810B012346C9A6
 
-# install bitcoin binaries
-RUN set -ex \
-	&& cd /tmp \
-	&& wget -qO "$BITCOIN_FILE" "$BITCOIN_URL$BITCOIN_FILE" \
-	&& echo "$BITCOIN_SHA256 $BITCOIN_FILE" | sha256sum -c - \
-	&& gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys "$BITCOIN_PGP_KEY" \
-	&& wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
-	&& sha256sum --ignore-missing --check bitcoin.asc \
-	&& gpg --verify bitcoin.asc \
-	&& tar -xzvf "$BITCOIN_FILE" -C /usr/local --strip-components=1 --exclude=*-qt \
-	&& rm -rf /tmp/*
+# Don't use base image's bitcoin package for a few reasons:
+# 1. Would need to use ppa/latest repo for the latest release.
+# 2. Some package generates /etc/bitcoin.conf on install and that's dangerous to bake in with Docker Hub.
+# 3. Verifying pkg signature from main website should inspire confidence and reduce chance of surprises.
+# Instead fetch, verify, and extract to Docker image
+RUN cd /tmp \
+    && gpg --keyserver hkp://keyserver.ubuntu.com --recv-keys ${BITCOIN_CORE_SIGNATURE} \
+    && wget https://bitcoincore.org/bin/bitcoin-core-${VERSION}/SHA256SUMS.asc \
+        https://bitcoincore.org/bin/bitcoin-core-${VERSION}/SHA256SUMS \
+        https://bitcoincore.org/bin/bitcoin-core-${VERSION}/bitcoin-${VERSION}-${ARCH}-linux-gnu.tar.gz \
+    && gpg --verify --status-fd 1 --verify SHA256SUMS.asc SHA256SUMS 2>/dev/null | grep "^\[GNUPG:\] VALIDSIG.*${BITCOIN_CORE_SIGNATURE}\$" \
+    && sha256sum --ignore-missing --check SHA256SUMS \
+    && tar -xzvf bitcoin-${VERSION}-${ARCH}-linux-gnu.tar.gz -C /opt \
+    && ln -sv bitcoin-${VERSION} /opt/bitcoin \
+    && /opt/bitcoin/bin/test_bitcoin --show_progress \
+    && rm -v /opt/bitcoin/bin/test_bitcoin /opt/bitcoin/bin/bitcoin-qt
+
+FROM debian:stretch-slim as final
+
+COPY --from=build /opt/bitcoin/bin/bitcoind /usr/local/bin/bitcoind
+COPY --from=build /opt/bitcoin/bin/bitcoin-cli /usr/local/bin/bitcoin-cli
 
 # create data directory
 ENV BITCOIN_DATA /data
