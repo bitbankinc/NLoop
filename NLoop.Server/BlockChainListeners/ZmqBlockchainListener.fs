@@ -92,7 +92,7 @@ type ZmqBlockchainListener(
   let zmqClient = new ZmqClient(loggerFactory.CreateLogger<_>(), zmqAddress)
   let logger = loggerFactory.CreateLogger<ZmqBlockchainListener>()
 
-  let [<Literal>] ConnectionRetryCount = 5
+  let [<Literal>] ConnectionRetryCount = 4
   let ConnectionBackoffInitialTime = TimeSpan.FromSeconds(0.5)
 
   member this.CheckConnection(ct: CancellationToken) = task {
@@ -103,7 +103,7 @@ type ZmqBlockchainListener(
       let waitTime = (2. ** (float i)) * ConnectionBackoffInitialTime
       connectionEstablished <- zmqClient.IsConnected(waitTime)
       if not <| connectionEstablished then
-        logger.LogInformation($"Failed to establish zmq connection to {cryptoCode}. Retrying in {waitTime.Seconds} seconds...")
+        logger.LogInformation($"Failed to establish zmq connection to {zmqAddress} ({cryptoCode}). Retrying in {waitTime.Seconds} seconds...")
         i <- i + 1
     return connectionEstablished
   }

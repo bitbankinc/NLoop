@@ -94,7 +94,7 @@ module CustomHandlers =
               foundRoutes
               |> Array.map(fun r -> r.Value.Head.ShortChannelId)
               |> Array.toList
-            logger.LogDebug($"paying through the channel {chanIds} ({chanIds |> List.map(fun cId -> cId.ToUInt64())})")
+            logger.LogDebug($"paying through channels {chanIds} ({chanIds |> List.map(fun cId -> cId.ToUInt64())})")
             return! next ctx
           else
             let msg = $"Failed to find route to Boltz server. Make sure the channels you specified is open and active"

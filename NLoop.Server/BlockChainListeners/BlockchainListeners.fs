@@ -66,7 +66,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
             | true ->
               ()
             | false ->
-              logger.LogError($"Failed to add {nameof(RPCLongPollingBlockchainListener)} ({cc})")
+              logger.LogError($"Failed to add {nameof(ZmqBlockchainListener)} ({cc})")
           | _ ->
             logger.LogWarning($"Failed to connect to zmq in {cc}. " +
                               "falling back to RPC long-polling. This might impact the performance")

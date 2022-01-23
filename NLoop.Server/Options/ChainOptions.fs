@@ -21,7 +21,7 @@ type IChainOptions =
 
   // --- zeromq ---
   abstract member ZmqHost: string with get, set
-  abstract member ZmqPort: string with get, set
+  abstract member ZmqPort: int with get, set
   // --- ---
 
   // --- swap params ---
@@ -43,7 +43,7 @@ type IChainOptionExtensions =
 
   [<Extension>]
   static member TryGetZmqAddress(this: IChainOptions) =
-    if this.ZmqHost |> String.IsNullOrEmpty || this.ZmqPort |> isNull then
+    if this.ZmqHost |> String.IsNullOrEmpty || this.ZmqPort = 0 then
       None
     else
       Some $"tcp://{this.ZmqHost}:{this.ZmqPort}"
@@ -64,7 +64,7 @@ type BTCChainOptions(n: Network) =
 
     // --- zeromq ---
     member val ZmqHost = null with get, set
-    member val ZmqPort = null with get, set
+    member val ZmqPort = 0 with get, set
     // --- ---
 
     // --- swap params ---
@@ -89,7 +89,7 @@ type LTCChainOptions(n: Network) =
 
     // --- zeromq ---
     member val ZmqHost = null with get, set
-    member val ZmqPort = null with get, set
+    member val ZmqPort = 0 with get, set
     // --- ---
 
     // --- swap params ---
