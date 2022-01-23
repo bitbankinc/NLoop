@@ -26,6 +26,7 @@ services:
       - -txindex=1
       - -zmqpubrawblock=tcp://0.0.0.0:28332
       - -zmqpubrawtx=tcp://0.0.0.0:28333
+      - -zmqpubsequence=tcp://0.0.0.0:28335
       - -deprecatedrpc=signrawtransaction
       - -assumevalid=00000000000000000012d0c0982d818aa909d78e54525b10563c698d89997632
       - -maxmempool=10 # MB
@@ -35,10 +36,12 @@ services:
       - "39388" # P2P
       - "28332" # ZMQ
       - "28333" # ZMQ
+      - "28335" # ZMQ
     ports:
       - "43782:43782" # RPC
       - "28332:28332"
       - "28333:28333"
+      - "28335:28335"
     volumes:
       - "./data/bitcoin:/data"
   litecoind:
