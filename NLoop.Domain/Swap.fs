@@ -881,6 +881,7 @@ module Swap =
 
   let applyChanges
     (state: State) (event: Event) =
+    let updateCost = updateCost state event
     match event, state with
     | NewLoopOutAdded { Height = h; LoopOut = x }, HasNotStarted ->
       Out (h, x)
@@ -892,13 +893,13 @@ module Swap =
       Out(h, { x with SwapTxHeight = Some item.Height })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
-                 Cost = updateCost state event x.Cost })
+                 Cost = updateCost x.Cost })
     | OffchainOfferResolved _, Out(h, x) ->
       Out(h, { x with
                  IsOffchainOfferResolved = true
-                 Cost = updateCost state event x.Cost })
+                 Cost = updateCost x.Cost })
     | ClaimTxConfirmed { TxId = txid }, Out(h, x) ->
-      let cost = updateCost state event x.Cost
+      let cost = updateCost x.Cost
       Out(h, { x with IsClaimTxConfirmed = true; ClaimTransactionId = Some txid; Cost = cost })
     | NewLoopInAdded { Height = h; LoopIn = x }, HasNotStarted ->
       In (h, x)
@@ -908,11 +909,11 @@ module Swap =
     | RefundTxPublished { TxId = txid }, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
     | SuccessTxConfirmed _, In(h, x) ->
-      In(h, { x with Cost = updateCost state event x.Cost; IsOurSuccessTxConfirmed = true })
+      In(h, { x with Cost = updateCost x.Cost; IsOurSuccessTxConfirmed = true })
     | RefundTxConfirmed _, In(h, x) ->
-      In(h, { x with Cost = updateCost state event x.Cost })
+      In(h, { x with Cost = updateCost x.Cost })
     | OffChainPaymentReceived _, In(h, x) ->
-      In(h, { x with Cost = updateCost state event x.Cost; IsOffChainPaymentReceived = true })
+      In(h, { x with Cost = updateCost x.Cost; IsOffChainPaymentReceived = true })
 
     | FinishedByError { Error = err }, In(_, { Cost = cost })
     | FinishedByError { Error = err }, Out(_, { Cost = cost }) ->
