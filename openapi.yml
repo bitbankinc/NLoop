@@ -269,10 +269,17 @@ components:
       example:
         bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5
     ShortChannelId:
-      type: string
-      pattern: (\d{3})x(\d{3})x(\d{2})
-      description: See bolt 07
-      example: 140x10x1
+      oneOf:
+        - type: string
+          pattern: (\d{3})x(\d{3})x(\d{2})
+          description: >
+            pointer to the funding outpoint.
+            i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index
+            Of the funding tx of the channel.
+          example: 140x10x1
+        - type: integer
+          format: uint64
+          description: uint64 representation used in LND.
     swapId:
       type: string
 
