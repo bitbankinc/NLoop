@@ -7,7 +7,7 @@ services:
       context: ./Dockerfiles
       dockerfile: bitcoin
       args:
-        VERSION: 22.0
+        VERSION: "22.0"
       cache_from:
         - nloop/bitcoind:22.0
     image: nloop/bitcoind:22.0
@@ -52,7 +52,7 @@ services:
       context: ./Dockerfiles
       dockerfile: litecoin
       args:
-        LITECOIN_VERSION: 18.1
+        LITECOIN_VERSION: "18.1"
       cache_from:
         - nloop/litecoind:18.1
     image: nloop/litecoind:18.1
@@ -90,7 +90,7 @@ services:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: v0.14.1-beta
+        LND_VERSION: "v0.14.1-beta"
       cache_from:
         - nloop/lnd:v0.14.1-beta
     environment:
@@ -147,7 +147,7 @@ services:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: v0.14.1-beta
+        LND_VERSION: "v0.14.1-beta"
       cache_from:
         - nloop/lnd:v0.14.1-beta
     environment:
@@ -202,7 +202,7 @@ services:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: v0.14.1-beta
+        LND_VERSION: "v0.14.1-beta"
       cache_from:
         - nloop/lnd:v0.14.1-beta
     environment:
@@ -255,7 +255,7 @@ services:
     build:
       context: ./Dockerfiles
       args:
-        BOLTZ_VERSION: 490d2a605bd7dae20a795607d61f5c722ab42054
+        BOLTZ_VERSION: "490d2a605bd7dae20a795607d61f5c722ab42054"
       dockerfile: boltz
       cache_from:
         - nloop/boltz:490d2a605bd7dae20a795607d61f5c722ab42054
@@ -280,7 +280,7 @@ services:
     container_name: esdb
     build:
       args:
-        EVENTSTORE_VERSION: oss-v20.10.2
+        EVENTSTORE_VERSION: "oss-v20.10.2"
       context: ./Dockerfiles
       dockerfile: esdb
       cache_from:
