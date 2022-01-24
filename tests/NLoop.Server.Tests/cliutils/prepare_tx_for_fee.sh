@@ -2,6 +2,8 @@
 
 set -eu
 
+./docker-bitcoin-cli.sh createwallet cashcow 2> /dev/null
+
 # prepare coinbase txes.
 ./docker-bitcoin-cli.sh getnewaddress "" bech32 | xargs  -IXX ./docker-bitcoin-cli.sh generatetoaddress 120 XX
 ./docker-litecoin-cli.sh getnewaddress "" bech32 | xargs  -IXX ./docker-litecoin-cli.sh generatetoaddress 120 XX
