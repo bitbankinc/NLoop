@@ -8,7 +8,7 @@
       "url": "https://twitter.com/joemphilips",
       "email": "joemphilips@gmail.com"
     },
-    "version": "1.0"
+    "version": "0.1.0-beta"
   },
   "servers": [
     {
@@ -397,10 +397,19 @@
         "example": "bc1q2y7lfmmm7xhv2dpf0n0mx6w26zspmvszm3hvkc4yn785xp8dvs5shejlc5"
       },
       "ShortChannelId": {
-        "type": "string",
-        "description": "See bolt 07",
-        "pattern": "(\\d{3})x(\\d{3})x(\\d{2})",
-        "example": "140x10x1"
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "pointer to the funding outpoint. i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index Of the funding tx of the channel.\n",
+            "pattern": "(\\d{3})x(\\d{3})x(\\d{2})",
+            "example": "140x10x1"
+          },
+          {
+            "type": "integer",
+            "description": "uint64 representation used in LND.",
+            "format": "uint64"
+          }
+        ]
       },
       "swapId": {
         "type": "string"

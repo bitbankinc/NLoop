@@ -972,6 +972,32 @@ namespace NLoopClient
     
     }
     
+    /// <summary>pointer to the funding outpoint. i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index Of the funding tx of the channel.
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
+    public partial class ShortChannelId 
+    {
+        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
+    
+        [Newtonsoft.Json.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties; }
+            set { _additionalProperties = value; }
+        }
+    
+        public string ToJson() 
+        {
+            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
+        }
+    
+        public static ShortChannelId FromJson(string data)
+        {
+            return Newtonsoft.Json.JsonConvert.DeserializeObject<ShortChannelId>(data);
+        }
+    
+    }
+    
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class HopHint 
     {
@@ -981,7 +1007,6 @@ namespace NLoopClient
         public string Node_id { get; set; }
     
         [Newtonsoft.Json.JsonProperty("chan_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Chan_id { get; set; }
     
         [Newtonsoft.Json.JsonProperty("fee_base_msat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
@@ -1099,7 +1124,6 @@ namespace NLoopClient
     
         /// <summary>&lt; channel_id (pubkey) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
         /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC.</summary>
@@ -1409,7 +1433,6 @@ namespace NLoopClient
         /// <summary>channel id to apply the rule. pubkey and channel_id fields are mutually exclusive.
         /// </summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
         /// <summary>The type of the liquidity rule we apply. Currently, we only have Threshold
@@ -1569,7 +1592,6 @@ namespace NLoopClient
     public partial class Disqualified 
     {
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"(\d{3})x(\d{3})x(\d{2})")]
         public string Channel_id { get; set; }
     
         [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

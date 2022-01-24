@@ -145,9 +145,25 @@ type ScriptJsonConverter() =
 type ShortChannelIdJsonConverter() =
   inherit JsonConverter<ShortChannelId>()
   override this.Write(writer, value, _options) =
-    value.AsString |> writer.WriteStringValue
+    $"{value.AsString}:{value.ToUInt64()}"
+    |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString() |> ShortChannelId.ParseUnsafe
+    try
+      let s = reader.GetString()
+      match ShortChannelId.TryParse s with
+      | ResultUtils.Portability.Result.Ok c -> c
+      | _ ->
+        let parts = s.Split(":").[0]
+        match ShortChannelId.TryParse parts with
+        | ResultUtils.Portability.Result.Ok c -> c
+        | _ ->
+        s
+        |> uint64
+        |> ShortChannelId.FromUInt64
+    with
+    | ex ->
+      reader.GetUInt64()
+      |> ShortChannelId.FromUInt64
 
 type SwapIdJsonConverter() =
   inherit JsonConverter<SwapId>()
