@@ -4,7 +4,7 @@ env:
 on:
   push:
     branches:
-      - "add_openapi_html"
+      - "master"
 
 jobs:
   deploy_openapi_html:
@@ -19,7 +19,7 @@ jobs:
           node-version: '17'
       - name: "build openapi.yml"
         run:
-          npx redoc-cli bundle openapi.yml -o docs/openapi.html && touch docs/.nojekyll
+          npx redoc-cli bundle openapi.yml -o docs/index.html && touch docs/.nojekyll
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4.2.2
