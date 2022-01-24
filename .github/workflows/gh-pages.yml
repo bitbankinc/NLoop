@@ -1,0 +1,24 @@
+name: github-pages-openapi.yml
+on:
+  push:
+    branches:
+      - "master"
+
+jobs:
+  deploy_openapi_html:
+    concurrency: ci-${{ github.ref }} # Recommended if you intend to make multiple deployments in quick succession.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: action/checkout@v2
+      - name: build openapi.yml
+        uses: actions/setup-node@v2
+        with:
+          node-version: '17'
+        run:
+          npx redoc-cli bundle openapi.yml -o docs/openapi.html
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@4.2.2
+        with:
+          branch: gh-pages
+          folder: docs
