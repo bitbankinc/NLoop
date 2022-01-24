@@ -55,7 +55,7 @@ Check [README.md in test project](./tests/NLoop.Server.Tests/README.md)
 
 ## REST API
 
-Check out our [`openapi.yml`](./openapi.yml) for the REST API specification.
+Check out our [`openapi.yml`](./openapi.yml) (or [its rendered version](https://bitbankinc.github.io/NLoop/)) for the REST API specification.
 
 There is a one endpoint which is not included in the spec.
 That is a WebSocket endpoint for listening to events.
