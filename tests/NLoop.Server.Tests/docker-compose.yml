@@ -19,13 +19,13 @@ services:
     command:
       - -datadir=/data
       - -wallet=cashcow
+      - -prune=1
       - -regtest
       - -rpcauth=johndoe:75669617aaedb394397ddc7213bb1ea9$$3a50ee2f4dff3cd49475295124aa3d48a61d6ae3cdcb4d2cf199dac6551217f4
       - -rpcport=43782
       - -rpcbind=0.0.0.0:43782
       - -rpcallowip=0.0.0.0/0
       - -port=39388
-      - -txindex=1
       - -zmqpubrawblock=tcp://0.0.0.0:28332
       - -zmqpubrawtx=tcp://0.0.0.0:28333
       - -zmqpubsequence=tcp://0.0.0.0:28335
@@ -215,7 +215,7 @@ services:
     command:
       - lnd
       - --restlisten=0.0.0.0:32737
-      - --rpclisten=0.0.0.0:32778
+      - --rpclisten=0.0.0.0:32779
       - --litecoin.active
       - --litecoin.regtest
       - --litecoin.node=litecoind
@@ -239,11 +239,11 @@ services:
     expose:
       - "9735"
       - "32737"
-      - "32778"
+      - "32779"
     depends_on:
       - litecoind
     ports:
-      - "32738:32738"
+      - "32739:32739"
     volumes:
       - "./data/lnd_server_ltc:/data"
       - "./data/litecoin:/deps/.litecoin"

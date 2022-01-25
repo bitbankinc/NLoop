@@ -450,9 +450,9 @@ type ServerAPITest() =
               GetInvoice = fun _preimage _amt _ _ _ -> invoice
               SubscribeSingleInvoice = fun _hash -> asyncSeq {
                 {
-                  PaymentRequest = invoice
-                  AmountPayed = swapAmount
-                  InvoiceState = InvoiceStateEnum.Settled
+                  IncomingInvoiceSubscription.PaymentRequest = invoice
+                  AmountPayed = swapAmount.ToLNMoney()
+                  InvoiceState = IncomingInvoiceStateUnion.Settled
                 }
               }
           }

@@ -24,9 +24,9 @@ type LightningInvoiceProvider(lightningClientProvider: ILightningClientProvider)
       let invoiceEvent = client.SubscribeSingleInvoice(invoice.PaymentHash, ct)
       invoiceEvent
       |> AsyncSeq.iterAsync(fun s -> async {
-        if s.InvoiceState = InvoiceStateEnum.Settled then
-          do! onPaymentFinished(s.AmountPayed) |> Async.AwaitTask
-        elif s.InvoiceState = InvoiceStateEnum.Canceled then
+        if s.InvoiceState = IncomingInvoiceStateUnion.Settled then
+          do! onPaymentFinished(s.AmountPayed.ToMoney()) |> Async.AwaitTask
+        elif s.InvoiceState = IncomingInvoiceStateUnion.Canceled then
           do! onPaymentCancelled("Offchain invoice cancelled") |> Async.AwaitTask
         })
       |> Async.StartImmediate

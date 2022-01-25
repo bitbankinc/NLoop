@@ -5,4 +5,4 @@ docker-compose exec -T lnd_server_ltc lncli \
   --chain=litecoin \
   --tlscertpath=/data/tls.cert \
   --macaroonpath=/data/admin.macaroon \
-  --rpcserver=localhost:32778 $@  | sed 's/\t//g'
+  --rpcserver=localhost:32779 $@

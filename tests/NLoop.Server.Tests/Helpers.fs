@@ -42,7 +42,7 @@ open NLoop.Server.Projections
 module Helpers =
   let getLocalBoltzClient() =
     let httpClient =new  HttpClient()
-    httpClient.BaseAddress <- Uri("http://localhost:9001")
+    httpClient.BaseAddress <- Uri("http://localhost:6028")
     let b = BoltzClient(httpClient)
     b
 
@@ -54,30 +54,19 @@ module Helpers =
   let hex = HexEncoder()
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
-  let private checkConnection port =
-    let l = TcpListener(IPAddress.Loopback, port)
-    try
-      l.Start()
-      l.Stop()
-      Ok()
-    with
-    | :? SocketException -> Error("")
 
-  let findEmptyPortUInt(ports: uint []) =
-    let mutable i = 0
-    while i < ports.Length do
-      let mutable port = RandomUtils.GetUInt32() % 4000u
-      port <- port + 10000u
-      if (ports |> Seq.exists((=)port)) then () else
-      match checkConnection(int port) with
-      | Ok _ ->
-        ports.[i] <- port
-        i <- i + 1
-      | _ -> ()
-    ports
+  let getLightningClient path port =
+    let settings =
+      let tls = $"{path}/tls.cert" |> getCertFingerPrintHex |> Some
+      let macaroonPath = Some $"{path}/admin.macaroon"
+      LndGrpcSettings.Create($"https://localhost:{port}", None, macaroonPath, tls, true)
+      |> function | Ok s -> s | Error e -> failwith e
+    NLoopLndGrpcClient(settings, Network.RegTest)
+    :> INLoopLightningClient
 
-  let findEmptyPort(ports: int[]) =
-    findEmptyPortUInt(ports |> Array.map(uint))
+  let userLndClient = getLightningClient "../../../data/lnd_user" 32777
+  let serverBTCLndClient = getLightningClient "../../../data/lnd_server_btc" 32778
+  let serverLTCLndClient = getLightningClient "../../../data/lnd_server_ltc" 32779
 
   let walletAddress =
     new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
@@ -98,7 +87,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
+  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
@@ -235,7 +224,10 @@ type TestHelpers =
         Task.FromResult parameters.ListChannels
       member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
         failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<InvoiceSubscription> =
+
+      member this.TrackPayment(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<OutgoingInvoiceSubscription> =
+        failwith "todo"
+      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
         parameters.SubscribeSingleInvoice invoiceHash
       member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
         {

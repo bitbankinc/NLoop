@@ -287,21 +287,46 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         let req = SubscribeSingleInvoiceRequest()
         req.RHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
         invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
-      let translateEnum: Invoice.Types.InvoiceState -> InvoiceStateEnum =
-        function
-        | Invoice.Types.InvoiceState.Accepted -> InvoiceStateEnum.Accepted
-        | Invoice.Types.InvoiceState.Canceled -> InvoiceStateEnum.Canceled
-        | Invoice.Types.InvoiceState.Open -> InvoiceStateEnum.Open
-        | Invoice.Types.InvoiceState.Settled -> InvoiceStateEnum.Settled
-        | _ -> raise <| InvalidDataException("Enum out of range.")
+      let translateEnum status =
+        match status with
+        | Invoice.Types.InvoiceState.Open -> IncomingInvoiceStateUnion.Open
+        | Invoice.Types.InvoiceState.Accepted -> IncomingInvoiceStateUnion.Accepted
+        | Invoice.Types.InvoiceState.Canceled -> IncomingInvoiceStateUnion.Canceled
+        | Invoice.Types.InvoiceState.Settled -> IncomingInvoiceStateUnion.Settled
+        | _ -> IncomingInvoiceStateUnion.Unknown
 
       resp.ReadAllAsync(ct)
       |> AsyncSeq.ofAsyncEnum
       |> AsyncSeq.map(fun inv ->
-        { InvoiceSubscription.InvoiceState = inv.State |> translateEnum
-          AmountPayed = inv.AmtPaidSat |> Money.Satoshis
-          PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref }
-        )
+        { IncomingInvoiceSubscription.InvoiceState = inv.State |> translateEnum
+          IncomingInvoiceSubscription.PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+          IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
+        }
+      )
+
+    member this.TrackPayment(invoiceHash, ct) =
+      let ct = defaultArg ct CancellationToken.None
+      let resp =
+        let req = TrackPaymentRequest()
+        req.PaymentHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
+        routerClient.TrackPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
+      let translateEnum status =
+        match status with
+        | Payment.Types.PaymentStatus.InFlight ->  OutgoingInvoiceStateUnion.InFlight
+        | Payment.Types.PaymentStatus.Failed -> OutgoingInvoiceStateUnion.Failed
+        | Payment.Types.PaymentStatus.Succeeded -> OutgoingInvoiceStateUnion.Succeeded
+        | Payment.Types.PaymentStatus.Unknown
+        | _ -> OutgoingInvoiceStateUnion.Unknown
+
+      resp.ReadAllAsync(ct)
+      |> AsyncSeq.ofAsyncEnum
+      |> AsyncSeq.map(fun inv ->
+        { OutgoingInvoiceSubscription.InvoiceState = inv.Status |> translateEnum
+          Fee = inv.FeeMsat |> LNMoney.MilliSatoshis
+          PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+          AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
+        }
+      )
 
     member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
       task {
@@ -342,9 +367,12 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           req.PaymentRequest <- param.Invoice.ToString()
           req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
           req.FeeLimitSat <- param.MaxFee.Satoshi
+          req.MaxParts <-
+            let count = param.OutgoingChannelIds.Count()
+            if count = 0 then 1u else count |> uint
           req.TimeoutSeconds <-
             param.Invoice.Expiry.Second |> int
-          routerClient.SendPaymentV2(req).ResponseStream
+          routerClient.SendPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
 
         let f (s:Payment) =
           {

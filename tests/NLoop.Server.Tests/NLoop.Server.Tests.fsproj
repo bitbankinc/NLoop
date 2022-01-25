@@ -14,6 +14,7 @@
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="LiquidityTest.fs" />
     <Compile Include="AutoLoopManagerTests.fs" />
+    <Compile Include="LightningClientTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />
     <Compile Include="BlockListenerTest.fs" />
     <Compile Include="Program.fs" />

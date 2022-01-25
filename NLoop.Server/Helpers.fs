@@ -2,11 +2,17 @@ namespace NLoop.Server
 
 open NBitcoin
 open NLoop.Domain
+open NLoop.Domain.Utils
 
 type [<Measure>] percent
 type [<Measure>] ppm
 
 type ComparableOutpoint = uint256 * uint
+
+type RecordedEventPub<'T> = {
+  RecordedEvent: RecordedEvent<'T>
+  IsCatchUp: bool
+}
 
 exception NLoopConfigException of msg: string
 

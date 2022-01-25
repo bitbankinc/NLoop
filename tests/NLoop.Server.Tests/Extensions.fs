@@ -27,23 +27,35 @@ open NLoopClient
 
 [<AutoOpen>]
 module private Helpers =
-  let getLndRestSettings(path) port =
-    let lndMacaroonPath = Path.Join(path, "chain", "bitcoin", "regtest", "admin.macaroon")
+  let getLndRestSettings path port =
+    let lndMacaroonPath = Path.Join(path, "admin.macaroon")
     let lndCertThumbprint =
       getCertFingerPrintHex(Path.Join(path, "tls.cert"))
     let uri = $"https://localhost:%d{port}"
     (uri, lndCertThumbprint, lndMacaroonPath)
-  let getLNDClient (path) port  =
-    let (uri, lndCertThumbprint, lndMacaroonPath) = getLndRestSettings path port
+  let getLNDClient path port  =
+    let uri, lndCertThumbprint, lndMacaroonPath = getLndRestSettings path port
     let settings =
       LndGrpcSettings.Create(uri, None, Some <| lndMacaroonPath,lndCertThumbprint |> Some,  false)
       |> function | Ok x -> x | Error e -> failwith e
     NLoopLndGrpcClient(settings, Network.RegTest)
 
-type Clients = {
+  let bitcoinPort = 43782
+  let litecoinPort = 43783
+  let lndUserRestPort = 32736
+  let lndServerRestPort = 32737
+  let boltzServerPort = 6028
+  let esdbTcpPort = 1113
+  let esdbHttpPort = 2113
+  let dataPath =
+    Directory.GetCurrentDirectory()
+    |> fun d -> Path.Join(d, "..", "..", "..", "data")
+  let lndUserPath = Path.Join(dataPath, "lnd_user")
+
+type ExternalClients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
-  User: {| Lnd: INLoopLightningClient; NLoop: NLoopClient; NLoopServer: TestServer |}
+  User: {| Lnd: INLoopLightningClient; |}
   Server: {| Lnd: INLoopLightningClient; Boltz: BoltzClient |}
 }
   with
@@ -62,7 +74,6 @@ type Clients = {
     let! _ = this.Bitcoin.GenerateToAddressAsync(3, btcAddr)
     ()
   }
-
   member this.AssureConnected() = task {
     let! nodes = this.Server.Boltz.GetNodesAsync()
     let connString =
@@ -113,25 +124,27 @@ type Clients = {
     }
     loop(0)
 
-  static member Create() =
-    let bitcoinPort = 43782
-    let litecoinPort = 43783
-    let lndUserRestPort = 32736
-    let lndServerRestPort = 32737
-    let boltzServerPort = 6028
-    let esdbTcpPort = 1113
-    let esdbHttpPort = 2113
-
-    let dataPath =
-      Directory.GetCurrentDirectory()
-      |> fun d -> Path.Join(d, "..", "..", "..", "data")
-    let lndUserPath = Path.Join(dataPath, "lnd_user")
+type Clients = {
+  NLoopClient: NLoopClient
+  External: ExternalClients
+  NLoopServer: TestServer
+}
+  with
+  static member GetExternalServiceClients() =
     let userLnd = getLNDClient lndUserPath lndUserRestPort
     let serverLnd = getLNDClient(Path.Join(dataPath, "lnd_server")) lndServerRestPort
     let serverBoltz =
       let httpClient = new HttpClient()
       httpClient.BaseAddress <- Uri($"http://localhsot:{boltzServerPort}")
       BoltzClient(httpClient)
+    {
+      ExternalClients.Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
+      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
+      User = {| Lnd = userLnd |}
+      Server = {| Lnd = serverLnd; Boltz = serverBoltz |}
+    }
+  static member Create() =
+    let externalClients = Clients.GetExternalServiceClients()
     let testHost =
       WebHostBuilder()
         .UseContentRoot(dataPath)
@@ -142,9 +155,9 @@ type Clients = {
           let lnClientProvider =
             { new ILightningClientProvider with
                 member this.TryGetClient(cryptoCode) =
-                  userLnd :> INLoopLightningClient |> Some
+                  externalClients.User.Lnd |> Some
                 member this.GetAllClients() =
-                  seq [userLnd]
+                  seq [externalClients.User.Lnd]
             }
           let cliOpts: ParseResult =
             let p =
@@ -174,7 +187,7 @@ type Clients = {
           s
             .AddSingleton<BindingContext>(BindingContext(cliOpts))
             .AddSingleton<ILightningClientProvider>(lnClientProvider)
-            .AddSingleton<BoltzClient>(serverBoltz)
+            .AddSingleton<BoltzClient>(externalClients.Server.Boltz)
           |> ignore
         )
         |> fun b -> new TestServer(b)
@@ -184,8 +197,7 @@ type Clients = {
       nloopClient.BaseUrl <- httpClient.BaseAddress.ToString()
       nloopClient
     {
-      Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
-      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
-      User = {| Lnd = userLnd; NLoop = userNLoop; NLoopServer = testHost |}
-      Server = {| Lnd = serverLnd; Boltz= serverBoltz |}
+      External = externalClients
+      NLoopClient = userNLoop
+      NLoopServer = testHost
     }

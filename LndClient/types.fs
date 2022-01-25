@@ -139,18 +139,33 @@ type PaymentResult = {
   Fee: LNMoney
 }
 
-type InvoiceStateEnum =
-   | Open = 0
-   | Settled = 1
-   | Canceled = 2
-   | Accepted = 3
+[<Struct>]
+type OutgoingInvoiceStateUnion =
+   | InFlight
+   | Failed
+   | Succeeded
+   | Unknown
 
-type InvoiceSubscription = {
+type OutgoingInvoiceSubscription = {
   PaymentRequest: PaymentRequest
-  InvoiceState: InvoiceStateEnum
-  AmountPayed: Money
+  InvoiceState: OutgoingInvoiceStateUnion
+  Fee: LNMoney
+  AmountPayed: LNMoney
 }
 
+[<Struct>]
+type IncomingInvoiceStateUnion =
+  | Open
+  | Accepted
+  | Canceled
+  | Settled
+  | Unknown
+
+type IncomingInvoiceSubscription = {
+  PaymentRequest: PaymentRequest
+  InvoiceState: IncomingInvoiceStateUnion
+  AmountPayed: LNMoney
+}
 type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse>
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
@@ -171,13 +186,21 @@ type INLoopLightningClient =
     ?ct: CancellationToken
      -> Task<PaymentRequest>
   abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
-  abstract member GetInfo: ?ct: CancellationToken  -> Task<obj>
-  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken -> Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken -> Task<Result<OutPoint, LndOpenChannelError>>
+  abstract member GetInfo: ?ct: CancellationToken -> Task<obj>
+  abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken ->
+    Task<Route>
+  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken ->
+    Task<Result<OutPoint, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
   abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
-  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken -> AsyncSeq<InvoiceSubscription>
+
+  /// Subscription for incoming payment. used for loopin
+  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken ->
+    AsyncSeq<IncomingInvoiceSubscription>
+  /// Subscription for outgoing payment. used for loopout
+  abstract member TrackPayment: invoiceHash: PaymentHash * ?c: CancellationToken ->
+    AsyncSeq<OutgoingInvoiceSubscription>
   abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
 
 open FSharp.Control.Tasks

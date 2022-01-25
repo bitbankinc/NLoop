@@ -169,17 +169,18 @@ type NLoopExtensions() =
 
       if (not <| test) then
         this
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
-          )
+          .AddHostedService<SwapProcessManager>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
@@ -189,5 +190,3 @@ type NLoopExtensions() =
           )
           .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
           |> ignore
-      this
-        .AddHostedService<SwapProcessManager>()
