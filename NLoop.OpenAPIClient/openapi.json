@@ -354,10 +354,7 @@
       "pairId": {
         "type": "string",
         "description": "Pair of cryptoCode",
-        "example": [
-          "BTC/LTC",
-          "BTC/BTC"
-        ]
+        "example": "BTC/LTC"
       },
       "PubKey": {
         "type": "string",
@@ -444,31 +441,32 @@
           "amount"
         ],
         "properties": {
-          "channel_id": {
+          "channel_ids": {
             "type": "array",
-            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "description": "< ShortChannelId for the one you want to get inbound liquidity for. default is the one it has least.",
             "nullable": true,
             "items": {
               "$ref": "#/components/schemas/ShortChannelId"
             }
           },
           "pair_id": {
-            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
+            "description": "< currency pair to perform the swap. Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC",
             "nullable": true,
             "$ref": "#/components/schemas/pairId"
           },
           "address": {
+            "description": "< An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)",
             "nullable": true,
             "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
           },
           "amount": {
             "type": "integer",
-            "description": "< amount in satoshi.",
+            "description": "< amount you wish to swap out (in satoshi).",
             "format": "int64"
           },
           "swap_tx_conf_requirement": {
             "type": "integer",
-            "description": "< The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on lightning loop. Default number depends on the asset type.",
+            "description": "< The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on the lightning loop. Default number depends on the asset type. Set this to 0 for zero-conf swap.",
             "nullable": true
           },
           "label": {
@@ -478,7 +476,7 @@
           },
           "max_swap_routing_fee": {
             "type": "integer",
-            "description": "< Maximum off-chain fee in sat that may be paied for swap payment to the server. This limit is applied during path finding.",
+            "description": "< Maximum off-chain fee in sats that may be paied for swap payment to the server. This limit is applied during path finding.",
             "format": "int64",
             "nullable": true
           },
@@ -490,13 +488,13 @@
           },
           "max_swap_fee": {
             "type": "integer",
-            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
+            "description": "< Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
             "format": "int64",
             "nullable": true
           },
           "max_prepay_amount": {
             "type": "integer",
-            "description": "< Maximum amount of the (loop-out) swap fee that may be charged as a prepayment",
+            "description": "< The server might request a pre-payment for the sake of DoS-prevention, this is a maximum amount (in sats) of the off-chain prepayment.",
             "format": "int64",
             "nullable": true
           },
@@ -508,7 +506,7 @@
           },
           "sweep_conf_target": {
             "type": "integer",
-            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "description": "< Confimation target (block num) for estimating the fee for the sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx) Default depends on the asset type, but usually it is not that short. If you want to finish swap asap and get your on-chain funds quickly, You probably want to set a short time.",
             "format": "int32",
             "nullable": true
           }
@@ -522,7 +520,7 @@
         "properties": {
           "amount": {
             "type": "integer",
-            "description": "< amount in satoshi.",
+            "description": "< amount you wish to swap in to the channel (in satoshi).",
             "format": "int64"
           },
           "last_hop": {
@@ -531,12 +529,12 @@
             "$ref": "#/components/schemas/PubKey"
           },
           "channel_id": {
-            "description": "< channel_id (pubkey) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.",
+            "description": "< channel_id (ShortChannelId) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.",
             "nullable": true,
             "$ref": "#/components/schemas/ShortChannelId"
           },
           "pair_id": {
-            "description": "< currency pair to perform the swap. Default is BTC/BTC.",
+            "description": "< currency pair to perform the swap. Default is BTC/BTC. In case of loopin, Base/Quote is OffChain/OnChain So say if you want to use LTC as an on-chain asset, you must specify BTC/LTC",
             "nullable": true,
             "$ref": "#/components/schemas/pairId"
           },
@@ -553,13 +551,13 @@
           },
           "max_swap_fee": {
             "type": "integer",
-            "description": "< Maximum we are willing to pay the server for the swap. This value is not disclosed in the swap initiation call, but if the server asks for a higher fee, we abort the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
+            "description": "< Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.",
             "format": "int64",
             "nullable": true
           },
           "htlc_conf_target": {
             "type": "integer",
-            "description": "< Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)",
+            "description": "< Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx) If the server is not willing to accept zero-conf swap, Making this value smaller might make a swap fast.",
             "format": "int32",
             "nullable": true
           }

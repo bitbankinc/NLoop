@@ -104,21 +104,24 @@ type LoopOutLimits = {
     if noShowFees > successFees then noShowFees else successFees
 
 type LoopOutRequest = {
-  [<JsonPropertyName "channel_id">]
+  [<JsonPropertyName "channel_ids">]
   ChannelIds: ShortChannelId array voption
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
+  /// (or, for assets those which does not support off-chain,
+  /// it asks a blockchain daemon's (e.g. litecoind) wallet for new address.)
   [<JsonPropertyName "address">]
-  Address: BitcoinAddress option
+  Address: string option
 
   [<JsonPropertyName "pair_id">]
   PairId: PairId option
 
   [<JsonPropertyName "amount">]
   Amount: Money
-  /// Confirmation target before we make an offer. zero-conf by default.
+
   [<JsonPropertyName "swap_tx_conf_requirement">]
   SwapTxConfRequirement: int option
+
   Label: string option
 
   [<JsonPropertyName "max_swap_routing_fee">]
@@ -199,8 +202,14 @@ type LoopOutRequest = {
     let struct (onChain, _offChain) = this.PairIdValue.Value
     let checkAddressHasCorrectNetwork =
       match this.Address with
-      | Some a when a.Network <> getNetwork(onChain) ->
-        Error $"on-chain address must be the one for network: {getNetwork(onChain)}. It was {a.Network}"
+      | Some a ->
+        let n = getNetwork(onChain)
+        try
+          BitcoinAddress.Create(a, n) |> ignore
+          Ok()
+        with
+        | ex ->
+          Error $"Invalid address, on-chain address must be the one for network: {getNetwork(onChain)}. It was {n}: {ex}"
       | _ ->
         Ok()
 
