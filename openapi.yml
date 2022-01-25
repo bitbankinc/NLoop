@@ -318,22 +318,29 @@ components:
           $ref: '#/components/schemas/pairId'
           description: <
             currency pair to perform the swap.
-            Default is BTC/BTC.
+            Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain
+            So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC
           nullable: true
         address:
           $ref: '#/components/schemas/BitcoinAddressNonMalleable'
           nullable: true
+          description: <
+            An external address that to which the counterparty will pay.
+            i.e. final destination of our on-chain funds.
+            default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet
+            (e.g. in case of LTC, litecoind's wallet-controlled address.)
         amount:
           type: integer
           format: int64
           description: <
-            amount in satoshi.
+            amount you wish to swap out (in satoshi).
         swap_tx_conf_requirement:
           type: integer
           description: <
             The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer.
-            a.k.a. `htlc_confirmations` on lightning loop.
+            a.k.a. `htlc_confirmations` on the lightning loop.
             Default number depends on the asset type.
+            Set this to 0 for zero-conf swap.
           nullable: true
         label:
           type: string
@@ -344,7 +351,7 @@ components:
           type: integer
           format: int64
           description: <
-            Maximum off-chain fee in sat that may be paied for swap payment to the
+            Maximum off-chain fee in sats that may be paied for swap payment to the
             server. This limit is applied during path finding.
           nullable: true
         max_prepay_routing_fee:
@@ -358,9 +365,8 @@ components:
           type: integer
           format: int64
           description: <
-            Maximum we are willing to pay the server for the swap.
-            This value is not disclosed in the swap initiation call,
-            but if the server asks for a higher fee, we abort the swap.
+            Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment).
+            If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
             We use a rate information from external exchanges to calculate the value.
           nullable: true
@@ -368,7 +374,8 @@ components:
           type: integer
           format: int64
           description: <
-            Maximum amount of the (loop-out) swap fee that may be charged as a prepayment
+            The server might request a pre-payment for the sake of DoS-prevention,
+            this is a maximum amount (in sats) of the off-chain prepayment.
           nullable: true
         max_miner_fee:
           type: integer
@@ -388,7 +395,11 @@ components:
           type: integer
           format: int32
           description: <
-            Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
+            Confimation target (block num) for estimating the fee for the
+            sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx)
+            Default depends on the asset type, but usually it is not that short.
+            If you want to finish swap asap and get your on-chain funds quickly,
+            You probably want to set a short time.
           nullable: true
       required:
         - amount
@@ -399,7 +410,7 @@ components:
           type: integer
           format: int64
           description: <
-            amount in satoshi.
+            amount you wish to swap in to the channel (in satoshi).
         last_hop:
           $ref: '#/components/schemas/PubKey'
           description: <
@@ -409,15 +420,15 @@ components:
         channel_id:
           $ref: '#/components/schemas/ShortChannelId'
           description: <
-            channel_id (pubkey) to perform the swap for.
+            channel_id (ShortChannelId) to perform the swap for.
             If you specify both last_hop and channel_id, channel_id is be prioritized.
           nullable: true
-            
         pair_id:
           $ref: '#/components/schemas/pairId'
           description: <
             currency pair to perform the swap.
-            Default is BTC/BTC.
+            Default is BTC/BTC. In case of loopin, Base/Quote is OffChain/OnChain
+            So say if you want to use LTC as an on-chain asset, you must specify BTC/LTC
           nullable: true
         label:
           type: string
@@ -435,9 +446,8 @@ components:
           type: integer
           format: int64
           description: <
-            Maximum we are willing to pay the server for the swap.
-            This value is not disclosed in the swap initiation call, but if the server asks for a higher fee,
-            we abort the swap.
+            Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment).
+            If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
             We use a rate information from external exchanges to calculate the value.
           nullable: true
@@ -445,7 +455,9 @@ components:
           type: integer
           format: int32
           description: <
-            Confimation target for sweeping the HTLC (a.k.a. swaptx, lockuptx)
+            Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx)
+            If the server is not willing to accept zero-conf swap, Making this value smaller might
+            make a swap fast.
           nullable: true
       required:
         - amount
