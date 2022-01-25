@@ -24,6 +24,8 @@ docker-compose up -d # Start dependencies such as bitcoind and lnd
 ./docker-litecoin-cli.sh getblockchaininfo
 ./docker-lncli-user.sh getinfo
 ./docker-lncli-server_ltc.sh getinfo
+# Some interactive operation (e.g. lnd's `payinvoice`) may require you to execute it with the pseudo-tty.
+# in that case do not use these scripts and run `docker-compose exec` without `-T` option
 
 cd ../..
 # --- ---
