@@ -1,8 +1,8 @@
 #!/bin/bash
 
-docker-compose exec lnd_server_ltc lncli \
+docker-compose exec -T lnd_server_ltc lncli \
   --network=regtest \
   --chain=litecoin \
   --tlscertpath=/data/tls.cert \
   --macaroonpath=/data/admin.macaroon \
-  --rpcserver=localhost:32778 $@
+  --rpcserver=localhost:32778 $@  | sed 's/\t//g'
