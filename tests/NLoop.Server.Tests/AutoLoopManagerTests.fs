@@ -384,7 +384,7 @@ type AutoLoopManagerTests() =
     let chan1Swap = {
       LoopOutRequest.Amount = amt
       ChannelIds = [|chanId1|] |> ValueSome
-      Address = Helpers.lndAddress |> Some
+      Address = Helpers.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -400,7 +400,7 @@ type AutoLoopManagerTests() =
     let chan2Swap = {
       LoopOutRequest.Amount = amt
       ChannelIds = [|chanId2|] |> ValueSome
-      Address = Helpers.lndAddress |> Some
+      Address = Helpers.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -525,7 +525,7 @@ type AutoLoopManagerTests() =
     let peerSwap = {
       LoopOutRequest.Amount = peerAmount
       ChannelIds = [| chanId2; chanId3 |] |> ValueSome
-      Address = Helpers.lndAddress |> Some
+      Address = Helpers.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -749,7 +749,7 @@ type AutoLoopManagerTests() =
     let loopOutSwap = {
       LoopOutRequest.Amount = loopOutAmount
       ChannelIds = [|chanId1|] |> ValueSome
-      Address = Some(Helpers.lndAddress)
+      Address = Some(Helpers.lndAddress.ToString())
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some

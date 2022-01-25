@@ -108,8 +108,9 @@ type LoopOutRequest = {
   ChannelIds: ShortChannelId array voption
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
+  /// (or, for assets those which does not support off-chain, it uses a )
   [<JsonPropertyName "address">]
-  Address: BitcoinAddress option
+  Address: string option
 
   [<JsonPropertyName "pair_id">]
   PairId: PairId option
@@ -199,8 +200,14 @@ type LoopOutRequest = {
     let struct (onChain, _offChain) = this.PairIdValue.Value
     let checkAddressHasCorrectNetwork =
       match this.Address with
-      | Some a when a.Network <> getNetwork(onChain) ->
-        Error $"on-chain address must be the one for network: {getNetwork(onChain)}. It was {a.Network}"
+      | Some a ->
+        let n = getNetwork(onChain)
+        try
+          BitcoinAddress.Create(a, n) |> ignore
+          Ok()
+        with
+        | ex ->
+          Error $"Invalid address, on-chain address must be the one for network: {getNetwork(onChain)}. It was {n}: {ex}"
       | _ ->
         Ok()
 

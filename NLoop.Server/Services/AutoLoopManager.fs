@@ -713,7 +713,7 @@ type SwapBuilder = {
         let! addr =
             if autoloop then
               cfg.GetDepositAddress.Invoke(pairId.Base)
-              |> TaskResult.map Some
+              |> TaskResult.map (fun a -> Some(a.ToString()))
               |> TaskResult.mapError(SwapDisqualifiedReason.FailedToGetOnChainAddress)
             else
               TaskResult.retn None

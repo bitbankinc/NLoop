@@ -201,9 +201,9 @@ type SwapExecutor(
         ct.ThrowIfCancellationRequested()
         let! addr =
           match req.Address with
-          | Some a -> Task.FromResult (Ok a)
+          | Some a -> TaskResult.retn a
           | None ->
-            getAddress.Invoke(pairId.Base)
+            getAddress.Invoke(pairId.Base) |> TaskResult.map(fun a -> a.ToString())
         ct.ThrowIfCancellationRequested()
         let loopOut = {
           LoopOut.Id = outResponse.Id |> SwapId
@@ -212,7 +212,7 @@ type SwapExecutor(
           Preimage = preimage
           RedeemScript = outResponse.RedeemScript
           Invoice = outResponse.Invoice.ToString()
-          ClaimAddress = addr.ToString()
+          ClaimAddress = addr
           OnChainAmount = outResponse.OnchainAmount
           TimeoutBlockHeight = outResponse.TimeoutBlockHeight
           SwapTxHex = None

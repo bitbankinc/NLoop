@@ -16,6 +16,7 @@ open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
 open NBitcoin
+open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NLoop.Server
 open NLoop.Server.SwapServerClient
@@ -237,24 +238,46 @@ type ServerAPITest() =
       }
       ("prepay miner fee too expensive", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
 
+      let req = {
+        chan1Rec
+          with
+          Address = Some "foo"
+      }
+      ("invalid request from the user (bogus)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      let req = {
+        chan1Rec
+          with
+          Address =
+            new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
+            |> fun k -> k.PubKey.WitHash.GetAddress(Network.Main).ToString() |> Some
+      }
+      ("invalid request from the user (network mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      let req = {
+        chan1Rec
+          with
+          Address =
+            new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
+            |> fun k -> k.PubKey.WitHash.GetAddress(Litecoin.Instance.Regtest).ToString() |> Some
+      }
+      ("invalid request from the user (cryptocode mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let resp = {
         loopOutResp1
           with
           LockupAddress = "foo"
       }
-      ("Invalid address (bogus)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (bogus)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Network.Main).ToString()
       }
-      ("Invalid address (network mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (network mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(NBitcoin.Altcoins.Litecoin.Instance.Regtest).ToString()
       }
-      ("Invalid address (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
 
       let err = "Payment Hash in invoice does not match preimage hash we specified in request"
       let resp = {
