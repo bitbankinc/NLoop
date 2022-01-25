@@ -306,7 +306,7 @@ components:
     LoopOutRequest:
       type: object
       properties:
-        channel_id:
+        channel_ids:
           type: array
           items:
             $ref: '#/components/schemas/ShortChannelId'

@@ -1043,8 +1043,8 @@ namespace NLoopClient
     public partial class LoopOutRequest 
     {
         /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
-        [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public System.Collections.Generic.ICollection<string> Channel_id { get; set; }
+        [Newtonsoft.Json.JsonProperty("channel_ids", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public System.Collections.Generic.ICollection<string> Channel_ids { get; set; }
     
         /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]

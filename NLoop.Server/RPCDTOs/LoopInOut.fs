@@ -104,7 +104,7 @@ type LoopOutLimits = {
     if noShowFees > successFees then noShowFees else successFees
 
 type LoopOutRequest = {
-  [<JsonPropertyName "channel_id">]
+  [<JsonPropertyName "channel_ids">]
   ChannelIds: ShortChannelId array voption
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
