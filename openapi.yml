@@ -234,8 +234,7 @@ components:
       description: Pair of cryptoCode
       type: string
       example:
-        - "BTC/LTC"
-        - "BTC/BTC"
+        "BTC/LTC"
     # ----- Primitive objects
     PubKey:
       description: Bitcoin public key in 33 bytes length
@@ -311,7 +310,7 @@ components:
           items:
             $ref: '#/components/schemas/ShortChannelId'
           description: <
-            ShortChannelId for the one you want to get inbound liquidity.
+            ShortChannelId for the one you want to get inbound liquidity for.
             default is the one it has least.
           nullable: true
         pair_id:

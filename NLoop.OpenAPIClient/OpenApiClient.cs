@@ -1042,7 +1042,7 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
-        /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.</summary>
+        /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity for. default is the one it has least.</summary>
         [Newtonsoft.Json.JsonProperty("channel_ids", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public System.Collections.Generic.ICollection<string> Channel_ids { get; set; }
     

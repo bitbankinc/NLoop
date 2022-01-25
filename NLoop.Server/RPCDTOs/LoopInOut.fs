@@ -108,7 +108,8 @@ type LoopOutRequest = {
   ChannelIds: ShortChannelId array voption
   /// The address which counterparty must pay.
   /// If none, the daemon should query a new one from LND.
-  /// (or, for assets those which does not support off-chain, it uses a )
+  /// (or, for assets those which does not support off-chain,
+  /// it asks a blockchain daemon's (e.g. litecoind) wallet for new address.)
   [<JsonPropertyName "address">]
   Address: string option
 
@@ -117,9 +118,10 @@ type LoopOutRequest = {
 
   [<JsonPropertyName "amount">]
   Amount: Money
-  /// Confirmation target before we make an offer. zero-conf by default.
+
   [<JsonPropertyName "swap_tx_conf_requirement">]
   SwapTxConfRequirement: int option
+
   Label: string option
 
   [<JsonPropertyName "max_swap_routing_fee">]

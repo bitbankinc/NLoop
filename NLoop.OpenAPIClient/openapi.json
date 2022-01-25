@@ -354,10 +354,7 @@
       "pairId": {
         "type": "string",
         "description": "Pair of cryptoCode",
-        "example": [
-          "BTC/LTC",
-          "BTC/BTC"
-        ]
+        "example": "BTC/LTC"
       },
       "PubKey": {
         "type": "string",
@@ -446,7 +443,7 @@
         "properties": {
           "channel_ids": {
             "type": "array",
-            "description": "< ShortChannelId for the one you want to get inbound liquidity. default is the one it has least.",
+            "description": "< ShortChannelId for the one you want to get inbound liquidity for. default is the one it has least.",
             "nullable": true,
             "items": {
               "$ref": "#/components/schemas/ShortChannelId"
