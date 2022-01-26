@@ -286,7 +286,10 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       let resp =
         let req = SubscribeSingleInvoiceRequest()
         req.RHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
-        invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
+        // we need to set longer deadline for grpc itself too.
+        // since we don't know how long it will take, we just set null.
+        let deadline = Nullable()
+        invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, deadline, ct).ResponseStream
       let translateEnum status =
         match status with
         | Invoice.Types.InvoiceState.Open -> IncomingInvoiceStateUnion.Open
@@ -309,7 +312,10 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       let resp =
         let req = TrackPaymentRequest()
         req.PaymentHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
-        routerClient.TrackPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
+        // we need to set longer deadline for grpc itself too.
+        // since we don't know how long it will take, we just set null.
+        let deadline = Nullable()
+        routerClient.TrackPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
       let translateEnum status =
         match status with
         | Payment.Types.PaymentStatus.InFlight ->  OutgoingInvoiceStateUnion.InFlight
@@ -359,7 +365,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           |> Seq.toList
       }
 
-    member this.Offer(param, ct) =
+    member this.SendPayment(param, ct) =
       let ct = defaultArg ct CancellationToken.None
       task {
         let responseStream =
@@ -371,7 +377,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
             let count = param.OutgoingChannelIds.Count()
             if count = 0 then 1u else count |> uint
           req.TimeoutSeconds <-
-            param.Invoice.Expiry.Second |> int
+            param.TimeoutSeconds
           routerClient.SendPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
 
         let f (s:Payment) =
@@ -406,6 +412,48 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         | ex ->
           return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
       }
+
+    member this.Offer(param, ct) = task {
+      let ct = defaultArg ct CancellationToken.None
+      let responseStream =
+        let req = SendPaymentRequest()
+        req.PaymentRequest <- param.Invoice.ToString()
+        req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
+        req.FeeLimitSat <- param.MaxFee.Satoshi
+        req.MaxParts <-
+          let count = param.OutgoingChannelIds.Count()
+          if count = 0 then 1u else count |> uint
+        req.TimeoutSeconds <-
+          param.TimeoutSeconds
+        // we need to set longer deadline for grpc itself too.
+        let deadline = Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(float param.TimeoutSeconds + 10.))
+        routerClient.SendPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
+      try
+        let mutable result = None
+        let mutable hasNotFinished = true
+        while result.IsNone && hasNotFinished do
+          ct.ThrowIfCancellationRequested()
+          let! notFinished = responseStream.MoveNext(ct)
+          hasNotFinished <- notFinished
+          if hasNotFinished then
+            let status = responseStream.Current
+            match status.Status with
+            | Payment.Types.PaymentStatus.Succeeded
+            | Payment.Types.PaymentStatus.InFlight ->
+              result <- Some(Ok())
+              ()
+            | Payment.Types.PaymentStatus.Failed ->
+              result <- $"payment failed. reason: {status.FailureReason}" |> Error |> Some
+            | s ->
+              result <- $"Unexpected payment state: {s}" |> Error |> Some
+        return
+          match result with
+          | Some r -> r
+          | None -> Error $"Empty result in offer"
+      with
+      | ex ->
+        return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
+    }
     member this.OpenChannel(request, ct) =
       task {
         let ct = defaultArg ct CancellationToken.None
@@ -453,8 +501,11 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     member this.SubscribeChannelChange(ct) =
       let ct = defaultArg ct CancellationToken.None
       let req = ChannelEventSubscription()
+      // we need to set longer deadline for grpc itself too.
+      // since we don't know how long it will take, we just set null.
+      let deadline = Nullable()
       client
-        .SubscribeChannelEvents(req, this.DefaultHeaders, this.Deadline, ct)
+        .SubscribeChannelEvents(req, this.DefaultHeaders, deadline, ct)
         .ResponseStream
         .ReadAllAsync(ct)
       |> AsyncSeq.ofAsyncEnum

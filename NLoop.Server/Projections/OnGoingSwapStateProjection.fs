@@ -72,7 +72,6 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
           if catchupCompletion.Task.IsCompleted then
             log.LogInformation($"Publishing RecordedEvent {r.Data.Type} for {r.StreamId}")
             log.LogTrace($"Publishing RecordedEvent {r}")
-            eventAggregator.Publish<RecordedEventPub<Swap.Event>> { IsCatchUp = false; RecordedEvent = r }
             eventAggregator.Publish<RecordedEvent<Swap.Event>> r
           else
             ongoingEvents.Add r
@@ -84,7 +83,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     for r in ongoingEvents |> Seq.rev do
       log.LogInformation($"Catchup: Publishing RecordedEvent {r.Data.Type} for {r.StreamId}")
       log.LogTrace($"Catchup: Publishing RecordedEvent {r}")
-      eventAggregator.Publish<RecordedEventPub<Swap.Event>> { IsCatchUp = true; RecordedEvent = r }
+      eventAggregator.Publish<RecordedEvent<Swap.Event>> r
     ongoingEvents.Clear()
     log.LogDebug "Catchup completed"
     catchupCompletion.SetResult()

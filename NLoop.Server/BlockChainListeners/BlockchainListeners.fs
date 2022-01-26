@@ -20,6 +20,9 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
   let listeners = ConcurrentDictionary<SupportedCryptoCode, BlockchainListener>()
   let logger = loggerFactory.CreateLogger<BlockchainListeners>()
 
+  let swapIdToRegisterOnStartup = ConcurrentBag()
+  let startupCompletion = TaskCompletionSource()
+
   member this.CurrentHeight (cc: SupportedCryptoCode) =
     listeners.[cc].CurrentTip.Height
 
@@ -76,6 +79,12 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         opts.Value.OnChainCrypto
         |> Seq.map roundTrip
         |> Task.WhenAll
+
+      for swapId, group in swapIdToRegisterOnStartup do
+        (this :> ISwapEventListener).RegisterSwap(swapId, group)
+      swapIdToRegisterOnStartup.Clear()
+
+      startupCompletion.SetResult()
     }
 
     member this.StopAsync(cancellationToken) = unitTask {
@@ -86,11 +95,16 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
 
   interface ISwapEventListener with
     member this.RegisterSwap(swapId, group) =
-      match listeners.TryGetValue group.OnChainAsset with
-      | false, _ ->
-        ()
-      | true, listener ->
-        listener.RegisterSwap(swapId)
+      if startupCompletion.Task.IsCompleted |> not then
+        swapIdToRegisterOnStartup.Add(swapId, group)
+      else
+        match listeners.TryGetValue group.OnChainAsset with
+        | false, _ ->
+          logger.LogError $"No listeners found for onchain-asset {group.OnChainAsset}"
+          ()
+        | true, listener ->
+          logger.LogDebug $"registering {swapId}"
+          listener.RegisterSwap(swapId)
     member this.RemoveSwap(swapId) =
       for l in listeners.Values do
         l.RemoveSwap(swapId)

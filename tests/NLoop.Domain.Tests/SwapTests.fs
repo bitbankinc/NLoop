@@ -231,7 +231,7 @@ type SwapDomainTests() =
       Swap.Deps.UTXOProvider = mockUtxoProvider [||]
       Swap.Deps.GetChangeAddress = getChangeAddress
       Swap.Deps.GetRefundAddress = getChangeAddress
-      Swap.Deps.PayInvoice =
+      Swap.Deps.PayInvoiceImmediate =
         fun _n _parameters req ->
           let r = {
             Swap.PayInvoiceResult.AmountPayed = req.AmountValue |> Option.defaultValue(LNMoney.Satoshis(100000L))

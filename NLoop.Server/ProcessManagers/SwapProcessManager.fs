@@ -26,44 +26,13 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
                         swapState: IOnGoingSwapStateProjection,
                         listeners: IEnumerable<ISwapEventListener>) =
   let obs =
-    eventAggregator.GetObservable<RecordedEventPub<Swap.Event>>()
+    eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()
 
   let subscriptions = ResizeArray()
   let handleError swapId msg  = unitTask {
     logger.LogError($"{msg}")
     do! actor.Execute(swapId, Swap.Command.MarkAsErrored msg, nameof(SwapProcessManager))
   }
-
-  let rec makeAnOffer =
-    fun ({
-      Swap.OffChainOfferStartedData.SwapId = swapId;
-      Swap.OffChainOfferStartedData.PairId = pairId
-      Swap.OffChainOfferStartedData.Params = paymentParams
-    } as data)->
-        task {
-          try
-            let invoice = data.Invoice |> ResultUtils.Result.deref
-            let! pr =
-              let req = {
-                SendPaymentRequest.Invoice = invoice
-                MaxFee = paymentParams.MaxFee
-                OutgoingChannelIds = paymentParams.OutgoingChannelIds
-              }
-              lightningClientProvider.GetClient(pairId.Quote).Offer(req).ConfigureAwait(false)
-
-            match pr with
-            | Ok s ->
-              let cmd =
-                { Swap.PayInvoiceResult.RoutingFee = s.Fee; Swap.PayInvoiceResult.AmountPayed = invoice.AmountValue.Value }
-                |> Swap.Command.OffChainOfferResolve
-              do! actor.Execute(swapId, cmd, $"{nameof(SwapProcessManager)}-{nameof(makeAnOffer)}")
-            | Error e ->
-              do! handleError swapId e
-          with
-          | ex ->
-              do! handleError swapId (ex.ToString())
-        }
-
   let rec waitToOfferGetsResolved (swapId, quote, invoice: PaymentRequest) =
     asyncSeq {
       try
@@ -101,7 +70,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
     logger.LogInformation $"starting {nameof(SwapProcessManager)}..."
     let subsc1 =
       obs
-      |> Observable.choose(fun { RecordedEvent = e; IsCatchUp = isCatchup } ->
+      |> Observable.choose(fun e ->
         match e.Data with
         | Swap.Event.OffChainOfferStarted d ->
           // we want to execute the side effect again only when we haven't finished before.
@@ -113,23 +82,14 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           if isOffchainOfferResolved then
             None
           else
-            if not <| isCatchup then
-              // make an offer as usual
-              Some (Choice1Of2 d)
-            else
-              // very rare case that we restarted before counterparty finishes payment.
-              Some (Choice2Of2 (d.SwapId, d.PairId.Quote, d.Invoice |> ResultUtils.Result.deref))
+            Some (d.SwapId, d.PairId.Quote, d.Invoice |> ResultUtils.Result.deref)
         | _ -> None)
-      |> Observable.flatmapTask(
-        function
-          | Choice1Of2 data -> makeAnOffer data
-          | Choice2Of2 data -> waitToOfferGetsResolved data
-        )
+      |> Observable.flatmapTask(waitToOfferGetsResolved)
       |> Observable.subscribe id
     subscriptions.Add subsc1
     let subsc2 =
       obs
-      |> Observable.subscribe(fun { RecordedEvent = e } ->
+      |> Observable.subscribe(fun e ->
         match e.Data with
         | Swap.Event.NewLoopOutAdded { LoopOut = { Id = swapId; PairId = pairId } } ->
           logger.LogDebug($"Registering new Swap {swapId}")
@@ -144,8 +104,6 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
           | ex ->
             logger.LogError $"Failed to register swap (id: {swapId}, group: {group}) {ex}"
         | Swap.Event.NewLoopInAdded { LoopIn = { Id = swapId; PairId = pairId} } ->
-          // TODO: re-registering everything from start is not very performant nor scalable.
-          // Ideally we should register only the one which is not finished.
           logger.LogDebug($"Registering new Swap {swapId}")
           let group = {
             Swap.Group.Category = Swap.Category.In

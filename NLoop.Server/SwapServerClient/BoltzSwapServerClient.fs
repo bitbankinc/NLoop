@@ -180,9 +180,9 @@ type BoltzSwapServerClient(b: BoltzClient) =
         while result |> isNull && not <| ct.IsCancellationRequested do
           let! resp = b.GetSwapStatusAsync(swapId.Value, ct).ConfigureAwait(false)
           match resp.Transaction with
-          | Some {Tx = tx} ->
+          | Some {Tx = tx} when resp.SwapStatus = SwapStatusType.TxMempool ->
              result <- tx
-          | None ->
+          | _ ->
             ()
           do! Task.Delay 6000
         if result |> isNull then

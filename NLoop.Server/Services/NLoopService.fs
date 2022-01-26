@@ -168,10 +168,16 @@ type NLoopExtensions() =
         |> ignore
 
       if (not <| test) then
+        // it is important here that Startup order is
+        // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
+        // Since otherwise on startup it fails to re-register swaps on blockchain listeners.
         this
           .AddHostedService<SwapProcessManager>()
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
@@ -181,9 +187,6 @@ type NLoopExtensions() =
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManagers>() :> IHostedService

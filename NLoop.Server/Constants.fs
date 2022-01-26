@@ -54,6 +54,9 @@ module Constants =
   /// Minimum confirmation target user can specify.
   let [<Literal>] MinConfTarget = 2u
 
+  /// The longest time we wait before giving up making an off-chain offer.
+  let [<Literal>] OfferTimeoutSeconds = 15
+
   let [<Literal>] MaxRateDiffDelta: int64<ppm> = 100L<ppm>
 
   let [<Literal>] BlockchainLongPollingIntervalSec = 8.

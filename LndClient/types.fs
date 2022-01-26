@@ -132,12 +132,19 @@ type SendPaymentRequest = {
   Invoice: PaymentRequest
   MaxFee: Money
   OutgoingChannelIds: ShortChannelId[]
+
+  /// Timeout before giving up making an offer.
+  /// note: This is not a timeout for payment to complete, that is defined by invoice parameters.
+  /// If that does not click to you, see: https://docs.lightning.engineering/lightning-network-tools/lnd/payments
+  TimeoutSeconds: int
 }
 
 type PaymentResult = {
   PaymentPreimage: Primitives.PaymentPreimage
   Fee: LNMoney
 }
+
+type OfferResult = unit
 
 [<Struct>]
 type OutgoingInvoiceStateUnion =
@@ -185,7 +192,12 @@ type INLoopLightningClient =
     memo: string *
     ?ct: CancellationToken
      -> Task<PaymentRequest>
-  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
+
+  /// Send payment to the counterparty, expect to finish immediately.
+  abstract member SendPayment: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
+
+  /// Make an payment offer to the counterparty, do not expect immediately.
+  abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<OfferResult, string>>
   abstract member GetInfo: ?ct: CancellationToken -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken ->
     Task<Route>

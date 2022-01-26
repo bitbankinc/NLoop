@@ -203,7 +203,7 @@ type TestHelpers =
                              ?ct: CancellationToken): Task<PaymentRequest> =
         parameters.GetInvoice paymentPreimage amount expiry memo routeHint
         |> Task.FromResult
-      member this.Offer(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
+      member this.SendPayment(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
         TaskResult.retn {
           PaymentPreimage = PaymentPreimage.Create(Array.zeroCreate 32)
           Fee = req.MaxFee.ToLNMoney()

@@ -121,6 +121,8 @@ module Swap =
     AmountPayed: LNMoney
   }
 
+  type OfferResult = unit
+
   type Command =
     // -- loop out --
     /// Start new loop out (i.e. reverse-submarine swap)
@@ -162,7 +164,7 @@ module Swap =
     SwapId: SwapId
     PairId: PairId
     InvoiceStr: string
-    Params: PayInvoiceParams
+    OfferResult: OfferResult
   }
     with
     member this.Invoice = this.InvoiceStr |> PaymentRequest.Parse
@@ -402,6 +404,7 @@ module Swap =
     | CounterPartyReturnedBogusResponse of BogusResponseError
     | BogusSwapTransaction of msg: string
     | APIMisuseError of string
+    | OfferFailed of string
     with
     member this.Msg =
       "SwapError: " +
@@ -417,6 +420,9 @@ module Swap =
 
   let inline private expectInputError(r: Result<_, string>) =
     r |> Result.mapError InputError
+
+  let inline private expectOfferError(r: Result<_, string>) =
+    r |> Result.mapError OfferFailed
 
   let private jsonConverterOpts =
     let o = JsonSerializerOptions()
@@ -457,7 +463,10 @@ module Swap =
     GetRefundAddress: GetAddress
     /// Used for pre-paying miner fee.
     /// This is not for paying an actual swap invoice, since we cannot expect it to get finished immediately.
-    PayInvoice: Network -> PayInvoiceParams -> PaymentRequest -> Task<PayInvoiceResult>
+    PayInvoiceImmediate: SupportedCryptoCode -> PayInvoiceParams -> PaymentRequest -> Task<PayInvoiceResult>
+
+    /// Make an off-chain offer. Do not wait until it completes.
+    Offer: SupportedCryptoCode ->  PayInvoiceParams -> PaymentRequest -> Task<Result<OfferResult, string>>
   }
 
   // ----- aggregates ----
@@ -521,7 +530,8 @@ module Swap =
 
   let executeCommand
     ({ Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-       GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress; PayInvoice = payInvoice
+       GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress
+       PayInvoiceImmediate = payInvoiceImmediate; Offer = offer;
      } as deps)
     (s: State)
     (cmd: ESCommand<Command>): Task<Result<ESEvent<Event> list, _>> =
@@ -552,8 +562,8 @@ module Swap =
               loopOut.PrepayInvoice
               |> PaymentRequest.Parse
               |> ResultUtils.Result.deref
-              |> payInvoice
-                   loopOut.QuoteAssetNetwork
+              |> payInvoiceImmediate
+                   loopOut.PairId.Quote
                    prepaymentParams
               |> Task.map(fun p -> { PrepayFinishedData.Result = p } |> PrePayFinished |> List.singleton |> Ok)
             else
@@ -563,19 +573,22 @@ module Swap =
             |> PaymentRequest.Parse
             |> ResultUtils.Result.deref
           do! invoice.AmountValue |> function | Some _ -> Ok() | None -> Error(Error.InputError($"invoice has no amount specified"))
+          let! result =
+            let offerParams = {
+              PayInvoiceParams.MaxFee = p.MaxPrepayFee
+              OutgoingChannelIds = loopOut.OutgoingChanIds
+            }
+            offer loopOut.PairId.Quote offerParams invoice
+            |> Task.map expectOfferError
           return
             [
               NewLoopOutAdded { Height = h; LoopOut = loopOut }
               yield! additionalEvents
-              let paymentParams = {
-                MaxFee = p.MaxPrepayFee
-                OutgoingChannelIds = loopOut.OutgoingChanIds
-              }
               OffChainOfferStarted {
                 SwapId = loopOut.Id
                 PairId = loopOut.PairId
                 InvoiceStr = invoice.ToString()
-                Params = paymentParams
+                OfferResult = result
               }
             ]
             |> enhance

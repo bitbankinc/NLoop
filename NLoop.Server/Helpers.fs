@@ -9,11 +9,6 @@ type [<Measure>] ppm
 
 type ComparableOutpoint = uint256 * uint
 
-type RecordedEventPub<'T> = {
-  RecordedEvent: RecordedEvent<'T>
-  IsCatchUp: bool
-}
-
 exception NLoopConfigException of msg: string
 
 [<AutoOpen>]
