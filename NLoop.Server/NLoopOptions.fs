@@ -71,8 +71,6 @@ type NLoopOptions() =
 
   // -- --
 
-  member val AcceptZeroConf = false with get, set
-
   member val OnChainCrypto = [|SupportedCryptoCode.BTC; SupportedCryptoCode.LTC|] with get, set
   member val OffChainCrypto = [|SupportedCryptoCode.BTC|] with get, set
 

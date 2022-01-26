@@ -91,7 +91,7 @@ module NLoopServerCommandLine =
     seq [
       let networks = Network.GetNetworks()
       let networkNames = networks |> Seq.map(fun n -> n.Name.ToLowerInvariant()) |> Array.ofSeq
-      let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default: mainnet)")
+      let o = System.CommandLine.Option<string>([| "-n"; "--network" |], $"Set the network from ({String.Join(',', networkNames)}) (default:{NLoopOptions.Instance.Network.ToLowerInvariant()})")
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ExactlyOne
@@ -158,7 +158,7 @@ module NLoopServerCommandLine =
 
        let o = Option<string>(b (nameof(opts.ZmqHost)),
                               $"optional: zeromq host address. It will fallback to rpc long-polling " +
-                              $"if it is unavailable (default: {opts.ZmqHost})")
+                              $"if it is unavailable.")
        o.Argument <-
          let a = Argument<string>()
          a.Arity <- ArgumentArity.ZeroOrOne
@@ -188,14 +188,6 @@ module NLoopServerCommandLine =
       o.Argument <-
         let a = Argument<string[]>()
         a.Arity <- ArgumentArity.ZeroOrMore
-        a
-      o
-
-
-      let o = Option<bool>($"--{nameof(NLoopOptions.Instance.AcceptZeroConf).ToLowerInvariant()}", "Whether we want to accept zero conf")
-      o.Argument <-
-        let a = Argument<bool>()
-        a.Arity <- ArgumentArity.ZeroOrOne
         a
       o
 
@@ -236,7 +228,7 @@ module NLoopServerCommandLine =
       o
 
       let o = Option<string>([|$"--{nameof(NLoopOptions.Instance.EventStoreUrl).ToLowerInvariant()}";|],
-                             $"Url for your eventstore db. (default: {NLoopOptions.Instance.EventStoreUrl})")
+                             $"Url for your eventstoredb. (default: {NLoopOptions.Instance.EventStoreUrl})")
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ZeroOrOne
@@ -287,12 +279,12 @@ module NLoopServerCommandLine =
 
       let o = Option<string[]>($"--{nameof(NLoopOptions.Instance.Exchanges).ToLowerInvariant()}",
                                "The name of exchanges you want to use, nloop will use its public api to get the current\n" +
-                               "exchange rate in case of multi-asset swap. (e.g. for validating fee after adjusting the price)\n" +
+                               "exchange rate in case of multi-asset swap. (e.g. for validating fees after adjusting the price)\n" +
                                "The list of possible exchanges are those which supported by NuGetPackage named ExchangeSharp: " +
                                "https://github.com/jjxtra/ExchangeSharp \n" +
                                "you can specify this option multiple times. "+
                                "In that case, the median value of all exchanges will be used.\n" +
-                               $"default is {NLoopOptions.Instance.Exchanges}")
+                               $"default is {NLoopOptions.Instance.Exchanges |> List.ofSeq}")
       o.Argument <-
         let a = Argument<string[]>()
         a.Arity <- ArgumentArity.ZeroOrMore
