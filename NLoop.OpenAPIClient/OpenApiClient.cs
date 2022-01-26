@@ -57,13 +57,13 @@ namespace NLoopClient
         /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode? offchainAsset = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode? offchainAsset = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
     
         /// <param name="cancellationToken">A cancellation token that can be used by other objects or threads to receive notice of cancellation.</param>
         /// <returns>OK</returns>
@@ -616,14 +616,14 @@ namespace NLoopClient
         /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<SuggestSwapsResponse> SuggestAsync(CryptoCode? offchainAsset = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (offchainAsset == null)
-                throw new System.ArgumentNullException("offchainAsset");
-    
             var urlBuilder_ = new System.Text.StringBuilder();
             urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/auto/suggest/{offchainAsset}");
-            urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
+            if (offchainAsset != null)
+                urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
+            else
+                urlBuilder_.Replace("/{offchainAsset}", string.Empty);
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -688,14 +688,14 @@ namespace NLoopClient
         /// <param name="offchainAsset">off-chain asset which autoloop manager will take care. default is BTC.</param>
         /// <returns>OK</returns>
         /// <exception cref="ApiException">A server side error occurred.</exception>
-        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode offchainAsset, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+        public async System.Threading.Tasks.Task<LiquidityParameters> ParamsAsync(CryptoCode? offchainAsset = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
         {
-            if (offchainAsset == null)
-                throw new System.ArgumentNullException("offchainAsset");
-    
             var urlBuilder_ = new System.Text.StringBuilder();
             urlBuilder_.Append(BaseUrl != null ? BaseUrl.TrimEnd('/') : "").Append("/v1/liquidity/params/{offchainAsset}");
-            urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
+            if (offchainAsset != null)
+                urlBuilder_.Replace("{offchainAsset}", System.Uri.EscapeDataString(ConvertToString(offchainAsset, System.Globalization.CultureInfo.InvariantCulture)));
+            else
+                urlBuilder_.Replace("/{offchainAsset}", string.Empty);
     
             var client_ = _httpClient;
             var disposeClient_ = false;
@@ -1007,7 +1007,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Pair_id { get; set; }
     
-        /// <summary>An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)</summary>
+        /// <summary>An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemon's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)</summary>
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
     
@@ -1293,7 +1293,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public object Id { get; set; }
     
-        /// <summary>An address to which counterparty has paid. Must be the same with the one in the request unless null.</summary>
+        /// <summary>An address to which counterparty has paid. Must be the same one with the one in the request if there is any. Otherwise, it is the address controlled by lnd or blockchain daemon (e.g. litecoind.)</summary>
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
     

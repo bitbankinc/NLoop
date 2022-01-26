@@ -157,7 +157,7 @@ paths:
           name: offchainAsset
           schema:
             $ref:  "#/components/schemas/cryptoCode"
-          required: true
+          required: false
           description: off-chain asset which autoloop manager will take care. default is BTC.
       tags:
         - loop
@@ -182,7 +182,7 @@ paths:
           name: offchainAsset
           schema:
             $ref:  "#/components/schemas/cryptoCode"
-          required: true
+          required: false
           description: off-chain asset which autoloop manager will take care. default is BTC.
       responses:
         '200':
@@ -276,6 +276,9 @@ components:
         - type: integer
           format: uint64
           description: uint64 representation used in LND.
+        - type: string
+          pattern: (\d{3})x(\d{3})x(\d{2}):(\d+)
+          description: both bolt-style triplet and lnd-compatible style concatenated.
     swapId:
       type: string
 
@@ -307,7 +310,7 @@ components:
           description:
             An external address that to which the counterparty will pay.
             i.e. final destination of our on-chain funds.
-            default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet
+            default is a wallet of the lnd (in case of BTC), or blockchain daemon's wallet
             (e.g. in case of LTC, litecoind's wallet-controlled address.)
         amount:
           type: integer
@@ -525,12 +528,16 @@ components:
         id:
           description:
             Swap identifier to track status.
+          nullable: false
+          example: "tY8iDo"
         address:
           oneOf:
             - $ref:  "#/components/schemas/BitcoinAddressNonMalleable"
           description:
             An address to which counterparty has paid.
-            Must be the same with the one in the request unless null.
+            Must be the same one with the one in the request if there is any.
+            Otherwise, it is the address controlled by lnd or blockchain daemon (e.g. litecoind.)
+          nullable: false
         claim_tx_id:
           description:
             An txid by which they have paid to us. It is populated only when its 0-conf.
@@ -541,6 +548,8 @@ components:
         id:
           description:
             Swap identifier to track status.
+          nullable: false
+          example: "tY8iDo"
         address:
           oneOf:
             - $ref:  "#/components/schemas/P2WSH"

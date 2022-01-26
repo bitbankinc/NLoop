@@ -249,7 +249,6 @@
           {
             "name": "offchainAsset",
             "in": "path",
-            "required": true,
             "description": "off-chain asset which autoloop manager will take care. default is BTC.",
             "schema": {
               "$ref": "#/components/schemas/cryptoCode"
@@ -281,7 +280,6 @@
           {
             "name": "offchainAsset",
             "in": "path",
-            "required": true,
             "description": "off-chain asset which autoloop manager will take care. default is BTC.",
             "schema": {
               "$ref": "#/components/schemas/cryptoCode"
@@ -402,6 +400,11 @@
             "type": "integer",
             "description": "uint64 representation used in LND.",
             "format": "uint64"
+          },
+          {
+            "type": "string",
+            "description": "both bolt-style triplet and lnd-compatible style concatenated.",
+            "pattern": "(\\d{3})x(\\d{3})x(\\d{2}):(\\d+)"
           }
         ]
       },
@@ -432,7 +435,7 @@
             ]
           },
           "address": {
-            "description": "An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)",
+            "description": "An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemon's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)",
             "nullable": true,
             "oneOf": [
               {
@@ -654,10 +657,13 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Swap identifier to track status."
+            "description": "Swap identifier to track status.",
+            "nullable": false,
+            "example": "tY8iDo"
           },
           "address": {
-            "description": "An address to which counterparty has paid. Must be the same with the one in the request unless null.",
+            "description": "An address to which counterparty has paid. Must be the same one with the one in the request if there is any. Otherwise, it is the address controlled by lnd or blockchain daemon (e.g. litecoind.)",
+            "nullable": false,
             "oneOf": [
               {
                 "$ref": "#/components/schemas/BitcoinAddressNonMalleable"
@@ -674,7 +680,9 @@
         "type": "object",
         "properties": {
           "id": {
-            "description": "Swap identifier to track status."
+            "description": "Swap identifier to track status.",
+            "nullable": false,
+            "example": "tY8iDo"
           },
           "address": {
             "description": "The address of the on-chain HTLC",
