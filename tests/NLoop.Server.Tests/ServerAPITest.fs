@@ -212,8 +212,8 @@ type ServerAPITest() =
             Progress = 0.99f
       }
       ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
-      ("no connected nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
-      ("no routes to the node", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1,testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no connected nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no routes to the node", [channel2], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
 
       let quote = {
         testLoopOutQuote
@@ -243,7 +243,7 @@ type ServerAPITest() =
           with
           Address = Some "foo"
       }
-      ("invalid request from the user (bogus)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (bogus)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let req = {
         chan1Rec
           with
@@ -251,7 +251,7 @@ type ServerAPITest() =
             new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
             |> fun k -> k.PubKey.WitHash.GetAddress(Network.Main).ToString() |> Some
       }
-      ("invalid request from the user (network mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (network mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let req = {
         chan1Rec
           with
@@ -259,7 +259,7 @@ type ServerAPITest() =
             new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
             |> fun k -> k.PubKey.WitHash.GetAddress(Litecoin.Instance.Regtest).ToString() |> Some
       }
-      ("invalid request from the user (cryptocode mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (cryptocode mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let resp = {
         loopOutResp1
           with
@@ -275,7 +275,7 @@ type ServerAPITest() =
       let resp = {
         loopOutResp1
           with
-          LockupAddress = reverseSwapRedeem.WitHash.GetAddress(NBitcoin.Altcoins.Litecoin.Instance.Regtest).ToString()
+          LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Litecoin.Instance.Regtest).ToString()
       }
       ("Invalid address from the server (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
 
