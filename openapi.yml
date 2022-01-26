@@ -2,7 +2,7 @@ openapi: '3.0.2'
 info:
   title: NLoop Server OpenAPI definition
   version: '0.1.0-beta'
-  description: >
+  description:
     Lightning Channel Manager. It will maintain the channel balance by performing
     submarine swap against Boltz server.
   contact:
@@ -40,7 +40,7 @@ paths:
     get:
       tags:
         - swap
-      description: >
+      description:
         Get the list of ongoing swaps.
       parameters:
         - $ref: '#/components/schemas/swapId'
@@ -54,7 +54,7 @@ paths:
 
   /v1/swaps/history:
     get:
-      description: >
+      description:
         Get the full history of swas. This might take long if you have a lots of entries in a database.
       tags:
         - swap
@@ -74,7 +74,7 @@ paths:
                 $ref: "#/components/schemas/GetSwapHistoryResponse"
   /v1/swaps/ongoing:
     get:
-      description: >
+      description:
         Get the list of ongoing swaps.
       tags:
         - swap
@@ -150,7 +150,7 @@ paths:
 
   /v1/auto/suggest/{offchainAsset}:
     get:
-      description: >
+      description:
         Get suggestion for the swaps.
       parameters:
         - in: path
@@ -172,7 +172,7 @@ paths:
 
   /v1/liquidity/params/{offchainAsset}:
     get:
-      description: >
+      description:
         Get the parameters that the daemon's liquidity manager is currently configured with.
         This may be nil if nothing is configured.
       tags:
@@ -193,7 +193,7 @@ paths:
                 $ref: '#/components/schemas/LiquidityParameters'
 
     post:
-      description: >
+      description:
         Overwrites the current set of parameters for the daemon's liquidity manager.
       requestBody:
         content:
@@ -225,19 +225,16 @@ components:
       in: cookie
   schemas:
     cryptoCode:
-      description: Symbol name for the currency.
       type: string
       enum:
         - BTC
         - LTC
     pairId:
-      description: Pair of cryptoCode
       type: string
       example:
         "BTC/LTC"
     # ----- Primitive objects
     PubKey:
-      description: Bitcoin public key in 33 bytes length
       type: string
       maxLength: 33
       minLength: 33
@@ -271,7 +268,7 @@ components:
       oneOf:
         - type: string
           pattern: (\d{3})x(\d{3})x(\d{2})
-          description: >
+          description:
             pointer to the funding outpoint.
             i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index
             Of the funding tx of the channel.
@@ -282,24 +279,6 @@ components:
     swapId:
       type: string
 
-    HopHint:
-      type: object
-      properties:
-        node_id:
-          $ref: '#/components/schemas/PubKey'
-          description: The pubkey key of the node at the start of the channel
-        chan_id:
-          $ref: "#/components/schemas/ShortChannelId"
-        fee_base_msat:
-          type: integer
-          format: int64
-        fee_proportional_millionths:
-          type: integer
-          format: int64
-        cltv_expiry_delta:
-          type: integer
-          format: int64
-
     # -----
     # ----- requests
     LoopOutRequest:
@@ -309,21 +288,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShortChannelId'
-          description: <
+          description:
             ShortChannelId for the one you want to get inbound liquidity for.
             default is the one it has least.
           nullable: true
         pair_id:
-          $ref: '#/components/schemas/pairId'
-          description: <
+          oneOf:
+            - $ref: '#/components/schemas/pairId'
+          description:
             currency pair to perform the swap.
             Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain
             So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC
           nullable: true
         address:
-          $ref: '#/components/schemas/BitcoinAddressNonMalleable'
+          oneOf:
+            - $ref: '#/components/schemas/BitcoinAddressNonMalleable'
           nullable: true
-          description: <
+          description:
             An external address that to which the counterparty will pay.
             i.e. final destination of our on-chain funds.
             default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet
@@ -331,11 +312,11 @@ components:
         amount:
           type: integer
           format: int64
-          description: <
+          description:
             amount you wish to swap out (in satoshi).
         swap_tx_conf_requirement:
           type: integer
-          description: <
+          description:
             The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer.
             a.k.a. `htlc_confirmations` on the lightning loop.
             Default number depends on the asset type.
@@ -343,27 +324,27 @@ components:
           nullable: true
         label:
           type: string
-          description: <
+          description:
             Additional label for this request.
           nullable: true
         max_swap_routing_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum off-chain fee in sats that may be paied for swap payment to the
             server. This limit is applied during path finding.
           nullable: true
         max_prepay_routing_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum off-chain fee in sat that may be paid for the prepay to the server.
             This limit is applied during path finding.
           nullable: true
         max_swap_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment).
             If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
@@ -372,14 +353,14 @@ components:
         max_prepay_amount:
           type: integer
           format: int64
-          description: <
+          description:
             The server might request a pre-payment for the sake of DoS-prevention,
             this is a maximum amount (in sats) of the off-chain prepayment.
           nullable: true
         max_miner_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain
             htlc and the fee estimate turns out higher than this value, we cancel the swap.
             If the fee estimate is lower, we publish the sweep tx.
@@ -393,7 +374,7 @@ components:
         sweep_conf_target:
           type: integer
           format: int32
-          description: <
+          description:
             Confimation target (block num) for estimating the fee for the
             sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx)
             Default depends on the asset type, but usually it is not that short.
@@ -408,43 +389,46 @@ components:
         amount:
           type: integer
           format: int64
-          description: <
+          description:
             amount you wish to swap in to the channel (in satoshi).
         last_hop:
-          $ref: '#/components/schemas/PubKey'
-          description: <
+          oneOf:
+            - $ref: '#/components/schemas/PubKey'
+          description:
             node_id (pubkey) to perform the swap against.
             If you specify both last_hop and channel_id, channel_id is be prioritized.
           nullable: true
         channel_id:
-          $ref: '#/components/schemas/ShortChannelId'
-          description: <
+          oneOf:
+            - $ref: '#/components/schemas/ShortChannelId'
+          description:
             channel_id (ShortChannelId) to perform the swap for.
             If you specify both last_hop and channel_id, channel_id is be prioritized.
           nullable: true
         pair_id:
-          $ref: '#/components/schemas/pairId'
-          description: <
+          oneOf:
+            - $ref: '#/components/schemas/pairId'
+          description:
             currency pair to perform the swap.
             Default is BTC/BTC. In case of loopin, Base/Quote is OffChain/OnChain
             So say if you want to use LTC as an on-chain asset, you must specify BTC/LTC
           nullable: true
         label:
           type: string
-          description: <
+          description:
             Additional label for this request.
           nullable: true
         max_miner_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum on-chain fees that we are willing to spend. If we want to
             publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.
           nullable: true
         max_swap_fee:
           type: integer
           format: int64
-          description: <
+          description:
             Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment).
             If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
@@ -453,7 +437,7 @@ components:
         htlc_conf_target:
           type: integer
           format: int32
-          description: <
+          description:
             Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx)
             If the server is not willing to accept zero-conf swap, Making this value smaller might
             make a swap fast.
@@ -539,27 +523,29 @@ components:
       type: object
       properties:
         id:
-          description: >
+          description:
             Swap identifier to track status.
         address:
-          description: <
+          oneOf:
+            - $ref:  "#/components/schemas/BitcoinAddressNonMalleable"
+          description:
             An address to which counterparty has paid.
             Must be the same with the one in the request unless null.
-          $ref:  "#/components/schemas/BitcoinAddressNonMalleable"
         claim_tx_id:
-          description: <
+          description:
             An txid by which they have paid to us. It is populated only when its 0-conf.
           nullable: true
     LoopInResponse:
       type: object
       properties:
         id:
-          description: >
+          description:
             Swap identifier to track status.
         address:
-          description: >
+          oneOf:
+            - $ref:  "#/components/schemas/P2WSH"
+          description:
             The address of the on-chain HTLC
-          $ref:  "#/components/schemas/P2WSH"
 
     LiquidityRuleType:
       enum:
@@ -572,30 +558,32 @@ components:
         incoming_threshold_percent:
           type: integer
           format: int16
-          description: >
+          description:
             if the incoming liquidity (i.e. other party's share of the channel cap) has become
             less than this, we will dispatch the loop-out swap
         outgoing_threshold_percent:
           type: integer
           format: int16
-          description: >
+          description:
             if the outgoing liquidity (i. our share in the channel cap) has become
             less than this, we will dispatch the loop-in swap
         pubkey:
-          $ref: '#/components/schemas/PubKey'
-          description: >
+          oneOf:
+            - $ref: '#/components/schemas/PubKey'
+          description:
             Peer id to apply the rule against.
             pubkey and channel_id fields are mutually exclusive.
           nullable: true
         channel_id:
-          $ref: "#/components/schemas/ShortChannelId"
-          description: >
+          oneOf:
+            - $ref: "#/components/schemas/ShortChannelId"
+          description:
             channel id to apply the rule.
             pubkey and channel_id fields are mutually exclusive.
           nullable: true
         type:
           $ref:  "#/components/schemas/LiquidityRuleType"
-          description: >
+          description:
             The type of the liquidity rule we apply.
             Currently, we only have Threshold
 
@@ -608,20 +596,20 @@ components:
             $ref: '#/components/schemas/LiquidityRule'
         fee_ppm:
           type: integer
-          description: >
+          description:
             The parts per million of swap amount that is allowed to be allocated to swap fees.
             This valie is applied across swap categories and may not be set in conjunction with sweep fee rate,
             swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
           nullable: true
         sweep_fee_rate_sat_per_kvbyte:
           type: integer
-          description: >
+          description:
             The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our
             sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
           nullable: true
         max_swap_fee_ppm:
           type: integer
-          description: >
+          description:
             The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.
           nullable: true
         max_routing_fee_ppm:
@@ -643,12 +631,12 @@ components:
           description: The number of blocks from the on-chain HTLC7s confirmation height that it shuold be swept within.
         failure_backoff_sec:
           type: integer
-          description: >
+          description:
             The amount of time we require to pass since a channel was part of a failed swap due to off chain payment
             failure until it will be considered for swap suggestions again, expressed in seconds.
         autoloop:
           type: boolean
-          description: >
+          description:
             Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
         auto_max_in_flight:
           type: integer
@@ -656,7 +644,7 @@ components:
         min_swap_amount_loopout:
           type: integer
           format: int64
-          description: >
+          description:
             The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.
           nullable: true
         max_swap_amount_loopout:
@@ -667,7 +655,7 @@ components:
         min_swap_amount_loopin:
           type: integer
           format: int64
-          description: >
+          description:
             The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.
           nullable: true
         max_swap_amount_loopin:

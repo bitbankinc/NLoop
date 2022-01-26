@@ -936,7 +936,6 @@ namespace NLoopClient
         }
     }
 
-    /// <summary>Symbol name for the currency.</summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public enum CryptoCode
     {
@@ -972,8 +971,7 @@ namespace NLoopClient
     
     }
     
-    /// <summary>pointer to the funding outpoint. i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index Of the funding tx of the channel.
-    /// </summary>
+    /// <summary>pointer to the funding outpoint. i.e. triplet of 1. block height, 2. tx index number in the block. 3. tx out index Of the funding tx of the channel.</summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class ShortChannelId 
     {
@@ -999,94 +997,53 @@ namespace NLoopClient
     }
     
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
-    public partial class HopHint 
-    {
-        /// <summary>The pubkey key of the node at the start of the channel</summary>
-        [Newtonsoft.Json.JsonProperty("node_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
-        public string Node_id { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("chan_id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public string Chan_id { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("fee_base_msat", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Fee_base_msat { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("fee_proportional_millionths", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Fee_proportional_millionths { get; set; }
-    
-        [Newtonsoft.Json.JsonProperty("cltv_expiry_delta", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
-        public long Cltv_expiry_delta { get; set; }
-    
-        private System.Collections.Generic.IDictionary<string, object> _additionalProperties = new System.Collections.Generic.Dictionary<string, object>();
-    
-        [Newtonsoft.Json.JsonExtensionData]
-        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
-        {
-            get { return _additionalProperties; }
-            set { _additionalProperties = value; }
-        }
-    
-        public string ToJson() 
-        {
-            return Newtonsoft.Json.JsonConvert.SerializeObject(this);
-        }
-    
-        public static HopHint FromJson(string data)
-        {
-            return Newtonsoft.Json.JsonConvert.DeserializeObject<HopHint>(data);
-        }
-    
-    }
-    
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutRequest 
     {
-        /// <summary>&lt; ShortChannelId for the one you want to get inbound liquidity for. default is the one it has least.</summary>
+        /// <summary>ShortChannelId for the one you want to get inbound liquidity for. default is the one it has least.</summary>
         [Newtonsoft.Json.JsonProperty("channel_ids", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public System.Collections.Generic.ICollection<string> Channel_ids { get; set; }
     
-        /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC</summary>
+        /// <summary>currency pair to perform the swap. Default is BTC/BTC. In case of loopout, Base/Quote is OnChain/OffChain So say if you want to use LTC as an on-chain asset, you must specify LTC/BTC</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Pair_id { get; set; }
     
-        /// <summary>&lt; An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)</summary>
+        /// <summary>An external address that to which the counterparty will pay. i.e. final destination of our on-chain funds. default is a wallet of the lnd (in case of BTC), or blockchain daemin's wallet (e.g. in case of LTC, litecoind's wallet-controlled address.)</summary>
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
     
-        /// <summary>&lt; amount you wish to swap out (in satoshi).</summary>
+        /// <summary>amount you wish to swap out (in satoshi).</summary>
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on the lightning loop. Default number depends on the asset type. Set this to 0 for zero-conf swap.</summary>
+        /// <summary>The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on the lightning loop. Default number depends on the asset type. Set this to 0 for zero-conf swap.</summary>
         [Newtonsoft.Json.JsonProperty("swap_tx_conf_requirement", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Swap_tx_conf_requirement { get; set; }
     
-        /// <summary>&lt; Additional label for this request.</summary>
+        /// <summary>Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
     
-        /// <summary>&lt; Maximum off-chain fee in sats that may be paied for swap payment to the server. This limit is applied during path finding.</summary>
+        /// <summary>Maximum off-chain fee in sats that may be paied for swap payment to the server. This limit is applied during path finding.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_routing_fee { get; set; }
     
-        /// <summary>&lt; Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.</summary>
+        /// <summary>Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.</summary>
         [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_prepay_routing_fee { get; set; }
     
-        /// <summary>&lt; Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
-        /// <summary>&lt; The server might request a pre-payment for the sake of DoS-prevention, this is a maximum amount (in sats) of the off-chain prepayment.</summary>
+        /// <summary>The server might request a pre-payment for the sake of DoS-prevention, this is a maximum amount (in sats) of the off-chain prepayment.</summary>
         [Newtonsoft.Json.JsonProperty("max_prepay_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_prepay_amount { get; set; }
     
-        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.</summary>
+        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.</summary>
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
-        /// <summary>&lt; Confimation target (block num) for estimating the fee for the sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx) Default depends on the asset type, but usually it is not that short. If you want to finish swap asap and get your on-chain funds quickly, You probably want to set a short time.</summary>
+        /// <summary>Confimation target (block num) for estimating the fee for the sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx) Default depends on the asset type, but usually it is not that short. If you want to finish swap asap and get your on-chain funds quickly, You probably want to set a short time.</summary>
         [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Sweep_conf_target { get; set; }
     
@@ -1114,36 +1071,36 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopInRequest 
     {
-        /// <summary>&lt; amount you wish to swap in to the channel (in satoshi).</summary>
+        /// <summary>amount you wish to swap in to the channel (in satoshi).</summary>
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>&lt; node_id (pubkey) to perform the swap against. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
+        /// <summary>node_id (pubkey) to perform the swap against. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
         [Newtonsoft.Json.JsonProperty("last_hop", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
         public string Last_hop { get; set; }
     
-        /// <summary>&lt; channel_id (ShortChannelId) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
+        /// <summary>channel_id (ShortChannelId) to perform the swap for. If you specify both last_hop and channel_id, channel_id is be prioritized.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Channel_id { get; set; }
     
-        /// <summary>&lt; currency pair to perform the swap. Default is BTC/BTC. In case of loopin, Base/Quote is OffChain/OnChain So say if you want to use LTC as an on-chain asset, you must specify BTC/LTC</summary>
+        /// <summary>currency pair to perform the swap. Default is BTC/BTC. In case of loopin, Base/Quote is OffChain/OnChain So say if you want to use LTC as an on-chain asset, you must specify BTC/LTC</summary>
         [Newtonsoft.Json.JsonProperty("pair_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Pair_id { get; set; }
     
-        /// <summary>&lt; Additional label for this request.</summary>
+        /// <summary>Additional label for this request.</summary>
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
     
-        /// <summary>&lt; Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.</summary>
+        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.</summary>
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
-        /// <summary>&lt; Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
-        /// <summary>&lt; Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx) If the server is not willing to accept zero-conf swap, Making this value smaller might make a swap fast.</summary>
+        /// <summary>Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx) If the server is not willing to accept zero-conf swap, Making this value smaller might make a swap fast.</summary>
         [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Htlc_conf_target { get; set; }
     
@@ -1332,16 +1289,15 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopOutResponse 
     {
-        /// <summary>Swap identifier to track status.
-        /// </summary>
+        /// <summary>Swap identifier to track status.</summary>
         [Newtonsoft.Json.JsonProperty("id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public object Id { get; set; }
     
-        /// <summary>&lt; An address to which counterparty has paid. Must be the same with the one in the request unless null.</summary>
+        /// <summary>An address to which counterparty has paid. Must be the same with the one in the request unless null.</summary>
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Address { get; set; }
     
-        /// <summary>&lt; An txid by which they have paid to us. It is populated only when its 0-conf.</summary>
+        /// <summary>An txid by which they have paid to us. It is populated only when its 0-conf.</summary>
         [Newtonsoft.Json.JsonProperty("claim_tx_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public object Claim_tx_id { get; set; }
     
@@ -1369,13 +1325,11 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LoopInResponse 
     {
-        /// <summary>Swap identifier to track status.
-        /// </summary>
+        /// <summary>Swap identifier to track status.</summary>
         [Newtonsoft.Json.JsonProperty("id", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public object Id { get; set; }
     
-        /// <summary>The address of the on-chain HTLC
-        /// </summary>
+        /// <summary>The address of the on-chain HTLC</summary>
         [Newtonsoft.Json.JsonProperty("address", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"^(bc1|[13])[a-zA-HJ-NP-Z0-9]{39}$")]
         public string Address { get; set; }
@@ -1415,29 +1369,24 @@ namespace NLoopClient
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "10.3.11.0 (Newtonsoft.Json v12.0.0.0)")]
     public partial class LiquidityRule 
     {
-        /// <summary>if the incoming liquidity (i.e. other party's share of the channel cap) has become less than this, we will dispatch the loop-out swap
-        /// </summary>
+        /// <summary>if the incoming liquidity (i.e. other party's share of the channel cap) has become less than this, we will dispatch the loop-out swap</summary>
         [Newtonsoft.Json.JsonProperty("incoming_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int Incoming_threshold_percent { get; set; }
     
-        /// <summary>if the outgoing liquidity (i. our share in the channel cap) has become less than this, we will dispatch the loop-in swap
-        /// </summary>
+        /// <summary>if the outgoing liquidity (i. our share in the channel cap) has become less than this, we will dispatch the loop-in swap</summary>
         [Newtonsoft.Json.JsonProperty("outgoing_threshold_percent", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int Outgoing_threshold_percent { get; set; }
     
-        /// <summary>Peer id to apply the rule against. pubkey and channel_id fields are mutually exclusive.
-        /// </summary>
+        /// <summary>Peer id to apply the rule against. pubkey and channel_id fields are mutually exclusive.</summary>
         [Newtonsoft.Json.JsonProperty("pubkey", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         [System.ComponentModel.DataAnnotations.StringLength(33, MinimumLength = 33)]
         public string Pubkey { get; set; }
     
-        /// <summary>channel id to apply the rule. pubkey and channel_id fields are mutually exclusive.
-        /// </summary>
+        /// <summary>channel id to apply the rule. pubkey and channel_id fields are mutually exclusive.</summary>
         [Newtonsoft.Json.JsonProperty("channel_id", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Channel_id { get; set; }
     
-        /// <summary>The type of the liquidity rule we apply. Currently, we only have Threshold
-        /// </summary>
+        /// <summary>The type of the liquidity rule we apply. Currently, we only have Threshold</summary>
         [Newtonsoft.Json.JsonProperty("type", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public LiquidityRuleType Type { get; set; }
     
@@ -1469,18 +1418,15 @@ namespace NLoopClient
         [System.ComponentModel.DataAnnotations.Required]
         public System.Collections.Generic.ICollection<LiquidityRule> Rules { get; set; } = new System.Collections.ObjectModel.Collection<LiquidityRule>();
     
-        /// <summary>The parts per million of swap amount that is allowed to be allocated to swap fees. This valie is applied across swap categories and may not be set in conjunction with sweep fee rate, swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.
-        /// </summary>
+        /// <summary>The parts per million of swap amount that is allowed to be allocated to swap fees. This valie is applied across swap categories and may not be set in conjunction with sweep fee rate, swap fee ppm, routing fee ppm, prepay routing, max prepay and max miner fee.</summary>
         [Newtonsoft.Json.JsonProperty("fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Fee_ppm { get; set; }
     
-        /// <summary>The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.
-        /// </summary>
+        /// <summary>The limit we place on our estimated sweep cost for a swap in sat/kilo-vByte. If the estimated fee for our sweep tx within the specified confirmation target is above this value, we will not suggest any swaps.</summary>
         [Newtonsoft.Json.JsonProperty("sweep_fee_rate_sat_per_kvbyte", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Sweep_fee_rate_sat_per_kvbyte { get; set; }
     
-        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.
-        /// </summary>
+        /// <summary>The maximum fee paid to the server for facilitating the swap, expressed as parts-per-million of the swap amount.</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee_ppm", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Max_swap_fee_ppm { get; set; }
     
@@ -1500,13 +1446,11 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Always)]
         public int Sweep_conf_target { get; set; }
     
-        /// <summary>The amount of time we require to pass since a channel was part of a failed swap due to off chain payment failure until it will be considered for swap suggestions again, expressed in seconds.
-        /// </summary>
+        /// <summary>The amount of time we require to pass since a channel was part of a failed swap due to off chain payment failure until it will be considered for swap suggestions again, expressed in seconds.</summary>
         [Newtonsoft.Json.JsonProperty("failure_backoff_sec", Required = Newtonsoft.Json.Required.Always)]
         public int Failure_backoff_sec { get; set; }
     
-        /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,
-        /// </summary>
+        /// <summary>Set to true to enable automatic dispatch of swaps. All swaps will be limited to the fee categories set by these parameters,</summary>
         [Newtonsoft.Json.JsonProperty("autoloop", Required = Newtonsoft.Json.Required.Always)]
         public bool Autoloop { get; set; }
     
@@ -1514,8 +1458,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("auto_max_in_flight", Required = Newtonsoft.Json.Required.Always)]
         public int Auto_max_in_flight { get; set; }
     
-        /// <summary>The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.
-        /// </summary>
+        /// <summary>The minimum off-chain amount for loop out, expressed in satoshis, that the autoloop client will dispatch a swap for.</summary>
         [Newtonsoft.Json.JsonProperty("min_swap_amount_loopout", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Min_swap_amount_loopout { get; set; }
     
@@ -1523,8 +1466,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("max_swap_amount_loopout", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_amount_loopout { get; set; }
     
-        /// <summary>The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.
-        /// </summary>
+        /// <summary>The minimum off-chain amount for loop in, expressed in satoshis, that the autoloop client will dispatch a swap for.</summary>
         [Newtonsoft.Json.JsonProperty("min_swap_amount_loopin", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Min_swap_amount_loopin { get; set; }
     
