@@ -32,6 +32,7 @@ open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 open NLoop.Server.LoopHandlers
+open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services

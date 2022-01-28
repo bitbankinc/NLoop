@@ -191,6 +191,7 @@ services:
       - litecoind
     ports:
       - "32737:32737"
+      - "32778:32778"
     volumes:
       - "./data/lnd_server_btc:/data"
       - "./data/bitcoin:/deps/.bitcoin"
@@ -215,7 +216,7 @@ services:
     command:
       - lnd
       - --restlisten=0.0.0.0:32737
-      - --rpclisten=0.0.0.0:32778
+      - --rpclisten=0.0.0.0:32779
       - --litecoin.active
       - --litecoin.regtest
       - --litecoin.node=litecoind
@@ -239,11 +240,12 @@ services:
     expose:
       - "9735"
       - "32737"
-      - "32778"
+      - "32779"
     depends_on:
       - litecoind
     ports:
-      - "32738:32738"
+      - "32739:32739"
+      - "32779:32779"
     volumes:
       - "./data/lnd_server_ltc:/data"
       - "./data/litecoin:/deps/.litecoin"

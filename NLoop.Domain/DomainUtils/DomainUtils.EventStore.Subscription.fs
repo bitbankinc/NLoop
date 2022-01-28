@@ -44,7 +44,10 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
                               streamId: SubscriptionTarget,
                               log: ILogger<EventStoreDBSubscription>,
                               eventHandler: EventHandler,
+                              ?onLiveProcessingStart,
                               ?conn: IEventStoreConnection) =
+
+  let onLiveProcessingStart = defaultArg onLiveProcessingStart (fun _ -> ())
 
   let conn: IEventStoreConnection =
     conn |> Option.defaultWith (fun () ->
@@ -94,6 +97,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
           stream = streamId.Value,
           lastCheckpoint = lastCheckpoint,
           eventAppeared = eventAppeared,
+          liveProcessingStarted = onLiveProcessingStart,
           subscriptionDropped = subscriptionDropped
           )
         :> EventStoreCatchUpSubscription
@@ -105,6 +109,7 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
         conn.SubscribeToAllFrom(
           lastCheckpoint = lastCheckpoint,
           settings = settings,
+          liveProcessingStarted = onLiveProcessingStart,
           eventAppeared = eventAppeared
           )
         :> EventStoreCatchUpSubscription

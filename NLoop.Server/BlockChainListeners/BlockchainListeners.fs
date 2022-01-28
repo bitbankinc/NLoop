@@ -17,31 +17,33 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
                          swapActor,
                          getNetwork: GetNetwork,
                          swapState: IOnGoingSwapStateProjection) =
-  let mutable listeners = ConcurrentDictionary<SupportedCryptoCode, BlockchainListener>()
+  let listeners = ConcurrentDictionary<SupportedCryptoCode, BlockchainListener>()
   let logger = loggerFactory.CreateLogger<BlockchainListeners>()
+
+  let swapIdToRegisterOnStartup = ConcurrentBag()
+  let startupCompletion = TaskCompletionSource()
 
   member this.CurrentHeight (cc: SupportedCryptoCode) =
     listeners.[cc].CurrentTip.Height
 
   member this.GetRewindLimit(cc: SupportedCryptoCode) =
-    let heights =
+    let ongoingSwapStartHeights =
       swapState.State
       |> Seq.map(fun kv -> let startHeight, _ = kv.Value in startHeight)
-    if heights |> Seq.isEmpty then
-      let currentHeight = this.CurrentHeight(cc)
+    if ongoingSwapStartHeights |> Seq.isEmpty then
       let v =
-        if currentHeight.Value < Constants.MaxBlockRewind.Value then
+        if (this.CurrentHeight(cc).Value) < Constants.MaxBlockRewind.Value then
           0u
         else
           (this.CurrentHeight(cc) - Constants.MaxBlockRewind).Value
       v |> StartHeight.BlockHeight
     else
-      heights |> Seq.min
+      ongoingSwapStartHeights |> Seq.min
 
   interface IHostedService with
     member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting blockchain listeners ..."
-      //do! swapState.FinishCatchup
+      do! swapState.FinishCatchup
 
       let roundTrip cc = unitTask {
         let cOpts = opts.Value.ChainOptions.[cc]
@@ -77,6 +79,12 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
         opts.Value.OnChainCrypto
         |> Seq.map roundTrip
         |> Task.WhenAll
+
+      for swapId, group in swapIdToRegisterOnStartup do
+        (this :> ISwapEventListener).RegisterSwap(swapId, group)
+      swapIdToRegisterOnStartup.Clear()
+
+      startupCompletion.SetResult()
     }
 
     member this.StopAsync(cancellationToken) = unitTask {
@@ -87,11 +95,16 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
 
   interface ISwapEventListener with
     member this.RegisterSwap(swapId, group) =
-      match listeners.TryGetValue group.OnChainAsset with
-      | false, _ ->
-        ()
-      | true, listener ->
-        listener.RegisterSwap(swapId)
+      if startupCompletion.Task.IsCompleted |> not then
+        swapIdToRegisterOnStartup.Add(swapId, group)
+      else
+        match listeners.TryGetValue group.OnChainAsset with
+        | false, _ ->
+          logger.LogError $"No listeners found for onchain-asset {group.OnChainAsset}"
+          ()
+        | true, listener ->
+          logger.LogDebug $"registering {swapId}"
+          listener.RegisterSwap(swapId)
     member this.RemoveSwap(swapId) =
       for l in listeners.Values do
         l.RemoveSwap(swapId)

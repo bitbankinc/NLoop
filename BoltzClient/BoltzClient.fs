@@ -119,11 +119,13 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   member this.SetInvoiceAsync(swapId: string, invoice: PaymentRequest, [<O;D(null)>] ct: CancellationToken) =
     this.SendCommandAsync<SetInvoiceResponse option>("setinvoice", HttpMethod.Post, {| Id = swapId; Invoice = invoice.ToString() |}, ct)
 
-  member this.StartListenToSwapStatusChange(id, [<O;D(null)>] ct: CancellationToken) =
+  member this.StartListenToSwapStatusChange(id, [<O;D(null)>] ct: CancellationToken): AsyncSeq<SwapStatusResponse> =
     asyncSeq {
-      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}") |> Async.AwaitTask
+      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}", ct) |> Async.AwaitTask
       use streamReader = new StreamReader(x)
       while not <| streamReader.EndOfStream && not <| ct.IsCancellationRequested do
         let! msg = streamReader.ReadLineAsync() |> Async.AwaitTask
+        if String.IsNullOrEmpty msg then () else
+        let msg = if msg.StartsWith("data:") then msg.Substring(5).Trim() else msg
         yield JsonSerializer.Deserialize<SwapStatusResponse>(msg, jsonOpts)
     }

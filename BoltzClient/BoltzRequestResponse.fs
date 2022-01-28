@@ -204,7 +204,6 @@ type SwapStatusResponse = {
     | "invoice.failedToPay" -> SwapStatusType.InvoiceFailedToPay
     | "transaction.claimed" -> SwapStatusType.TxClaimed
     | _x -> SwapStatusType.Unknown
-
 type CreateSwapRequest = {
   [<JsonConverter(typeof<PairIdJsonConverter>)>]
   PairId: PairId

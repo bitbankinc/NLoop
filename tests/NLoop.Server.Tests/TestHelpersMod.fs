@@ -39,10 +39,10 @@ open NLoop.Server.SwapServerClient
 open NLoop.Server.Projections
 
 
-module Helpers =
+module TestHelpersMod =
   let getLocalBoltzClient() =
     let httpClient =new  HttpClient()
-    httpClient.BaseAddress <- Uri("http://localhost:9001")
+    httpClient.BaseAddress <- Uri("http://localhost:6028")
     let b = BoltzClient(httpClient)
     b
 
@@ -54,30 +54,24 @@ module Helpers =
   let hex = HexEncoder()
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
-  let private checkConnection port =
-    let l = TcpListener(IPAddress.Loopback, port)
-    try
-      l.Start()
-      l.Stop()
-      Ok()
-    with
-    | :? SocketException -> Error("")
 
-  let findEmptyPortUInt(ports: uint []) =
-    let mutable i = 0
-    while i < ports.Length do
-      let mutable port = RandomUtils.GetUInt32() % 4000u
-      port <- port + 10000u
-      if (ports |> Seq.exists((=)port)) then () else
-      match checkConnection(int port) with
-      | Ok _ ->
-        ports.[i] <- port
-        i <- i + 1
-      | _ -> ()
-    ports
+  let getLightningClient path port network =
+    let settings =
+      let tls = Path.Combine(path, "tls.cert") |> getCertFingerPrintHex |> Some
+      let macaroonPath = Some (Path.Combine(path, "admin.macaroon"))
+      LndGrpcSettings.Create($"https://localhost:{port}", None, macaroonPath, tls, true)
+      |> function | Ok s -> s | Error e -> failwith e
+    NLoopLndGrpcClient(settings, network)
 
-  let findEmptyPort(ports: int[]) =
-    findEmptyPortUInt(ports |> Array.map(uint))
+  let userLndClient() =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
+    getLightningClient path 32777 Network.RegTest
+  let serverBTCLndClient() =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
+    getLightningClient path 32778 Network.RegTest
+  let serverLTCLndClient() =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
+    getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
 
   let walletAddress =
     new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
@@ -98,7 +92,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<InvoiceSubscription>
+  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
@@ -187,7 +181,7 @@ type DummyWalletClientParameters = {
     {
       ListUnspent = fun () -> failwith "todo"
       SignSwapTxPSBT = fun _ -> failwith "todo"
-      GetDepositAddress = fun () -> Helpers.walletAddress
+      GetDepositAddress = fun () -> TestHelpersMod.walletAddress
     }
 
 type TestHelpers =
@@ -197,7 +191,7 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        Helpers.lndAddress
+        TestHelpersMod.lndAddress
         |> Task.FromResult
       member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
                                  value: LNMoney,
@@ -214,11 +208,15 @@ type TestHelpers =
                              ?ct: CancellationToken): Task<PaymentRequest> =
         parameters.GetInvoice paymentPreimage amount expiry memo routeHint
         |> Task.FromResult
-      member this.Offer(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
+      member this.SendPayment(req: SendPaymentRequest, ?ct: CancellationToken): Task<Result<PaymentResult, string>> =
         TaskResult.retn {
           PaymentPreimage = PaymentPreimage.Create(Array.zeroCreate 32)
           Fee = req.MaxFee.ToLNMoney()
         }
+
+      member this.Offer(req, ?ct) =
+        let offerResult = ()
+        TaskResult.retn offerResult
 
       member this.GetInfo(?ct: CancellationToken): Task<obj> =
         Task.FromResult(obj())
@@ -235,7 +233,10 @@ type TestHelpers =
         Task.FromResult parameters.ListChannels
       member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
         failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<InvoiceSubscription> =
+
+      member this.TrackPayment(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<OutgoingInvoiceSubscription> =
+        failwith "todo"
+      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
         parameters.SubscribeSingleInvoice invoiceHash
       member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
         {
@@ -296,8 +297,7 @@ type TestHelpers =
           parameters.LoopInTerms req
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"
-
-        member this.ListenToSwapTx(swapId: SwapId, ?ct: CancellationToken): Task<Transaction> =
+        member this.ListenToSwapTx(swapId: SwapId, onTx, ?ct: CancellationToken): Task =
           failwith "todo"
     }
 
@@ -410,7 +410,7 @@ type TestHelpers =
       .ConfigureAppConfiguration(fun configBuilder ->
         configBuilder.AddJsonFile("appsettings.test.json") |> ignore
         )
-      .UseStartup<Helpers.TestStartup>()
+      .UseStartup<TestHelpersMod.TestStartup>()
       .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
         TestHelpers.ConfigureTestServices(services, configureServices)

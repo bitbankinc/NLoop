@@ -2,6 +2,7 @@ namespace NLoop.Server
 
 open NBitcoin
 open NLoop.Domain
+open NLoop.Domain.Utils
 
 type [<Measure>] percent
 type [<Measure>] ppm

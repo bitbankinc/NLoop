@@ -205,15 +205,15 @@ type ServerAPITest() =
       ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("We have channel but that is different from the one specified in request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
+      ("We have a channel but that is different from the one specified in request", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
+      ("one of the channel user specified does not exist", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId1; chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
       let inprogressBlockchainInfo = {
         testBlockchainInfo
           with
             Progress = 0.99f
       }
       ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
-      ("no connected nodes", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
-      ("no routes to the node", [channel2], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
+      ("no routes to the node", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
 
       let quote = {
         testLoopOutQuote
@@ -450,9 +450,9 @@ type ServerAPITest() =
               GetInvoice = fun _preimage _amt _ _ _ -> invoice
               SubscribeSingleInvoice = fun _hash -> asyncSeq {
                 {
-                  PaymentRequest = invoice
-                  AmountPayed = swapAmount
-                  InvoiceState = InvoiceStateEnum.Settled
+                  IncomingInvoiceSubscription.PaymentRequest = invoice
+                  AmountPayed = swapAmount.ToLNMoney()
+                  InvoiceState = IncomingInvoiceStateUnion.Settled
                 }
               }
           }

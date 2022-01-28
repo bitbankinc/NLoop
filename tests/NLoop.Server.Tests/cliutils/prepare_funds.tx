@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+set -eu
+
+bitcoin() {
+  ./docker-bitcoin-cli.sh createwallet cashcow 2> /dev/null
+
+  # prepare coinbase txes.
+  ./docker-bitcoin-cli.sh getnewaddress "" bech32 | xargs  -IXX ./docker-bitcoin-cli.sh generatetoaddress 120 XX
+
+  # Connect peers
+  ./docker-lncli-user.sh getinfo | jq ".uris[0]" | xargs -IXX ./docker-lncli-server_btc.sh connect XX  
+
+  # send on-chain funds to both sides.
+  ./docker-lncli-user.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
+  ./docker-lncli-server_btc.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
+  ./docker-bitcoin-cli.sh generatetoaddress 6 bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m # Just for confirmation
+}
+
+litecoin() {
+  ./docker-litecoin-cli.sh getnewaddress "" bech32 | xargs  -IXX ./docker-litecoin-cli.sh generatetoaddress 120 XX
+
+  # send on-chain litecoin funds for boltz.
+  ./docker-lncli-server_ltc.sh newaddress np2wkh | jq -r ".address" | xargs -IXX ./docker-litecoin-cli.sh sendtoaddress XX 10
+  ./docker-litecoin-cli.sh generatetoaddress 6 QWEEVUpWcCDkriRcv3Yi8eaBT7S2gZtX2H
+
+}
+
+bitcoin &
+litecoin &
+wait

@@ -261,7 +261,7 @@ type ISwapServerClient =
 
   /// In loop out, the counterparty must tell us about the swap tx (htlc tx, lockup tx). Otherwise we have no way to
   /// know about it. This is a method for waiting about the tx information.
-  abstract member ListenToSwapTx: swapId: SwapId * ?ct: CancellationToken -> Task<Transaction>
+  abstract member ListenToSwapTx: swapId: SwapId * onSwapTx: (Transaction -> Task)  * ?ct: CancellationToken -> Task
 
 
 type RestrictionError =

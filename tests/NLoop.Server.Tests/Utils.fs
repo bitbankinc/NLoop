@@ -40,3 +40,12 @@ module Assertion =
       failwith $"expected: Ok {e}\nactual: Error {a}"
     | Error e, Ok a ->
       failwith $"expected: Error {e}\nactual: Ok {a}"
+
+  let inline isSomeOf(expected: 'T, data: 'T option) =
+    match data with
+    | Some actual -> Assert.Equal<'T>(expected, actual)
+    | _ -> failwith $"Expected Some, but it was {data}"
+  let inline isSome(data: 'T option) =
+    match data with
+    | Some _ -> ()
+    | _ -> failwith $"Expected Some, but it was {data}"

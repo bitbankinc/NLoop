@@ -25,10 +25,18 @@ type BitcoinRPCBroadcaster(getClient: GetBlockchainClient, logger: ILogger<Bitco
       ()
     }
 
-type RPCFeeEstimator(getClient: GetBlockchainClient) =
+type RPCFeeEstimator(getClient: GetBlockchainClient, logger: ILogger<RPCFeeEstimator>) =
   interface IFeeEstimator with
     member this.Estimate target cc = task {
-      return! getClient(cc).EstimateFee(target)
+      try
+        return! getClient(cc).EstimateFee(target)
+      with
+      | :? RPC.NoEstimationException as ex ->
+        logger.LogWarning $"Failed estimate fee for {cc}: (target blockcount: {target}). using fallback fee. ({ex.Message})"
+        return
+          Constants.FallbackFeeSatsPerByte
+          |> decimal
+          |> FeeRate
     }
 
 type BitcoinUTXOProvider(getWalletClient: GetWalletClient) =

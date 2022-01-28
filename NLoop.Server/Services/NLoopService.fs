@@ -168,7 +168,20 @@ type NLoopExtensions() =
         |> ignore
 
       if (not <| test) then
+        // it is important here that Startup order is
+        // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
+        // Since otherwise on startup it fails to re-register swaps on blockchain listeners.
         this
+          .AddHostedService<SwapProcessManager>()
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
+          )
+          .AddSingleton<IHostedService>(fun p ->
+            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
+          )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
           )
@@ -176,18 +189,7 @@ type NLoopExtensions() =
             p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IOnGoingSwapStateProjection>() :?> OnGoingSwapStateProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IRecentSwapFailureProjection>() :?> RecentSwapFailureProjection :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<IBlockChainListener>() :?> BlockchainListeners :> IHostedService
-          )
-          .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManagers>() :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p -> p.GetRequiredService<BoltzListener>() :> IHostedService)
           |> ignore
-      this
-        .AddHostedService<SwapProcessManager>()

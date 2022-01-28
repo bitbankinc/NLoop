@@ -97,6 +97,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       SubscriptionTarget.All,
       loggerFactory.CreateLogger(),
       handleEvent,
+      (fun _ -> ()),
       conn
     )
 

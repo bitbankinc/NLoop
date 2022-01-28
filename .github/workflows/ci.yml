@@ -41,4 +41,4 @@ jobs:
         run: dotnet run --project tests/NLoop.Server.PropertyTests
 
       - name: Run unit tests for the server
-        run: dotnet test tests/NLoop.Server.Tests
+        run: dotnet test tests/NLoop.Server.Tests --filter="Docker!=On"

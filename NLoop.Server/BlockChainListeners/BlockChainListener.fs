@@ -159,7 +159,6 @@ type BlockchainListener(
   }
 
   member this.RegisterSwap(id: SwapId) =
-    if not <| swaps.TryAdd(id, ()) then
-      logger.LogError($"Failed to add swap id {id}")
+    swaps.TryAdd(id, ()) |> ignore
   member this.RemoveSwap(swapId: SwapId) =
     swaps.TryRemove(swapId) |> ignore
