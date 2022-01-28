@@ -92,6 +92,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
+  GetHodlInvoice: PaymentHash -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
   SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
@@ -99,7 +100,7 @@ type DummyLnClientParameters = {
   static member Default = {
     ListChannels = []
     QueryRoutes = fun _ _ _ -> Route[]
-    GetInvoice = fun preimage amount expiry memo hint ->
+    GetInvoice = fun _preimage amount expiry memo _hint ->
       let tags: TaggedFields = {
         Fields = [ TaggedField.DescriptionTaggedField(memo) ]
       }
@@ -108,6 +109,7 @@ type DummyLnClientParameters = {
       |> ResultUtils.Result.deref
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
     GetChannelInfo = fun _cId -> failwith "todo"
+    GetHodlInvoice = fun _ _ _ _ _ -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -199,7 +201,8 @@ type TestHelpers =
                                  routeHints: RouteHint[],
                                  memo: string,
                                  ?ct: CancellationToken) =
-          Task.FromResult(failwith "todo")
+          parameters.GetHodlInvoice paymentHash value expiry memo routeHints
+          |> Task.FromResult
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,

@@ -51,6 +51,7 @@ type ListChannelResponse = {
   Id: ShortChannelId
   Cap: Money
   LocalBalance: Money
+  RemoteBalance: Money
   NodeId: PubKey
 }
 

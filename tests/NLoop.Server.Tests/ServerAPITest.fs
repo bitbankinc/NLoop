@@ -68,6 +68,7 @@ module private ServerAPITestHelpers =
     ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
+    RemoteBalance = Money.Zero
     NodeId = peer1
   }
 
@@ -75,6 +76,7 @@ module private ServerAPITestHelpers =
     ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
+    RemoteBalance = Money.Zero
     NodeId = peer1
   }
   let node1Uri = {
