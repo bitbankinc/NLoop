@@ -2,6 +2,7 @@ namespace NLoop.Server.Actors
 
 open System
 open System.Collections.Generic
+open System.Threading.Channels
 open FSharp.Control
 open System.Net.Http
 open System.Threading
@@ -105,32 +106,51 @@ type SwapActor(opts: IOptions<NLoopOptions>,
   let handler =
     Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
 
+  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command> * TaskCompletionSource> 10
+
+  let _worker = task {
+    let mutable finished = false
+    while not <| finished do
+      let! channelOpened = workQueue.Reader.WaitToReadAsync()
+      finished <- not <| channelOpened
+      if not finished then
+        let! swapId, cmd, cts = workQueue.Reader.ReadAsync()
+        match! handler.Execute swapId cmd with
+        | Ok events ->
+          events
+          |> List.iter(fun e ->
+            eventAggregator.Publish e
+            eventAggregator.Publish e.Data
+            eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
+          )
+        | Error (EventSourcingError.Store s as e) ->
+          logger.LogError($"Store Error when executing swap handler %A{s}")
+          eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
+          // todo: retry
+          ()
+        | Error s ->
+          logger.LogError($"Error when executing swap handler %A{s}")
+          eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
+        cts.SetResult()
+  }
+
   member val Handler = handler with get
   member val Aggregate = aggr with get
   member this.Execute(swapId, msg: Swap.Command, ?source) = unitTask {
     let source = defaultArg source (nameof(SwapActor))
-    logger.LogDebug($"New Command {msg}: (source {source})")
+    logger.LogDebug($"New Command {msg} for swap {swapId}: (source {source})")
     let cmd =
       { ESCommand.Data = msg
         Meta = { CommandMeta.Source = source
                  EffectiveDate = UnixDateTime.UtcNow } }
-    match! handler.Execute swapId cmd with
-    | Ok events ->
-      events
-      |> List.iter(fun e ->
-        eventAggregator.Publish e
-        eventAggregator.Publish e.Data
-        eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
-      )
-    | Error (EventSourcingError.Store s as e) ->
-      logger.LogError($"Store Error when executing swap handler %A{s}")
-      eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
-      // todo: retry
-      ()
-    | Error s ->
-      logger.LogError($"Error when executing swap handler %A{s}")
-      eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
+
+    let! channelOpened = workQueue.Writer.WaitToWriteAsync()
+    let cts = TaskCompletionSource()
+    if channelOpened then
+      do! workQueue.Writer.WriteAsync((swapId, cmd, cts))
+      do! cts.Task
   }
+
   interface ISwapActor with
     member this.Aggregate = this.Aggregate
     member this.Execute(i, cmd, s) =
