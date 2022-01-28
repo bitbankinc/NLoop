@@ -9,6 +9,7 @@ open System.Security.Cryptography.X509Certificates
 open System.Threading
 open DotNetLightning.Payment
 open DotNetLightning.Utils
+open DotNetLightning.Utils.Primitives
 open FSharp.Control
 open Google.Protobuf
 open Grpc.Core
@@ -236,185 +237,137 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
   member this.Deadline =
     Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(20.))
 
-  interface INLoopLightningClient with
-    member this.ConnectPeer(nodeId, host, ct) =
+  member this.ConnectPeer(nodeId: PubKey, host, ct) =
+    let ct = defaultArg ct CancellationToken.None
+    let r = ConnectPeerRequest()
+    r.Addr <-
+      let addr = LightningAddress()
+      addr.Host <- host
+      addr.Pubkey <- nodeId.ToHex()
+      addr
+    unitTask {
+      let! m = client.ConnectPeerAsync(r, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
+      return m
+    }
+  member this.GetDepositAddress(ct) =
+    task {
       let ct = defaultArg ct CancellationToken.None
-      let r = ConnectPeerRequest()
-      r.Addr <-
-        let addr = LightningAddress()
-        addr.Host <- host
-        addr.Pubkey <- nodeId.ToHex()
-        addr
-      unitTask {
-        let! m = client.ConnectPeerAsync(r, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
-        return m
-      }
-    member this.GetDepositAddress(ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = NewAddressRequest()
-        let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
-        return BitcoinAddress.Create(m.Address, network)
-      }
-    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = AddHoldInvoiceRequest()
-        req.Hash <-
-          paymentHash.ToBytes()
-          |> ByteString.CopyFrom
-        req.Value <- value.Satoshi
-        req.Expiry <- expiry.Seconds |> int64
-        req.Memo <- memo
-        for r in routeHints do
-          let lnRouteHint = RouteHint()
-          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-          req.RouteHints.Add(lnRouteHint)
-        let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
-      }
-    member this.GetInfo(ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = GetInfoRequest()
-        let! m = client.GetInfoAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        return m |> box
-      }
-
-    member this.SubscribeSingleInvoice(invoiceHash, ct) =
+      let req = NewAddressRequest()
+      let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
+      return BitcoinAddress.Create(m.Address, network)
+    }
+  member this.GetHodlInvoice(paymentHash: DotNetLightning.Utils.Primitives.PaymentHash, value: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
+    task {
       let ct = defaultArg ct CancellationToken.None
-      let resp =
-        let req = SubscribeSingleInvoiceRequest()
-        req.RHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
-        // we need to set longer deadline for grpc itself too.
-        // since we don't know how long it will take, we just set null.
-        let deadline = Nullable()
-        invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, deadline, ct).ResponseStream
-      let translateEnum status =
-        match status with
-        | Invoice.Types.InvoiceState.Open -> IncomingInvoiceStateUnion.Open
-        | Invoice.Types.InvoiceState.Accepted -> IncomingInvoiceStateUnion.Accepted
-        | Invoice.Types.InvoiceState.Canceled -> IncomingInvoiceStateUnion.Canceled
-        | Invoice.Types.InvoiceState.Settled -> IncomingInvoiceStateUnion.Settled
-        | _ -> IncomingInvoiceStateUnion.Unknown
-
-      resp.ReadAllAsync(ct)
-      |> AsyncSeq.ofAsyncEnum
-      |> AsyncSeq.map(fun inv ->
-        { IncomingInvoiceSubscription.InvoiceState = inv.State |> translateEnum
-          IncomingInvoiceSubscription.PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
-          IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
-        }
-      )
-
-    member this.TrackPayment(invoiceHash, ct) =
+      let req = AddHoldInvoiceRequest()
+      req.Hash <-
+        paymentHash.ToBytes()
+        |> ByteString.CopyFrom
+      req.Value <- value.Satoshi
+      req.Expiry <- expiry.Seconds |> int64
+      req.Memo <- memo
+      for r in routeHints do
+        let lnRouteHint = RouteHint()
+        lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+        req.RouteHints.Add(lnRouteHint)
+      let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+    }
+  member this.GetInfo(ct) =
+    task {
       let ct = defaultArg ct CancellationToken.None
-      let resp =
-        let req = TrackPaymentRequest()
-        req.PaymentHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
-        // we need to set longer deadline for grpc itself too.
-        // since we don't know how long it will take, we just set null.
-        let deadline = Nullable()
-        routerClient.TrackPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
-      let translateEnum status =
-        match status with
-        | Payment.Types.PaymentStatus.InFlight ->  OutgoingInvoiceStateUnion.InFlight
-        | Payment.Types.PaymentStatus.Failed -> OutgoingInvoiceStateUnion.Failed
-        | Payment.Types.PaymentStatus.Succeeded -> OutgoingInvoiceStateUnion.Succeeded
-        | Payment.Types.PaymentStatus.Unknown
-        | _ -> OutgoingInvoiceStateUnion.Unknown
+      let req = GetInfoRequest()
+      let! m = client.GetInfoAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return m |> box
+    }
 
-      resp.ReadAllAsync(ct)
-      |> AsyncSeq.ofAsyncEnum
-      |> AsyncSeq.map(fun inv ->
-        { OutgoingInvoiceSubscription.InvoiceState = inv.Status |> translateEnum
-          Fee = inv.FeeMsat |> LNMoney.MilliSatoshis
-          PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
-          AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
-        }
-      )
+  member this.SubscribeSingleInvoice(invoiceHash: DotNetLightning.Utils.Primitives.PaymentHash, ct) =
+    let ct = defaultArg ct CancellationToken.None
+    let resp =
+      let req = SubscribeSingleInvoiceRequest()
+      req.RHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
+      // we need to set longer deadline for grpc itself too.
+      // since we don't know how long it will take, we just set null.
+      let deadline = Nullable()
+      invoiceClient.SubscribeSingleInvoice(req, this.DefaultHeaders, deadline, ct).ResponseStream
+    let translateEnum status =
+      match status with
+      | Invoice.Types.InvoiceState.Open -> IncomingInvoiceStateUnion.Open
+      | Invoice.Types.InvoiceState.Accepted -> IncomingInvoiceStateUnion.Accepted
+      | Invoice.Types.InvoiceState.Canceled -> IncomingInvoiceStateUnion.Canceled
+      | Invoice.Types.InvoiceState.Settled -> IncomingInvoiceStateUnion.Settled
+      | _ -> IncomingInvoiceStateUnion.Unknown
 
-    member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
-      task {
-        let req = Invoice()
-        let ct = defaultArg ct CancellationToken.None
-        req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
-        req.Value <- amount.Satoshi
-        req.Expiry <- expiry.Seconds |> int64
-        for r in routeHints do
-          let lnRouteHint = RouteHint()
-          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-          req.RouteHints.Add(lnRouteHint)
-        req.Memo <- memo
-        let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+    resp.ReadAllAsync(ct)
+    |> AsyncSeq.ofAsyncEnum
+    |> AsyncSeq.map(fun inv ->
+      { IncomingInvoiceSubscription.InvoiceState = inv.State |> translateEnum
+        IncomingInvoiceSubscription.PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+        IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
       }
-    member this.ListChannels(ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = ListChannelsRequest()
-        let! r = client.ListChannelsAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        return
-          r.Channels
-          |> Seq.map(fun c ->
-            { ListChannelResponse.Id = c.ChanId |> ShortChannelId.FromUInt64
-              Cap = c.Capacity |> Money.Satoshis
-              LocalBalance = c.LocalBalance |> Money.Satoshis
-              NodeId = c.RemotePubkey |> PubKey
-            })
-          |> Seq.toList
-      }
+    )
 
-    member this.SendPayment(param, ct) =
+  member this.TrackPayment(invoiceHash: DotNetLightning.Utils.Primitives.PaymentHash, ct) =
+    let ct = defaultArg ct CancellationToken.None
+    let resp =
+      let req = TrackPaymentRequest()
+      req.PaymentHash <- invoiceHash.ToBytes() |> ByteString.CopyFrom
+      // we need to set longer deadline for grpc itself too.
+      // since we don't know how long it will take, we just set null.
+      let deadline = Nullable()
+      routerClient.TrackPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
+    let translateEnum status =
+      match status with
+      | Payment.Types.PaymentStatus.InFlight ->  OutgoingInvoiceStateUnion.InFlight
+      | Payment.Types.PaymentStatus.Failed -> OutgoingInvoiceStateUnion.Failed
+      | Payment.Types.PaymentStatus.Succeeded -> OutgoingInvoiceStateUnion.Succeeded
+      | Payment.Types.PaymentStatus.Unknown
+      | _ -> OutgoingInvoiceStateUnion.Unknown
+
+    resp.ReadAllAsync(ct)
+    |> AsyncSeq.ofAsyncEnum
+    |> AsyncSeq.map(fun inv ->
+      { OutgoingInvoiceSubscription.InvoiceState = inv.Status |> translateEnum
+        Fee = inv.FeeMsat |> LNMoney.MilliSatoshis
+        PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+        AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
+      }
+    )
+
+  member this.GetInvoice(paymentPreimage: PaymentPreimage, amount: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
+    task {
+      let req = Invoice()
       let ct = defaultArg ct CancellationToken.None
-      task {
-        let responseStream =
-          let req = SendPaymentRequest()
-          req.PaymentRequest <- param.Invoice.ToString()
-          req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
-          req.FeeLimitSat <- param.MaxFee.Satoshi
-          req.MaxParts <-
-            let count = param.OutgoingChannelIds.Count()
-            if count = 0 then 1u else count |> uint
-          req.TimeoutSeconds <-
-            param.TimeoutSeconds
-          routerClient.SendPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
-
-        let f (s:Payment) =
-          {
-            PaymentResult.Fee = s.FeeMsat |> LNMoney.MilliSatoshis
-            PaymentPreimage = s.PaymentPreimage |> hex.DecodeData |> PaymentPreimage.Create
-          }
-
-        try
-          let mutable result = None
-          let mutable hasNotFinished = true
-          while result.IsNone && hasNotFinished do
-            ct.ThrowIfCancellationRequested()
-            let! notFinished = responseStream.MoveNext(ct)
-            hasNotFinished <- notFinished
-            if hasNotFinished then
-              let status = responseStream.Current
-              match status.Status with
-              | Payment.Types.PaymentStatus.Succeeded ->
-                result <- status |> f |> Ok |> Some
-              | Payment.Types.PaymentStatus.Failed ->
-                result <- $"payment failed. reason: {status.FailureReason}" |> Error |> Some
-              | Payment.Types.PaymentStatus.InFlight ->
-                ()
-              | s ->
-                result <- $"Unexpected payment state: {s}" |> Error |> Some
-          return
-            match result with
-            | Some r -> r
-            | None -> Error $"Empty result in offer"
-        with
-        | ex ->
-          return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
-      }
-
-    member this.Offer(param, ct) = task {
+      req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
+      req.Value <- amount.Satoshi
+      req.Expiry <- expiry.Seconds |> int64
+      for r in routeHints do
+        let lnRouteHint = RouteHint()
+        lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+        req.RouteHints.Add(lnRouteHint)
+      req.Memo <- memo
+      let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
+    }
+  member this.ListChannels(ct) =
+    task {
       let ct = defaultArg ct CancellationToken.None
+      let req = ListChannelsRequest()
+      let! r = client.ListChannelsAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return
+        r.Channels
+        |> Seq.map(fun c ->
+          { ListChannelResponse.Id = c.ChanId |> ShortChannelId.FromUInt64
+            Cap = c.Capacity |> Money.Satoshis
+            LocalBalance = c.LocalBalance |> Money.Satoshis
+            NodeId = c.RemotePubkey |> PubKey
+          })
+        |> Seq.toList
+    }
+
+  member this.SendPayment(param, ct) =
+    let ct = defaultArg ct CancellationToken.None
+    task {
       let responseStream =
         let req = SendPaymentRequest()
         req.PaymentRequest <- param.Invoice.ToString()
@@ -425,9 +378,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           if count = 0 then 1u else count |> uint
         req.TimeoutSeconds <-
           param.TimeoutSeconds
-        // we need to set longer deadline for grpc itself too.
-        let deadline = Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(float param.TimeoutSeconds + 10.))
-        routerClient.SendPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
+        routerClient.SendPaymentV2(req, this.DefaultHeaders, this.Deadline, ct).ResponseStream
+
+      let f (s:Payment) =
+        {
+          PaymentResult.Fee = s.FeeMsat |> LNMoney.MilliSatoshis
+          PaymentPreimage = s.PaymentPreimage |> hex.DecodeData |> PaymentPreimage.Create
+        }
+
       try
         let mutable result = None
         let mutable hasNotFinished = true
@@ -438,12 +396,12 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           if hasNotFinished then
             let status = responseStream.Current
             match status.Status with
-            | Payment.Types.PaymentStatus.Succeeded
-            | Payment.Types.PaymentStatus.InFlight ->
-              result <- Some(Ok())
-              ()
+            | Payment.Types.PaymentStatus.Succeeded ->
+              result <- status |> f |> Ok |> Some
             | Payment.Types.PaymentStatus.Failed ->
               result <- $"payment failed. reason: {status.FailureReason}" |> Error |> Some
+            | Payment.Types.PaymentStatus.InFlight ->
+              ()
             | s ->
               result <- $"Unexpected payment state: {s}" |> Error |> Some
         return
@@ -454,82 +412,142 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       | ex ->
         return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
     }
-    member this.OpenChannel(request, ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = OpenChannelRequest()
-        req.Private <- request.Private |> Option.defaultValue true
-        req.CloseAddress <- request.CloseAddress |> Option.toObj
-        req.NodePubkey <- request.NodeId.ToBytes() |> ByteString.CopyFrom
-        req.LocalFundingAmount <- request.Amount.Satoshi
-        try
-          let! r = client.OpenChannelSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
-          return r.ToOutPoint() |> Ok
-        with
-        | :? RpcException as e ->
-          return
-            {
-              StatusCode = e.StatusCode |> int |> Some
-              Message = e.Message
-            }
-            |> Error
-      }
-    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
-      task {
-        let ct = defaultArg ct CancellationToken.None
-        let req = QueryRoutesRequest()
-        req.PubKey <- nodeId.ToHex()
-        req.Amt <- amount.Satoshi
-        maybeOutgoingChanId
-        |> Option.iter(fun chanId ->
-          req.OutgoingChanId <- chanId.ToUInt64()
-        )
-        let! resp = client.QueryRoutesAsync(req, this.DefaultHeaders, this.Deadline, ct)
-        let r = resp.Routes.[0]
-        return
-          r.Hops
-          |> Seq.map(fun t ->
-            { RouteHop.Fee = t.FeeMsat |> LNMoney.MilliSatoshis
-              PubKey = t.PubKey |> PubKey
-              ShortChannelId = t.ChanId |> ShortChannelId.FromUInt64
-              CLTVExpiryDelta = t.Expiry
-            }
-          )
-          |> Seq.toList
-          |> Route.Route
-      }
-    member this.SubscribeChannelChange(ct) =
-      let ct = defaultArg ct CancellationToken.None
-      let req = ChannelEventSubscription()
-      // we need to set longer deadline for grpc itself too.
-      // since we don't know how long it will take, we just set null.
-      let deadline = Nullable()
-      client
-        .SubscribeChannelEvents(req, this.DefaultHeaders, deadline, ct)
-        .ResponseStream
-        .ReadAllAsync(ct)
-      |> AsyncSeq.ofAsyncEnum
-      |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
 
-    member this.GetChannelInfo(channelId: ShortChannelId, ?ct: CancellationToken) = task {
+  member this.Offer(param, ct) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let responseStream =
+      let req = SendPaymentRequest()
+      req.PaymentRequest <- param.Invoice.ToString()
+      req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
+      req.FeeLimitSat <- param.MaxFee.Satoshi
+      req.MaxParts <-
+        let count = param.OutgoingChannelIds.Count()
+        if count = 0 then 1u else count |> uint
+      req.TimeoutSeconds <-
+        param.TimeoutSeconds
+      // we need to set longer deadline for grpc itself too.
+      let deadline = Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(float param.TimeoutSeconds + 10.))
+      routerClient.SendPaymentV2(req, this.DefaultHeaders, deadline, ct).ResponseStream
+    try
+      let mutable result = None
+      let mutable hasNotFinished = true
+      while result.IsNone && hasNotFinished do
+        ct.ThrowIfCancellationRequested()
+        let! notFinished = responseStream.MoveNext(ct)
+        hasNotFinished <- notFinished
+        if hasNotFinished then
+          let status = responseStream.Current
+          match status.Status with
+          | Payment.Types.PaymentStatus.Succeeded
+          | Payment.Types.PaymentStatus.InFlight ->
+            result <- Some(Ok())
+            ()
+          | Payment.Types.PaymentStatus.Failed ->
+            result <- $"payment failed. reason: {status.FailureReason}" |> Error |> Some
+          | s ->
+            result <- $"Unexpected payment state: {s}" |> Error |> Some
+      return
+        match result with
+        | Some r -> r
+        | None -> Error $"Empty result in offer"
+    with
+    | ex ->
+      return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
+  }
+  member this.OpenChannel(request, ct) =
+    task {
       let ct = defaultArg ct CancellationToken.None
-      let! resp =
-        let req = ChanInfoRequest()
-        req.ChanId <- channelId.ToUInt64()
-        client.GetChanInfoAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
-      let convertNodePolicy (nodeIdStr: string) (p: RoutingPolicy) = {
-        NodePolicy.Disabled = p.Disabled
-        Id = nodeIdStr |> PubKey
-        TimeLockDelta =
-          // cltv_expiry_delta must be `u16` according to the [bolt07](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md)
-          p.TimeLockDelta |> uint16 |> BlockHeightOffset16
-        MinHTLC = p.MinHtlc |> LNMoney.MilliSatoshis
-        FeeBase = p.FeeBaseMsat |> LNMoney.MilliSatoshis
-        FeeProportionalMillionths = p.FeeRateMilliMsat |> uint32
-      }
-      return {
-        GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis
-        Node1Policy = resp.Node1Policy |> convertNodePolicy resp.Node1Pub
-        Node2Policy = resp.Node2Policy |> convertNodePolicy resp.Node2Pub
-      }
+      let req = OpenChannelRequest()
+      req.Private <- request.Private |> Option.defaultValue true
+      req.CloseAddress <- request.CloseAddress |> Option.toObj
+      req.NodePubkey <- request.NodeId.ToBytes() |> ByteString.CopyFrom
+      req.LocalFundingAmount <- request.Amount.Satoshi
+      try
+        let! r = client.OpenChannelSyncAsync(req, this.DefaultHeaders, this.Deadline, ct)
+        return r.ToOutPoint() |> Ok
+      with
+      | :? RpcException as e ->
+        return
+          {
+            StatusCode = e.StatusCode |> int |> Some
+            Message = e.Message
+          }
+          |> Error
     }
+  member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, maybeOutgoingChanId: ShortChannelId option, ct) =
+    task {
+      let ct = defaultArg ct CancellationToken.None
+      let req = QueryRoutesRequest()
+      req.PubKey <- nodeId.ToHex()
+      req.Amt <- amount.Satoshi
+      maybeOutgoingChanId
+      |> Option.iter(fun chanId ->
+        req.OutgoingChanId <- chanId.ToUInt64()
+      )
+      let! resp = client.QueryRoutesAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      let r = resp.Routes.[0]
+      return
+        r.Hops
+        |> Seq.map(fun t ->
+          { RouteHop.Fee = t.FeeMsat |> LNMoney.MilliSatoshis
+            PubKey = t.PubKey |> PubKey
+            ShortChannelId = t.ChanId |> ShortChannelId.FromUInt64
+            CLTVExpiryDelta = t.Expiry
+          }
+        )
+        |> Seq.toList
+        |> Route.Route
+    }
+  member this.SubscribeChannelChange(ct) =
+    let ct = defaultArg ct CancellationToken.None
+    let req = ChannelEventSubscription()
+    // we need to set longer deadline for grpc itself too.
+    // since we don't know how long it will take, we just set null.
+    let deadline = Nullable()
+    client
+      .SubscribeChannelEvents(req, this.DefaultHeaders, deadline, ct)
+      .ResponseStream
+      .ReadAllAsync(ct)
+    |> AsyncSeq.ofAsyncEnum
+    |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
+
+  member this.GetChannelInfo(channelId: ShortChannelId, ct: CancellationToken option) = task {
+    let ct = defaultArg ct CancellationToken.None
+    let! resp =
+      let req = ChanInfoRequest()
+      req.ChanId <- channelId.ToUInt64()
+      client.GetChanInfoAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
+    let convertNodePolicy (nodeIdStr: string) (p: RoutingPolicy) = {
+      NodePolicy.Disabled = p.Disabled
+      Id = nodeIdStr |> PubKey
+      TimeLockDelta =
+        // cltv_expiry_delta must be `u16` according to the [bolt07](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md)
+        p.TimeLockDelta |> uint16 |> BlockHeightOffset16
+      MinHTLC = p.MinHtlc |> LNMoney.MilliSatoshis
+      FeeBase = p.FeeBaseMsat |> LNMoney.MilliSatoshis
+      FeeProportionalMillionths = p.FeeRateMilliMsat |> uint32
+    }
+    return {
+      GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis
+      Node1Policy = resp.Node1Policy |> convertNodePolicy resp.Node1Pub
+      Node2Policy = resp.Node2Policy |> convertNodePolicy resp.Node2Pub
+    }
+  }
+
+  interface INLoopLightningClient with
+    member this.ConnectPeer(nodeId, host, ct) = this.ConnectPeer(nodeId, host, ct)
+    member this.GetDepositAddress(ct) = this.GetDepositAddress(ct)
+    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
+      this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct)
+    member this.GetInfo(ct) = this.GetInfo ct
+    member this.SubscribeSingleInvoice(invoiceHash, ct) = this.SubscribeSingleInvoice(invoiceHash, ct)
+    member this.TrackPayment(invoiceHash, ct) = this.TrackPayment(invoiceHash, ct)
+    member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
+      this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct)
+    member this.ListChannels(ct) = this.ListChannels ct
+    member this.SendPayment(param, ct) = this.SendPayment (param, ct)
+    member this.Offer(param, ct) = this.Offer(param, ct)
+    member this.OpenChannel(request, ct) =  this.OpenChannel(request, ct)
+    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) = this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct)
+    member this.SubscribeChannelChange(ct) = this.SubscribeChannelChange(ct)
+    member this.GetChannelInfo(channelId: ShortChannelId, ?ct: CancellationToken) = this.GetChannelInfo(channelId, ct)

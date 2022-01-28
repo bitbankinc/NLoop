@@ -209,6 +209,10 @@ type TestHelpers =
           Fee = req.MaxFee.ToLNMoney()
         }
 
+      member this.Offer(req, ?ct) =
+        let offerResult = ()
+        TaskResult.retn offerResult
+
       member this.GetInfo(?ct: CancellationToken): Task<obj> =
         Task.FromResult(obj())
 
