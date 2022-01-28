@@ -373,7 +373,6 @@ type TestHelpers =
     }
 
   static member private ConfigureTestServices(services: IServiceCollection, ?configureServices: IServiceCollection -> unit) =
-    let rc = NLoopServerCommandLine.getRootCommand()
     services
       .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
       .AddHttpClient<BoltzClient>()
