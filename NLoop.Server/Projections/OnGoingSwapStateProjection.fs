@@ -50,10 +50,14 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         | Ok r ->
           this.State <-
             (
-              if this.State |> Map.containsKey r.StreamId |> not then
-                this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
-              else
-                this.State
+              match r.Data with
+              | Swap.Event.NewLoopOutAdded { LoopOut = { ChainName = c } }
+              | Swap.Event.NewLoopInAdded { LoopIn = { ChainName = c } } ->
+                if String.Equals(c, opts.Value.Network, StringComparison.OrdinalIgnoreCase) && this.State |> Map.containsKey r.StreamId |> not then
+                  this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
+                else
+                  this.State
+              | _ -> this.State
             )
             |> Map.change
               r.StreamId
