@@ -238,6 +238,7 @@ type SwapDomainTests() =
             Swap.PayInvoiceResult.RoutingFee = LNMoney.Satoshis(10L)
           }
           Task.FromResult(r)
+      Swap.Deps.Offer = fun _ _ _ -> Task.FromResult (Ok ())
     }
 
   do

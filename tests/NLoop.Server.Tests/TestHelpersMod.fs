@@ -63,13 +63,13 @@ module TestHelpersMod =
       |> function | Ok s -> s | Error e -> failwith e
     NLoopLndGrpcClient(settings, network)
 
-  let userLndClient =
+  let userLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
     getLightningClient path 32777 Network.RegTest
-  let serverBTCLndClient =
+  let serverBTCLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
     getLightningClient path 32778 Network.RegTest
-  let serverLTCLndClient =
+  let serverLTCLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
     getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
 
@@ -297,8 +297,7 @@ type TestHelpers =
           parameters.LoopInTerms req
         member this.CheckConnection(?ct: CancellationToken): Task =
           failwith "todo"
-
-        member this.ListenToSwapTx(swapId: SwapId, ?ct: CancellationToken): Task<Transaction> =
+        member this.ListenToSwapTx(swapId: SwapId, onTx, ?ct: CancellationToken): Task =
           failwith "todo"
     }
 

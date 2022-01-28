@@ -45,5 +45,11 @@ type BoltzClientTests() =
     Assertion.isSome boltzResult.Value.Transaction
     Assert.NotNull boltzResult.Value.Transaction.Value.Tx
 
+    let paymentSeq =
+      cli.User.BitcoinLnd.TrackPayment(resp.Invoice.PaymentHash, Some cts.Token)
+    let! paymentState = paymentSeq |> AsyncSeq.tryFirst
+    Assertion.isSome paymentState
+    Assert.Equal (OutgoingInvoiceStateUnion.InFlight, paymentState.Value.InvoiceState)
+
     ()
   }

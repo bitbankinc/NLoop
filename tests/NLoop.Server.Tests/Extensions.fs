@@ -197,8 +197,8 @@ type ExternalClients = {
     {
       ExternalClients.Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
       Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
-      User = {| BitcoinLnd = userLndClient |}
-      Server = {| BitcoinLnd = serverBTCLndClient; LitecoinLnd = serverLTCLndClient; Boltz = serverBoltz |}
+      User = {| BitcoinLnd = userLndClient() |}
+      Server = {| BitcoinLnd = serverBTCLndClient(); LitecoinLnd = serverLTCLndClient(); Boltz = serverBoltz |}
     }
 
 type Clients = {
