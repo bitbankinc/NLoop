@@ -1,6 +1,5 @@
 namespace NLoop.Server.SwapServerClient
 
-open System
 open FsToolkit.ErrorHandling
 open System.Threading
 open BoltzClient
@@ -11,6 +10,7 @@ open DotNetLightning.Utils.Primitives
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
+open FSharp.Control
 
 
 [<AutoOpen>]
@@ -175,18 +175,15 @@ type BoltzSwapServerClient(b: BoltzClient) =
 
     member this.ListenToSwapTx(swapId, ct) =
       let ct = defaultArg ct CancellationToken.None
-      task {
-        let mutable result = null
-        while result |> isNull && not <| ct.IsCancellationRequested do
-          let! resp = b.GetSwapStatusAsync(swapId.Value, ct).ConfigureAwait(false)
+      asyncSeq {
+        for resp in b.StartListenToSwapStatusChange(swapId.Value) do
           match resp.Transaction with
           | Some {Tx = tx} when resp.SwapStatus = SwapStatusType.TxMempool ->
-             result <- tx
+            return tx
           | _ ->
             ()
-          do! Task.Delay 6000
-        if result |> isNull then
-          failwith "unreachable: result is null"
-        return result
       }
+      |> AsyncSeq.tryFirst
+      |> Async.map(function | None -> printfn "Unreachable!"; failwith "Unreachable!" | Some a -> a)
+      |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
 

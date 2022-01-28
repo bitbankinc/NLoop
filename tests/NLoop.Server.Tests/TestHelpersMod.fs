@@ -39,7 +39,7 @@ open NLoop.Server.SwapServerClient
 open NLoop.Server.Projections
 
 
-module Helpers =
+module TestHelpersMod =
   let getLocalBoltzClient() =
     let httpClient =new  HttpClient()
     httpClient.BaseAddress <- Uri("http://localhost:6028")
@@ -55,18 +55,23 @@ module Helpers =
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
 
-  let getLightningClient path port =
+  let getLightningClient path port network =
     let settings =
-      let tls = $"{path}/tls.cert" |> getCertFingerPrintHex |> Some
-      let macaroonPath = Some $"{path}/admin.macaroon"
+      let tls = Path.Combine(path, "tls.cert") |> getCertFingerPrintHex |> Some
+      let macaroonPath = Some (Path.Combine(path, "admin.macaroon"))
       LndGrpcSettings.Create($"https://localhost:{port}", None, macaroonPath, tls, true)
       |> function | Ok s -> s | Error e -> failwith e
-    NLoopLndGrpcClient(settings, Network.RegTest)
-    :> INLoopLightningClient
+    NLoopLndGrpcClient(settings, network)
 
-  let userLndClient = getLightningClient "../../../data/lnd_user" 32777
-  let serverBTCLndClient = getLightningClient "../../../data/lnd_server_btc" 32778
-  let serverLTCLndClient = getLightningClient "../../../data/lnd_server_ltc" 32779
+  let userLndClient =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
+    getLightningClient path 32777 Network.RegTest
+  let serverBTCLndClient =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
+    getLightningClient path 32778 Network.RegTest
+  let serverLTCLndClient =
+    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
+    getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
 
   let walletAddress =
     new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
@@ -176,7 +181,7 @@ type DummyWalletClientParameters = {
     {
       ListUnspent = fun () -> failwith "todo"
       SignSwapTxPSBT = fun _ -> failwith "todo"
-      GetDepositAddress = fun () -> Helpers.walletAddress
+      GetDepositAddress = fun () -> TestHelpersMod.walletAddress
     }
 
 type TestHelpers =
@@ -186,7 +191,7 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        Helpers.lndAddress
+        TestHelpersMod.lndAddress
         |> Task.FromResult
       member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
                                  value: LNMoney,
@@ -406,7 +411,7 @@ type TestHelpers =
       .ConfigureAppConfiguration(fun configBuilder ->
         configBuilder.AddJsonFile("appsettings.test.json") |> ignore
         )
-      .UseStartup<Helpers.TestStartup>()
+      .UseStartup<TestHelpersMod.TestStartup>()
       .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
         TestHelpers.ConfigureTestServices(services, configureServices)

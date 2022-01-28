@@ -229,6 +229,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
   let invoiceClient = Invoices.InvoicesClient(channel)
   let routerClient = Router.RouterClient(channel)
 
+  member val Client = client with get
+
   member this.DefaultHeaders = null
     //let metadata = Metadata()
     // metadata.Add()
@@ -249,6 +251,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       let! m = client.ConnectPeerAsync(r, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
       return m
     }
+  member this.ConnectPeer(nodeId: PubKey, host, ct) = this.ConnectPeer(nodeId, host, Some ct)
   member this.GetDepositAddress(ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
@@ -256,6 +259,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       let! m = client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
       return BitcoinAddress.Create(m.Address, network)
     }
+
+  member this.GetDepositAddress(ct) = this.GetDepositAddress(Some ct)
   member this.GetHodlInvoice(paymentHash: DotNetLightning.Utils.Primitives.PaymentHash, value: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
@@ -364,6 +369,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           })
         |> Seq.toList
     }
+  member this.ListChannels(ct) = this.ListChannels(Some ct)
 
   member this.SendPayment(param, ct) =
     let ct = defaultArg ct CancellationToken.None
@@ -454,12 +460,15 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     | ex ->
       return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
   }
+  member this.Offer(param, ct) = this.Offer(param, Some ct)
   member this.OpenChannel(request, ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
       let req = OpenChannelRequest()
       req.Private <- request.Private |> Option.defaultValue true
-      req.CloseAddress <- request.CloseAddress |> Option.toObj
+      request.CloseAddress |> Option.iter(fun addr ->
+        req.CloseAddress <- addr
+      )
       req.NodePubkey <- request.NodeId.ToBytes() |> ByteString.CopyFrom
       req.LocalFundingAmount <- request.Amount.Satoshi
       try
@@ -474,6 +483,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
           }
           |> Error
     }
+  member this.OpenChannel(request, ct) = this.OpenChannel(request, Some ct)
   member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, maybeOutgoingChanId: ShortChannelId option, ct) =
     task {
       let ct = defaultArg ct CancellationToken.None

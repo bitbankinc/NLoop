@@ -191,6 +191,7 @@ services:
       - litecoind
     ports:
       - "32737:32737"
+      - "32778:32778"
     volumes:
       - "./data/lnd_server_btc:/data"
       - "./data/bitcoin:/deps/.bitcoin"
@@ -244,6 +245,7 @@ services:
       - litecoind
     ports:
       - "32739:32739"
+      - "32779:32779"
     volumes:
       - "./data/lnd_server_ltc:/data"
       - "./data/litecoin:/deps/.litecoin"

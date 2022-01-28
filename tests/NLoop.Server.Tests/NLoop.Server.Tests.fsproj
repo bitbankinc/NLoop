@@ -9,12 +9,13 @@
 
   <ItemGroup>
     <Compile Include="Utils.fs" />
-    <Compile Include="Helpers.fs" />
+    <Compile Include="TestHelpersMod.fs" />
     <Compile Include="Extensions.fs" />
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="LiquidityTest.fs" />
     <Compile Include="AutoLoopManagerTests.fs" />
     <Compile Include="LightningClientTests.fs" />
+    <Compile Include="BoltzClientTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />
     <Compile Include="BlockListenerTest.fs" />
     <Compile Include="Program.fs" />

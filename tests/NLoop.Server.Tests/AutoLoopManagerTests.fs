@@ -280,7 +280,7 @@ type AutoLoopManagerTests() =
       Preimage = None
       RedeemScript = swapRedeem
       Invoice = invoice.ToString()
-      Address = Helpers.lndAddress.ToString()
+      Address = TestHelpersMod.lndAddress.ToString()
       ExpectedAmount = req.Amount
       TimeoutBlockHeight = BlockHeight(32u)
       HTLCConfTarget =
@@ -385,7 +385,7 @@ type AutoLoopManagerTests() =
     let chan1Swap = {
       LoopOutRequest.Amount = amt
       ChannelIds = [|chanId1|] |> ValueSome
-      Address = Helpers.lndAddress.ToString() |> Some
+      Address = TestHelpersMod.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -401,7 +401,7 @@ type AutoLoopManagerTests() =
     let chan2Swap = {
       LoopOutRequest.Amount = amt
       ChannelIds = [|chanId2|] |> ValueSome
-      Address = Helpers.lndAddress.ToString() |> Some
+      Address = TestHelpersMod.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -526,7 +526,7 @@ type AutoLoopManagerTests() =
     let peerSwap = {
       LoopOutRequest.Amount = peerAmount
       ChannelIds = [| chanId2; chanId3 |] |> ValueSome
-      Address = Helpers.lndAddress.ToString() |> Some
+      Address = TestHelpersMod.lndAddress.ToString() |> Some
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
@@ -750,7 +750,7 @@ type AutoLoopManagerTests() =
     let loopOutSwap = {
       LoopOutRequest.Amount = loopOutAmount
       ChannelIds = [|chanId1|] |> ValueSome
-      Address = Some(Helpers.lndAddress.ToString())
+      Address = Some(TestHelpersMod.lndAddress.ToString())
       PairId = loopOutPair |> Some
       SwapTxConfRequirement =
         loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some

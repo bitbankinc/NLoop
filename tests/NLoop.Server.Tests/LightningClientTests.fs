@@ -1,5 +1,6 @@
 namespace NLoop.Server.Tests
 
+open System.Threading
 open LndClient
 open Xunit
 open NBitcoin
@@ -11,8 +12,10 @@ type LightningClientTests() =
   [<Fact>]
   [<Trait("Docker", "On")>]
   member this.TestListeningInvoices() =
-    let client = Helpers.userLndClient
+    let client = TestHelpersMod.userLndClient
     task {
-      let! channels = client.ListChannels()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(3000)
+      let! channels = client.ListChannels(cts.Token)
       ()
     }

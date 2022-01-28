@@ -1,9 +1,11 @@
 namespace NLoop.Server.Tests
 
+open System.Threading
 open BoltzClient
 open DotNetLightning.Utils
 open FSharp.Control
 open NBitcoin
+open NLoop.Server.Tests.Extensions
 open Xunit
 open FSharp.Control.Tasks
 open LndClient
@@ -13,7 +15,10 @@ type BoltzClientTests() =
   [<Fact>]
   [<Trait("Docker", "On")>]
   member this.TestListenSwaps() = task {
-    let cli = Helpers.getLocalBoltzClient()
+    let cli = ExternalClients.GetExternalServiceClients()
+    use cts = new CancellationTokenSource()
+    cts.CancelAfter(30000)
+    let! _ = cli.AssureChannelIsOpen(LNMoney.Satoshis(5000000L), cts.Token)
 
     let! resp =
       let req = {
@@ -23,14 +28,10 @@ type BoltzClientTests() =
         InvoiceAmount = Money.Satoshis(100000L)
         PreimageHash = preimage.Hash.Value
       }
-      cli.CreateReverseSwapAsync(req)
-    let! s =
-      asyncSeq {
-        for s in cli.StartListenToSwapStatusChange(resp.Id) do
-          ()
-      } |> AsyncSeq.toArrayAsync
-
-    let lnClient = Helpers.userLndClient
+      cli.Server.Boltz.CreateReverseSwapAsync(req, cts.Token)
+    let listenTask =
+        cli.Server.Boltz.StartListenToSwapStatusChange(resp.Id, cts.Token)
+        |> AsyncSeq.tryFirst
     let! _ =
       let req = {
         SendPaymentRequest.Invoice = resp.Invoice
@@ -38,6 +39,8 @@ type BoltzClientTests() =
         OutgoingChannelIds = [||]
         TimeoutSeconds = 2
       }
-      lnClient.Offer(req)
+      cli.User.BitcoinLnd.Offer(req, cts.Token)
+    let! boltzResult = listenTask
+    Assertion.isSome boltzResult
     ()
   }

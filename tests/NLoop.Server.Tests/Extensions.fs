@@ -9,6 +9,8 @@ open System.CommandLine.Parsing
 open System.IO
 open System.Linq
 open System.Net.Http
+open System.Threading
+open System.Threading.Tasks
 open BoltzClient
 open FSharp.Control.Tasks
 
@@ -18,35 +20,31 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open NBitcoin
+open NBitcoin.Altcoins
 open NBitcoin.RPC
 open NLoop.Server
 open NLoop.Server.Services
 open NLoop.Server.SwapServerClient
-open NLoop.Server.Tests.Helpers
+open NLoop.Server.Tests
+open NLoop.Server.Tests.TestHelpersMod
 open NLoopClient
 
 [<AutoOpen>]
-module private Helpers =
+module private ExtensionHelpers =
   let getLndRestSettings path port =
     let lndMacaroonPath = Path.Join(path, "admin.macaroon")
     let lndCertThumbprint =
       getCertFingerPrintHex(Path.Join(path, "tls.cert"))
     let uri = $"https://localhost:%d{port}"
     (uri, lndCertThumbprint, lndMacaroonPath)
-  let getLNDClient path port  =
-    let uri, lndCertThumbprint, lndMacaroonPath = getLndRestSettings path port
-    let settings =
-      LndGrpcSettings.Create(uri, None, Some <| lndMacaroonPath,lndCertThumbprint |> Some,  false)
-      |> function | Ok x -> x | Error e -> failwith e
-    NLoopLndGrpcClient(settings, Network.RegTest)
-
-  let bitcoinPort = 43782
-  let litecoinPort = 43783
-  let lndUserRestPort = 32736
-  let lndServerRestPort = 32737
-  let boltzServerPort = 6028
-  let esdbTcpPort = 1113
-  let esdbHttpPort = 2113
+  let [<Literal>] bitcoinPort = 43782
+  let [<Literal>] litecoinPort = 43783
+  let [<Literal>] lndUserRestPort = 32736
+  let [<Literal>] lndServerRestPort = 32737
+  let [<Literal>] boltzServerPort = 6028
+  let [<Literal>] esdbTcpPort = 1113
+  let [<Literal>] esdbHttpPort = 2113
+  let [<Literal>] walletName = "cashcow"
   let dataPath =
     Directory.GetCurrentDirectory()
     |> fun d -> Path.Join(d, "..", "..", "..", "data")
@@ -55,61 +53,126 @@ module private Helpers =
 type ExternalClients = {
   Bitcoin: RPCClient
   Litecoin: RPCClient
-  User: {| Lnd: INLoopLightningClient; |}
-  Server: {| Lnd: INLoopLightningClient; Boltz: BoltzClient |}
+  User: {| BitcoinLnd: NLoopLndGrpcClient; |}
+  Server: {| BitcoinLnd: NLoopLndGrpcClient; LitecoinLnd: NLoopLndGrpcClient; Boltz: BoltzClient |}
 }
   with
-  member this.AssureWalletIsReady() = task {
-    let! btcAddr = this.Bitcoin.GetNewAddressAsync()
-    let! _ = this.Bitcoin.GenerateToAddressAsync(Network.RegTest.Consensus.CoinbaseMaturity + 1, btcAddr)
+  member private this.AssureWalletIsCreated (ct) = task {
+    let walletClient = this.Bitcoin.GetWallet(walletName)
+    let mutable btcAddress = null
+    try
+      let! btcAddr = walletClient.GetNewAddressAsync()
+      btcAddress <- btcAddr
+    with
+    | :? RPCException as ex when ex.Message = "Requested wallet does not exist or is not loaded" ->
+      let! _ = walletClient.CreateWalletAsync(walletName)
+      let! btcAddr = walletClient.GetNewAddressAsync()
+      btcAddress <- btcAddr
+      ()
+    return (walletClient, btcAddress)
+  }
 
-    let send (cli: INLoopLightningClient) = task {
-      let! addr = cli.GetDepositAddress()
-      let! _ = this.Bitcoin.SendToAddressAsync(addr, Money.Coins(10m))
+  member private this.AssureWalletHasEnoughBalance(ct: CancellationToken) = task {
+      let! walletClient, btcAddress = this.AssureWalletIsCreated ct
+      let! balance = walletClient.GetBalanceAsync()
+      if balance < Money.Coins(21m) then
+        let! _ = walletClient.GenerateToAddressAsync(Network.RegTest.Consensus.CoinbaseMaturity + 1, btcAddress)
+        ()
+      else
+        ()
+      ct.ThrowIfCancellationRequested()
+      let! litecoinBalance = this.Litecoin.GetBalanceAsync()
+      let! ltcAddress =
+        let req = GetNewAddressRequest()
+        req.AddressType <- AddressType.Legacy
+        this.Litecoin.GetNewAddressAsync(req)
+      if litecoinBalance < Money.Coins(21m) then
+        let! _ = this.Litecoin.GenerateToAddressAsync(Litecoin.Instance.Regtest.Consensus.CoinbaseMaturity + 1, ltcAddress)
+        ()
+      else
+        ()
+      ct.ThrowIfCancellationRequested()
+      return (walletClient, btcAddress, ltcAddress)
+  }
+
+  member private this.AssureWalletIsReady(ct) = task {
+    let! walletClient, btcAddress, ltcAddress = this.AssureWalletHasEnoughBalance(ct)
+
+    let assureLndHasEnoughCash (cli: NLoopLndGrpcClient) = task {
+      let balance =
+        let req = Lnrpc.WalletBalanceRequest()
+        cli.Client.WalletBalance(req, cli.DefaultHeaders, cli.Deadline, ct)
+      let required = Money.Coins(10m)
+      if balance.TotalBalance >= required.Satoshi then () else
+      let! addr = cli.GetDepositAddress(ct)
+      let! _ = walletClient.SendToAddressAsync(addr, required)
       return ()
     }
-    do! send (this.User.Lnd)
-    do! send (this.Server.Lnd)
+    let assureLndHasEnoughCash_LTC (cli: NLoopLndGrpcClient) = task {
+      let balance =
+        let req = Lnrpc.WalletBalanceRequest()
+        cli.Client.WalletBalance(req, cli.DefaultHeaders, cli.Deadline, ct)
+      let required = Money.Coins(10m)
+      if balance.TotalBalance >= required.Satoshi then () else
+      let! addr = cli.GetDepositAddress(ct)
+      let! _ = this.Litecoin.SendToAddressAsync(addr, required)
+      return ()
+    }
 
-    let! _ = this.Bitcoin.GenerateToAddressAsync(3, btcAddr)
+    let! _ =
+      [| assureLndHasEnoughCash this.User.BitcoinLnd; assureLndHasEnoughCash this.Server.BitcoinLnd; assureLndHasEnoughCash_LTC this.Server.LitecoinLnd |]
+      |> Task.WhenAll
+
+    // confirm
+    let! _ = walletClient.GenerateToAddressAsync(3, btcAddress)
+    let! _ = this.Litecoin.GenerateToAddressAsync(3, ltcAddress)
     ()
   }
-  member this.AssureConnected() = task {
-    let! nodes = this.Server.Boltz.GetNodesAsync()
+  member this.AssureConnected(ct) = task {
+    let! nodes = this.Server.Boltz.GetNodesAsync(ct)
     let connString =
       nodes.Nodes |> Map.toSeq |> Seq.head |> fun (_, info) -> info.Uris.[0]
-    do! this.User.Lnd.ConnectPeer(connString.NodeId, connString.EndPoint.ToEndpointString())
+    try
+      do! this.User.BitcoinLnd.ConnectPeer(connString.NodeId, connString.EndPoint.ToEndpointString(), ct)
+    with
+    | :? Grpc.Core.RpcException as ex when ex.Message.Contains("already connected to peer") ->
+      ()
     return connString.NodeId
   }
 
-  member this.OpenChannel(amount: LNMoney) =
+  member this.AssureChannelIsOpen(localBalance: LNMoney, ct: CancellationToken) = task {
+    let! channels = this.Server.BitcoinLnd.ListChannels(ct)
+    if channels |> Seq.exists(fun c -> c.LocalBalance.Satoshi > localBalance.Satoshi) then () else
+
     let mutable nodeId = null
-    task {
-      do! this.AssureWalletIsReady()
-      let! n = this.AssureConnected()
-      nodeId <- n
-    } |> fun t -> t.GetAwaiter().GetResult()
+    do! this.AssureWalletIsReady(ct)
+    let! n = this.AssureConnected(ct)
+    nodeId <- n
 
     let rec loop (count: int) = async {
       let req =
         { LndOpenChannelRequest.Private = None
-          Amount = amount
+          Amount = localBalance
           NodeId = nodeId
           CloseAddress = None }
-      let! r = this.User.Lnd.OpenChannel(req) |> Async.AwaitTask
+      let! r = this.User.BitcoinLnd.OpenChannel(req, ct) |> Async.AwaitTask
+      let! ct = Async.CancellationToken
+      ct.ThrowIfCancellationRequested()
       match r with
       | Ok _fundingOutPoint ->
         let rec waitToSync(count) = async {
           do! Async.Sleep(500)
+          let! ct = Async.CancellationToken
+          ct.ThrowIfCancellationRequested()
           let! btcAddr = this.Bitcoin.GetNewAddressAsync() |> Async.AwaitTask
           let! _ = this.Bitcoin.GenerateToAddressAsync(2, btcAddr) |> Async.AwaitTask
-          let! s = this.Server.Lnd.ListChannels() |> Async.AwaitTask
+          let! s = this.User.BitcoinLnd.ListChannels(ct) |> Async.AwaitTask
+          ct.ThrowIfCancellationRequested()
           match s with
           | [] ->
             if count > 4 then failwith "Failed to Create Channel" else
             return! waitToSync(count + 1)
-          | s ->
-            printfn $"\n\nSuccessfully created a channel with cap: {s.First().Cap.Satoshi}. balance: {s.First().LocalBalance.Satoshi}\n\n"
+          | _s ->
             return ()
         }
         do! waitToSync(0)
@@ -122,7 +185,21 @@ type ExternalClients = {
         else
           failwithf "Failed opening channel %A" e
     }
-    loop(0)
+    return!
+      loop(0)
+      |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
+  }
+  static member GetExternalServiceClients() =
+    let serverBoltz =
+      let httpClient = new HttpClient()
+      httpClient.BaseAddress <- Uri($"http://localhost:{boltzServerPort}")
+      BoltzClient(httpClient)
+    {
+      ExternalClients.Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
+      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
+      User = {| BitcoinLnd = userLndClient |}
+      Server = {| BitcoinLnd = serverBTCLndClient; LitecoinLnd = serverLTCLndClient; Boltz = serverBoltz |}
+    }
 
 type Clients = {
   NLoopClient: NLoopClient
@@ -130,21 +207,8 @@ type Clients = {
   NLoopServer: TestServer
 }
   with
-  static member GetExternalServiceClients() =
-    let userLnd = getLNDClient lndUserPath lndUserRestPort
-    let serverLnd = getLNDClient(Path.Join(dataPath, "lnd_server")) lndServerRestPort
-    let serverBoltz =
-      let httpClient = new HttpClient()
-      httpClient.BaseAddress <- Uri($"http://localhsot:{boltzServerPort}")
-      BoltzClient(httpClient)
-    {
-      ExternalClients.Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
-      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
-      User = {| Lnd = userLnd |}
-      Server = {| Lnd = serverLnd; Boltz = serverBoltz |}
-    }
   static member Create() =
-    let externalClients = Clients.GetExternalServiceClients()
+    let externalClients = ExternalClients.GetExternalServiceClients()
     let testHost =
       WebHostBuilder()
         .UseContentRoot(dataPath)
@@ -155,9 +219,9 @@ type Clients = {
           let lnClientProvider =
             { new ILightningClientProvider with
                 member this.TryGetClient(cryptoCode) =
-                  externalClients.User.Lnd |> Some
+                  externalClients.User.BitcoinLnd :> INLoopLightningClient |> Some
                 member this.GetAllClients() =
-                  seq [externalClients.User.Lnd]
+                  seq [externalClients.User.BitcoinLnd]
             }
           let cliOpts: ParseResult =
             let p =
