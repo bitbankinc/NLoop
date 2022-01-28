@@ -32,6 +32,7 @@ type NLoopOptions() =
     :> IWalletClient
 
   member val DataDir = Constants.DefaultDataDirectoryPath with get, set
+  member this.DataDirNetwork = Path.Combine(this.DataDir, this.Network)
   // -- --
   // -- https --
   member val NoHttps = Constants.DefaultNoHttps with get, set
@@ -115,8 +116,6 @@ type NLoopOptions() =
   member this.OffChainNetworks =
     this.OffChainCrypto
     |> Array.map(fun s -> s.ToString().GetNetworkSetFromCryptoCodeUnsafe())
-
-  member this.DBPath = Path.Join(this.DataDir, "nloop.db")
 
   member val LndCertThumbPrint = null with get, set
   member val LndMacaroon = null with get, set

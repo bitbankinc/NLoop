@@ -97,7 +97,7 @@ module NLoopServerCommandLine =
         a.Arity <- ArgumentArity.ExactlyOne
         a.FromAmong(networkNames)
       o :> Option
-      let o = Option<DirectoryInfo>([|$"--{nameof(NLoopOptions.Instance.DataDir).ToLowerInvariant()}"; "-d"|], "Directory to store data")
+      let o = Option<DirectoryInfo>([|$"--{nameof(NLoopOptions.Instance.DataDir).ToLowerInvariant()}"; "-d"|], "Directory to store data other than those stored in eventstoredb.")
       o.Argument <-
         let a = Argument<DirectoryInfo>()
         a.Arity <- ArgumentArity.ExactlyOne
