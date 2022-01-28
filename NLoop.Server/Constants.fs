@@ -21,6 +21,8 @@ module Constants =
   let DefaultNoHttps = false
   [<Literal>]
   let DefaultHttpsPort = 443
+  [<Literal>]
+  let FallbackFeeSatsPerByte = 50
 
   [<Literal>]
   let DefaultHttpsHost = "localhost"
