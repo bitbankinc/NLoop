@@ -15,6 +15,7 @@
 | [Giraffe][giraffe] | [Apache License 2.0][giraffe-license] | | For web API | [NetMQ][netmq] | [LGPL][netmq-license] | | For listening to bitcoind's zeromq interface | 
 | [Ply][ply] | [MIT License][ply-license] |  | For handling `task` in F# CE |
 | [System.Commandline][system-commandline] | [MIT License][system-commandline-license] | | For parsing commandline options |
+| [NReco.Logging.File][nreco.logging] | [MIT License][nreco.logging-license] | | For logging into the file |
 
 
 [esdb]:https://github.com/EventStore/EventStore
@@ -40,4 +41,5 @@
 [ply-license]: https://github.com/crowded/ply/blob/master/LICENSE.md
 [system-commandline]: https://github.com/dotnet/command-line-api
 [system-commandline-license]: https://github.com/dotnet/command-line-api/blob/main/LICENSE.md
-
+[nreco.logging]: https://github.com/nreco/logging
+[nreco.logging-license]: https://github.com/nreco/logging/blob/master/LICENSE

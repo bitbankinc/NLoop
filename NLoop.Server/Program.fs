@@ -37,7 +37,7 @@ open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
-
+open NReco.Logging.File
 module App =
   let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
@@ -166,8 +166,21 @@ module Main =
 
   let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
       builder
-        .AddConsole()
-        .AddDebug()
+        .AddConsole() |> ignore
+
+      let isProduction = ctx.HostingEnvironment.IsProduction()
+      if isProduction |> not then
+        builder.AddDebug() |> ignore
+      let configureFileLogging (opts: FileLoggerOptions) =
+        opts.Append <- isProduction
+        opts.MinLevel <- if isProduction then LogLevel.Debug else LogLevel.Trace
+        ()
+      let opts =
+        let sp = builder.Services.BuildServiceProvider()
+        sp.GetRequiredService<IOptions<NLoopOptions>>()
+      let filePath = Path.Combine(opts.Value.DataDirNetwork, "nloop.log")
+      builder
+        .AddFile(filePath, configureFileLogging)
         .AddConfiguration(ctx.Configuration.GetSection("Logging"))
 #if DEBUG
         .SetMinimumLevel(LogLevel.Debug)

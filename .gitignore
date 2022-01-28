@@ -3,4 +3,5 @@ tests/NLoop.Server.Tests/data/
 LndClient/openapi.json
 publish/
 .vscode
+nloop.log
 
