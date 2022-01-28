@@ -322,7 +322,7 @@ components:
           description:
             The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer.
             a.k.a. `htlc_confirmations` on the lightning loop.
-            Default number depends on the asset type.
+            Default number depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
             Set this to 0 for zero-conf swap.
           nullable: true
         label:
@@ -336,6 +336,7 @@ components:
           description:
             Maximum off-chain fee in sats that may be paied for swap payment to the
             server. This limit is applied during path finding.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         max_prepay_routing_fee:
           type: integer
@@ -343,6 +344,7 @@ components:
           description:
             Maximum off-chain fee in sat that may be paid for the prepay to the server.
             This limit is applied during path finding.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         max_swap_fee:
           type: integer
@@ -352,6 +354,8 @@ components:
             If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
             We use a rate information from external exchanges to calculate the value.
+            Default value depends on the asset type, and a channel size.
+            (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         max_prepay_amount:
           type: integer
@@ -359,6 +363,7 @@ components:
           description:
             The server might request a pre-payment for the sake of DoS-prevention,
             this is a maximum amount (in sats) of the off-chain prepayment.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         max_miner_fee:
           type: integer
@@ -373,6 +378,7 @@ components:
             The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than
             the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that
             the server is not publishing the revocation.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         sweep_conf_target:
           type: integer
@@ -383,6 +389,7 @@ components:
             Default depends on the asset type, but usually it is not that short.
             If you want to finish swap asap and get your on-chain funds quickly,
             You probably want to set a short time.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
       required:
         - amount
@@ -427,6 +434,7 @@ components:
           description:
             Maximum on-chain fees that we are willing to spend. If we want to
             publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.
+            Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         max_swap_fee:
           type: integer
@@ -436,6 +444,8 @@ components:
             If the server asks for a higher fee, we do not perform the swap.
             For multi-asset swap, the unit of this value is off-chain currency.
             We use a rate information from external exchanges to calculate the value.
+            Default number depends on the asset type, and a channel size.
+            (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
         htlc_conf_target:
           type: integer
@@ -444,6 +454,7 @@ components:
             Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx)
             If the server is not willing to accept zero-conf swap, Making this value smaller might
             make a swap fast.
+            Default number depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)
           nullable: true
       required:
         - amount
