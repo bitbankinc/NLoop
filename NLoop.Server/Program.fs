@@ -168,6 +168,17 @@ module Main =
       builder
         .AddConsole()
         .AddDebug()
+        .AddJsonConsole() |> ignore
+
+      let configureFileLogging (opts: FileLoggerOptions) =
+        let isProduction = ctx.HostingEnvironment.IsProduction()
+        opts.Append <- isProduction
+        opts.MinLevel <- if isProduction then LogLevel.Debug else LogLevel.Trace
+        ()
+
+      builder
+        .AddFile("nloop.log", configureFileLogging)
+        //.AddFile("nloop.log", shouldAppendToFileLog, configureFileLogging)
         .AddConfiguration(ctx.Configuration.GetSection("Logging"))
 #if DEBUG
         .SetMinimumLevel(LogLevel.Debug)

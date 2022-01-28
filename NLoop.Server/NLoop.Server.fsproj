@@ -59,6 +59,7 @@
     <Compile Include="Services\AutoLoopManager.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
+    <Compile Include="FileLoggingProvider.fs" />
     <Compile Include="GiraffeExtensions.fs" />
     <Compile Include="LoopHandlers.fs" />
     <Compile Include="AutoLoopHandlers.fs" />
