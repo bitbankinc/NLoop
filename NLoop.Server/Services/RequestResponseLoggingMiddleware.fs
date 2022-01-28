@@ -26,7 +26,7 @@ type RequestResponseLoggingMiddleware(logger: ILogger<RequestResponseLoggingMidd
       context.Request.EnableBuffering()
       use requestStream = memStreamManager.GetStream()
       do! context.Request.Body.CopyToAsync(requestStream)
-      logger.LogDebug($"Http Request Information: ")
+      logger.LogTrace($"Http Request Information: ")
       let msg =
         $"Received Request{Environment.NewLine}" +
         $"Method: {context.Request.Method} " +
@@ -36,7 +36,7 @@ type RequestResponseLoggingMiddleware(logger: ILogger<RequestResponseLoggingMidd
         $"QueryString: {context.Request.QueryString} " +
         $"Request Body: {this.ReadStreamInChunks(requestStream)}"
 
-      logger.LogDebug(msg)
+      logger.LogTrace(msg)
       context.Request.Body.Position <- 0L;
       let originalBodyStream = context.Response.Body;
       use responseBody = memStreamManager.GetStream();
@@ -47,7 +47,7 @@ type RequestResponseLoggingMiddleware(logger: ILogger<RequestResponseLoggingMidd
       let! text = (new StreamReader(context.Response.Body)).ReadToEndAsync();
       context.Response.Body.Seek(0L, SeekOrigin.Begin) |> ignore;
 
-      logger.LogDebug($"Http Response Information :{Environment.NewLine}" +
+      logger.LogTrace($"Http Response Information :{Environment.NewLine}" +
                       $"Scheme: {context.Request.Scheme} " +
                       $"Host: {context.Request.Host} " +
                       $"Path: {context.Request.Path} " +
