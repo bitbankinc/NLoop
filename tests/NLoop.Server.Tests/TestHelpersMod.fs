@@ -63,13 +63,13 @@ module TestHelpersMod =
       |> function | Ok s -> s | Error e -> failwith e
     NLoopLndGrpcClient(settings, network)
 
-  let userLndClient() =
+  let getUserLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
     getLightningClient path 32777 Network.RegTest
-  let serverBTCLndClient() =
+  let getServerBTCLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
     getLightningClient path 32778 Network.RegTest
-  let serverLTCLndClient() =
+  let getServerLTCLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
     getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
 

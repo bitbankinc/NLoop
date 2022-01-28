@@ -4,6 +4,7 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open EventStore.ClientAPI
+open EventStore.ClientAPI
 open NLoop.Domain.Utils.EventStore
 open Microsoft.Extensions.Logging
 open FSharp.Control.Tasks
