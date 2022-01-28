@@ -5,6 +5,7 @@ open System
 open System.Collections.Concurrent
 open System.Net.Http
 open System.Threading
+open System.Threading.Channels
 open System.Threading.Tasks
 open BoltzClient
 open DotNetLightning.Utils
@@ -25,28 +26,25 @@ type BoltzListener(swapServerClient: ISwapServerClient,
                    opts: IOptions<NLoopOptions>,
                    actor: ISwapActor
                    ) =
-  let statuses = ConcurrentDictionary<SwapId, Task<SwapId * Transaction>>()
+  let statuses = ConcurrentDictionary<SwapId, Task>()
+
+  let updateQueue = Channel.CreateBounded<SwapId * Transaction>(10)
 
   let mutable _executingTask = null
   let mutable _stoppingCts = null
 
-
   member this.ExecuteAsync(ct: CancellationToken) = unitTask {
       do! Task.Yield()
       try
-        while not <| ct.IsCancellationRequested do
-          ct.ThrowIfCancellationRequested()
-          let ts = statuses.Values |> Seq.cast<_> |> Array.ofSeq
-          if ts.Length = 0 then () else
-          let timeout = Task.Delay(1000)
-          let! txAny = Task.WhenAny([|yield! ts; timeout|])
-          match txAny with
-          | :? Task<SwapId * Transaction> ->
-            let! swapId, tx = txAny :?> Task<SwapId * Transaction>
+        let mutable finished = false
+        while not <| ct.IsCancellationRequested && not <| finished do
+          let! channelIsAlive = updateQueue.Reader.WaitToReadAsync(ct)
+          finished <- not <| channelIsAlive
+          if not <| finished then
+            let! swapId, tx = updateQueue.Reader.ReadAsync(ct)
             logger.LogInformation $"boltz notified about their swap tx ({tx.ToHex()}) for swap {swapId}"
             do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
             statuses.TryRemove(swapId) |> ignore
-          | _ -> ()
       with
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
@@ -63,13 +61,13 @@ type BoltzListener(swapServerClient: ISwapServerClient,
     member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting {nameof(BoltzListener)}"
       try
-        let! _ = swapServerClient.CheckConnection()
+        let! _ = swapServerClient.CheckConnection(ct)
         ()
       with
       | ex ->
         logger.LogError $"Failed to connect to boltz-server {ex}"
         raise <| ex
-      _stoppingCts <- CancellationTokenSource.CreateLinkedTokenSource(ct)
+      _stoppingCts <- new CancellationTokenSource()
       _executingTask <- this.ExecuteAsync(_stoppingCts.Token)
       if _executingTask.IsCompleted then return! _executingTask else
       return ()
@@ -89,8 +87,17 @@ type BoltzListener(swapServerClient: ISwapServerClient,
     member this.RegisterSwap(swapId: SwapId, _group) =
       logger.LogDebug $"registering the swap {swapId}"
       let t = task {
-        let! tx = swapServerClient.ListenToSwapTx(swapId)
-        return swapId, tx
+        let onTransaction (tx: Transaction) =
+          task {
+            try
+              let! channelOpened = updateQueue.Writer.WaitToWriteAsync()
+              if channelOpened then
+                do! updateQueue.Writer.WriteAsync((swapId, tx))
+            with
+            | ex ->
+              logger.LogWarning($"error while handling swap {ex}")
+          } :> Task
+        do! swapServerClient.ListenToSwapTx(swapId, onTransaction)
       }
       statuses.TryAdd(swapId, t)
       |> ignore

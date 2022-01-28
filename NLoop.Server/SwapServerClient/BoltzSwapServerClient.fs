@@ -173,17 +173,18 @@ type BoltzSwapServerClient(b: BoltzClient) =
       let ct = defaultArg ct CancellationToken.None
       b.GetVersionAsync(ct) :> Task
 
-    member this.ListenToSwapTx(swapId, ct) =
+    member this.ListenToSwapTx(swapId, onSwapTx , ct) =
       let ct = defaultArg ct CancellationToken.None
       asyncSeq {
         for resp in b.StartListenToSwapStatusChange(swapId.Value) do
           match resp.Transaction with
           | Some {Tx = tx} when resp.SwapStatus = SwapStatusType.TxMempool ->
-            return tx
+            do! onSwapTx tx |> Async.AwaitTask
+            return ()
           | _ ->
             ()
       }
       |> AsyncSeq.tryFirst
       |> Async.map(function | None -> printfn "Unreachable!"; failwith "Unreachable!" | Some a -> a)
-      |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
+      |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct) :> Task
 

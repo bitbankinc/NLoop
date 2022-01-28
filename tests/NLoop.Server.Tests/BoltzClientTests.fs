@@ -42,5 +42,8 @@ type BoltzClientTests() =
       cli.User.BitcoinLnd.Offer(req, cts.Token)
     let! boltzResult = listenTask
     Assertion.isSome boltzResult
+    Assertion.isSome boltzResult.Value.Transaction
+    Assert.NotNull boltzResult.Value.Transaction.Value.Tx
+
     ()
   }
