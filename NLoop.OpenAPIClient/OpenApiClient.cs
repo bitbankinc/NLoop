@@ -1015,7 +1015,7 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("amount", Required = Newtonsoft.Json.Required.Always)]
         public long Amount { get; set; }
     
-        /// <summary>The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on the lightning loop. Default number depends on the asset type. Set this to 0 for zero-conf swap.</summary>
+        /// <summary>The number of confirmation of the swaptx (htlc tx) before we make an off-chain offer. a.k.a. `htlc_confirmations` on the lightning loop. Default number depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs) Set this to 0 for zero-conf swap.</summary>
         [Newtonsoft.Json.JsonProperty("swap_tx_conf_requirement", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Swap_tx_conf_requirement { get; set; }
     
@@ -1023,27 +1023,27 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
     
-        /// <summary>Maximum off-chain fee in sats that may be paied for swap payment to the server. This limit is applied during path finding.</summary>
+        /// <summary>Maximum off-chain fee in sats that may be paied for swap payment to the server. This limit is applied during path finding. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_routing_fee { get; set; }
     
-        /// <summary>Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding.</summary>
+        /// <summary>Maximum off-chain fee in sat that may be paid for the prepay to the server. This limit is applied during path finding. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_prepay_routing_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_prepay_routing_fee { get; set; }
     
-        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value. Default value depends on the asset type, and a channel size. (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
-        /// <summary>The server might request a pre-payment for the sake of DoS-prevention, this is a maximum amount (in sats) of the off-chain prepayment.</summary>
+        /// <summary>The server might request a pre-payment for the sake of DoS-prevention, this is a maximum amount (in sats) of the off-chain prepayment. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_prepay_amount", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_prepay_amount { get; set; }
     
-        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation.</summary>
+        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to sweep the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. If the fee estimate is lower, we publish the sweep tx. If the sweep tx is not confirmed, we are forced to ratchet up fees until it is swept. Possibly even exceeding max_miner_fee if we get close to the HTLC timeout. Because the initial publication revealed the preimage, we have no other choice. The server may already have pulled the off-chain HTLC. Only when the fee becomes higher than the swap amount, we can wait for fees to come down and hope -- if we are past the timeout -- that the server is not publishing the revocation. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
-        /// <summary>Confimation target (block num) for estimating the fee for the sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx) Default depends on the asset type, but usually it is not that short. If you want to finish swap asap and get your on-chain funds quickly, You probably want to set a short time.</summary>
+        /// <summary>Confimation target (block num) for estimating the fee for the sweeping tx (a.k.a. sweep tx, claim tx.) from the HTLC tx (a.k.a. swaptx, lockuptx) Default depends on the asset type, but usually it is not that short. If you want to finish swap asap and get your on-chain funds quickly, You probably want to set a short time. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("sweep_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Sweep_conf_target { get; set; }
     
@@ -1092,15 +1092,15 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("label", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Label { get; set; }
     
-        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap.</summary>
+        /// <summary>Maximum on-chain fees that we are willing to spend. If we want to publish the on-chain htlc and the fee estimate turns out higher than this value, we cancel the swap. Default value depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_miner_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_miner_fee { get; set; }
     
-        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value.</summary>
+        /// <summary>Maximum we are willing to pay the server for the swap (by diff of on/off-chain payment). If the server asks for a higher fee, we do not perform the swap. For multi-asset swap, the unit of this value is off-chain currency. We use a rate information from external exchanges to calculate the value. Default number depends on the asset type, and a channel size. (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("max_swap_fee", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public long? Max_swap_fee { get; set; }
     
-        /// <summary>Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx) If the server is not willing to accept zero-conf swap, Making this value smaller might make a swap fast.</summary>
+        /// <summary>Confimation target for estimating the fee for HTLC tx (a.k.a. swaptx, lockuptx) If the server is not willing to accept zero-conf swap, Making this value smaller might make a swap fast. Default number depends on the asset type, (see NLoop.Server/Options/CryptoCodeParams.fs)</summary>
         [Newtonsoft.Json.JsonProperty("htlc_conf_target", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public int? Htlc_conf_target { get; set; }
     
