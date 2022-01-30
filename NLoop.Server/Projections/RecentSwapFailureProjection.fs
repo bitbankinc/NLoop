@@ -20,7 +20,7 @@ type IRecentSwapFailureProjection =
 /// Used in AutoLoop to backoff the failure
 type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
                                  loggerFactory: ILoggerFactory,
-                                 conn: IEventStoreConnection) as this =
+                                 getDBSubscription: GetDBSubscription) as this =
   inherit BackgroundService()
 
   /// We have no big reason to choose this number.
@@ -91,15 +91,15 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       | ex -> log.LogCritical $"{ex}"
   }
   let subscription =
-    EventStoreDBSubscription(
-      { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-      nameof(RecentSwapFailureProjection),
-      SubscriptionTarget.All,
-      loggerFactory.CreateLogger(),
-      handleEvent,
-      (fun _ -> ()),
-      conn
-    )
+    {
+      SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
+      Target =
+        SubscriptionTarget.All
+      HandleEvent = handleEvent
+      OnFinishCatchUp = None
+    }
+    |> getDBSubscription
+
 
   let mutable failedLoopOutSwapState = Map.empty<_, struct(ShortChannelId[] *  UnixDateTime voption)>
   let mutable failedLoopInSwapState = Map.empty<_, struct(NodeId * UnixDateTime voption)>

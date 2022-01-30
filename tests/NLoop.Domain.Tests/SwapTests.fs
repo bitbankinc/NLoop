@@ -4,8 +4,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin.DataEncoders
 open NLoop.Domain
-open NLoop.Domain
-open NLoop.Domain
+open NLoop.Tests
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -44,26 +43,6 @@ module Helpers =
   let pubkey5 = privKey5.PubKey
   let pubkey6 = privKey6.PubKey
   let pubkey7 = privKey7.PubKey
-  type BlockWithHeight with
-    member this.CreateNext(addr: BitcoinAddress) =
-      let nextHeight = this.Height + BlockHeightOffset16.One
-      {
-        Block = this.Block.CreateNextBlockWithCoinbase(addr, nextHeight.Value |> int)
-        Height = nextHeight
-      }
-
-
-    member this.CreateInfinite(network: Network) =
-      Seq.unfold(fun (b: BlockWithHeight) ->
-        let addr = (new Key()).PubKey.WitHash.GetAddress(network)
-        let next = b.CreateNext(addr)
-        (b, next) |> Some
-        )
-        this
-    member this.CreateNextMany(network: Network, n: int) =
-      this.CreateInfinite(network)
-      |> Seq.take n
-
 
   type LoopOut with
     member this.GetGenesis() = {
@@ -253,19 +232,9 @@ type SwapDomainTests() =
       }
     }
 
-  let getTestRepository() =
-    let store = InMemoryStore.eventStore()
-    Repository.Create
-      store
-      Swap.serializer
-      "swap in-memory repo"
-
-  let getHandler deps repo =
+  let getHandler deps store =
     let aggr = Swap.getAggregate deps
-    if useRealDB then
-      Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
-    else
-      Handler.Create<_> aggr repo
+    Swap.getHandler aggr store
 
   let executeCommand handler swapId useRealDB =
     fun cmd -> taskResult {
@@ -286,12 +255,12 @@ type SwapDomainTests() =
       |> List.sequenceTaskResultM
       |> TaskResult.map(List.concat)
       |> fun t -> t.GetAwaiter().GetResult()
-  let commandsToEvents assureRunSequentially deps repo swapId useRealDB commands =
-    let handler = getHandler deps repo
+  let commandsToEvents assureRunSequentially deps store swapId useRealDB commands =
+    let handler = getHandler deps store
     commandsToEventsCore assureRunSequentially handler swapId useRealDB commands
 
-  let commandsToState assureRunSequentially deps repo swapId useRealDB commands =
-    let handler = getHandler deps repo
+  let commandsToState assureRunSequentially deps store swapId useRealDB commands =
+    let handler = getHandler deps store
     // we discard the newly generated events. and re-load the events from the repository
     // and reconstitute the state again entirely from the events in the repository.
     let _newEvents = commandsToEventsCore assureRunSequentially handler swapId useRealDB commands
@@ -384,8 +353,8 @@ type SwapDomainTests() =
       |> List.map(fun x -> x ||> getCommand)
     let events =
       let deps = mockDeps()
-      let repo = getTestRepository()
-      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+      let store = InMemoryStore.getEventStore()
+      commandsToEvents assureRunSynchronously deps store loopOut.Id useRealDB commands
     Assertion.isOk events
 
   static member TestLoopOut_SuccessTestData =
@@ -410,7 +379,7 @@ type SwapDomainTests() =
     let loopOut = { loopOut with Preimage = paymentPreimage }
     let txBroadcasted = ResizeArray()
     let mutable i = 0
-    let repo = getTestRepository()
+    let store = InMemoryStore.getEventStore()
     let commandsToEvents (commands: Swap.Command list) =
       let deps =
         let broadcaster = {
@@ -429,7 +398,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB
+      |> commandsToEvents assureRunSynchronously deps store loopOut.Id useRealDB
     let swapTx =
       let fee = Money.Satoshis(30m)
       let txb =
@@ -593,7 +562,7 @@ type SwapDomainTests() =
           SwapTxConfRequirement = confRequirement
     }
     let mutable i = 0
-    let repo = getTestRepository()
+    let store = InMemoryStore.getEventStore()
     let commandsToState (commands: Swap.Command list) =
       let deps =
         mockDeps()
@@ -602,7 +571,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToState assureRunSynchronously deps repo loopOut.Id useRealDB
+      |> commandsToState assureRunSynchronously deps store loopOut.Id useRealDB
 
     let confirmationCommands =
       [
@@ -631,7 +600,7 @@ type SwapDomainTests() =
     let initialBlockHeight = BlockHeight.Zero
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(2us)
     use key = new Key()
-    let repo = getTestRepository()
+    let store = InMemoryStore.getEventStore()
     let txBroadcasted = ResizeArray()
     use fundsKey = new Key()
     let mutable i = 0
@@ -651,7 +620,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB
+      |> commandsToEvents assureRunSynchronously deps store loopIn.Id useRealDB
 
     // act
     let events =
@@ -732,7 +701,7 @@ type SwapDomainTests() =
           PairId = PairId(baseAsset, quoteAsset)
         }
     use key = new Key()
-    let repo = getTestRepository()
+    let store = InMemoryStore.getEventStore()
     let txBroadcasted = ResizeArray()
     use fundsKey = new Key()
     let initialBlockHeight = BlockHeight.Zero
@@ -755,7 +724,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB
+      |> commandsToEvents assureRunSynchronously deps store loopIn.Id useRealDB
     let loopIn =
       let addr =
         key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.QuoteAssetNetwork)

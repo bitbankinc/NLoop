@@ -5,6 +5,7 @@ open BoltzClient
 open DotNetLightning.Utils
 open LndClient
 open NBitcoin.Altcoins
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Server.Tests
 open Xunit
@@ -45,7 +46,7 @@ type IntegrationTests() =
         NLoop.Server.Constants.FallbackFeeSatsPerByte |> decimal |> FeeRate
       let changeAddress = pubkey1.WitHash
       let! unspents =
-        cli.Bitcoin.ListUnspentAsync()
+        cli.Litecoin.ListUnspentAsync()
       let utxos = unspents |> Array.map(fun uc -> uc.AsCoin() :> ICoin)
       let psbt =
         Transactions.createSwapPSBT
@@ -56,10 +57,14 @@ type IntegrationTests() =
           changeAddress
           Litecoin.Instance.Regtest
         |> function | Ok psbt -> psbt | Error e -> failwith e
-      let! psbtResp = cli.Bitcoin.WalletProcessPSBTAsync(psbt, true)
+      let! psbtResp = cli.Litecoin.WalletProcessPSBTAsync(psbt, true)
       Assert.True(psbtResp.Complete)
-      let! _ = cli.Bitcoin.SendRawTransactionAsync(psbtResp.PSBT.Finalize().ExtractTransaction())
-      let! _ = cli.Bitcoin.GenerateAsync(1)
+      let! _ = cli.Litecoin.SendRawTransactionAsync(psbtResp.PSBT.Finalize().ExtractTransaction())
+      let! _ = cli.Litecoin.GenerateAsync(1)
+      let! litecoinAddr =
+        let req = GetNewAddressRequest()
+        req.AddressType <- AddressType.Legacy
+        cli.Litecoin.GetNewAddressAsync(req)
       let! isInvoiceSettled =
         asyncSeq {
           for state in invoiceSubscription do
@@ -68,7 +73,7 @@ type IntegrationTests() =
               return ()
             | state ->
                 printfn $"state: {state}"
-                let! _ = cli.Bitcoin.GenerateAsync(1) |> Async.AwaitTask
+                let! _ = cli.Litecoin.GenerateToAddressAsync(3, litecoinAddr) |> Async.AwaitTask
                 ()
         }
         |> AsyncSeq.tryFirst

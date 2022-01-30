@@ -7,6 +7,7 @@
     <ItemGroup>
         <Compile Include="Generators.fs" />
         <Compile Include="RandomUtils.fs" />
+        <Compile Include="Extensions.fs" />
     </ItemGroup>
     <ItemGroup>
       <PackageReference Include="Expecto" Version="9.*" />

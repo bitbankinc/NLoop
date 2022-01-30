@@ -148,12 +148,18 @@ module EventStore =
 
   let writeStream (conn: IEventStoreConnection) =
     fun (expectedVersion: ExpectedVersionUnion) (events: SerializedEvent list) (streamId: StreamId) -> task {
-      let! _writeResult =
-        events
-        |> List.map(fun e -> e.AsEventData)
-        |> List.toArray
-        |> fun e -> conn.AppendToStreamAsync(streamId.Value, expectedVersion.AsEventStoreExpectedVersion, e)
-      return Ok()
+      try
+        let! _writeResult =
+          events
+          |> List.map(fun e -> e.AsEventData)
+          |> List.toArray
+          |> fun e -> conn.AppendToStreamAsync(streamId.Value, expectedVersion.AsEventStoreExpectedVersion, e)
+        return Ok()
+      with
+      | ex ->
+        return
+          $"Error writing events to EventStoreDB\n%A{ex}"
+          |> StoreError |> Error
     }
   let eventStore
     (uri: Uri)

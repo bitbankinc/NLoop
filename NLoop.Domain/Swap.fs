@@ -972,8 +972,7 @@ module Swap =
     Enrich = id
   }
 
-  let getRepository eventStoreUri =
-    let store = eventStore eventStoreUri
+  let getRepository store =
     Repository.Create
       store
       serializer
@@ -989,7 +988,7 @@ module Swap =
     Error: EventSourcingError<Error>
   }
 
-  let getHandler aggr eventStoreUri =
-    getRepository eventStoreUri
+  let getHandler aggr store =
+    getRepository store
     |> Handler.Create aggr
 

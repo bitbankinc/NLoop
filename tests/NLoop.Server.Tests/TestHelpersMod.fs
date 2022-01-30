@@ -309,7 +309,7 @@ type TestHelpers =
     {
       new ISwapActor with
         member this.Handler =
-          failwith "todo"
+            failwith "todo"
         member this.Aggregate =
           failwith "todo"
         member this.Execute(swapId, msg, source) =

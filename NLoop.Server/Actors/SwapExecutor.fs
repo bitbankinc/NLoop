@@ -29,7 +29,7 @@ open NLoop.Server.SwapServerClient
 open System.Reactive.Linq
 
 [<AutoOpen>]
-module private SwapActorHelpers =
+module internal SwapActorHelpers =
   let getSwapDeps b f u g payInvoice offer =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
@@ -48,7 +48,7 @@ module private SwapActorHelpers =
 
 
 [<RequireQualifiedAccess>]
-module private Observable =
+module Observable =
   let inline chooseOrError
     (selector: Swap.Event -> _ option)
     (obs: IObservable<Choice<Swap.EventWithId, Swap.ErrorWithId>>) =
@@ -64,7 +64,7 @@ module private Observable =
       |> Observable.first
       |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
 
-type SwapActor(opts: IOptions<NLoopOptions>,
+type SwapActor(
                lightningClientProvider: ILightningClientProvider,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
@@ -72,6 +72,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
                getChangeAddress: GetAddress,
                eventAggregator: IEventAggregator,
                getAllSwapEvents: GetAllEvents<Swap.Event>,
+               store: Store,
                logger: ILogger<SwapActor>) =
   let aggr =
     let payInvoiceImmediate =
@@ -103,9 +104,14 @@ type SwapActor(opts: IOptions<NLoopOptions>,
 
     getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress payInvoiceImmediate offer
     |> Swap.getAggregate
-  let handler =
-    Swap.getHandler aggr (opts.Value.EventStoreUrl |> Uri)
+  let mutable handler =
+    Swap.getHandler aggr store
 
+  /// We use queue to assure the change to the command execution is sequential.
+  /// This is OK (since performance rarely be a consideration in swap) but it is
+  /// not ideal in terms of performance, ideally we should allow a concurrent update
+  /// and handle the StoreError (e.g. retry or abort)
+  /// :todo:
   let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command> * TaskCompletionSource> 10
 
   let _worker = task {
@@ -124,7 +130,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
             eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
           )
         | Error (EventSourcingError.Store s as e) ->
-          logger.LogError($"Store Error when executing swap handler %A{s}")
+          logger.LogError($"Store Error when executing the swap handler %A{s}")
           eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
           // todo: retry
           ()

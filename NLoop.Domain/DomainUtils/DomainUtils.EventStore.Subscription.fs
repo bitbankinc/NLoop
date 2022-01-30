@@ -9,27 +9,18 @@ open NLoop.Domain.Utils.EventStore
 open Microsoft.Extensions.Logging
 open FSharp.Control.Tasks
 
-type EventHandler = SerializedRecordedEvent -> Task
 
 [<RequireQualifiedAccess>]
 type SubscriptionStatus =
   | Subscribed
   | UnSubscribed
 
-[<RequireQualifiedAccess>]
-type Checkpoint =
-  | StreamStart
-  | StreamPosition of int64
 
 type SubscriptionState = {
   Checkpoint: Checkpoint
   CancellationToken: CancellationToken
   SubscriptionStatus: SubscriptionStatus
 }
-[<RequireQualifiedAccess>]
-type SubscriptionTarget =
-  | All
-  | SpecificStream of streamId: StreamId
 type SubscriptionMessage =
   | Subscribe
   | Subscribed of EventStoreCatchUpSubscription
@@ -39,13 +30,14 @@ type SubscriptionMessage =
 
 type SubscriptionMailbox = MailboxProcessor<SubscriptionMessage>
 
+
 /// Based on https://github.com/ameier38/fsharp-eventstore-subscription
 type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
                               name: string,
                               streamId: SubscriptionTarget,
                               log: ILogger<EventStoreDBSubscription>,
-                              eventHandler: EventHandler,
-                              ?onLiveProcessingStart,
+                              eventHandler: SubscriptionEventHandler,
+                              onLiveProcessingStart,
                               ?conn: IEventStoreConnection) =
 
   let onLiveProcessingStart = defaultArg onLiveProcessingStart (fun _ -> ())
@@ -172,3 +164,9 @@ type EventStoreDBSubscription(eventStoreConfig: EventStoreConfig,
     let mailbox = start initState
     do! watch mailbox
   }
+
+  interface IDatabaseSubscription with
+    member this.SubscribeAsync(checkpoint, ct) =
+      this.SubscribeAsync(checkpoint, ct)
+      |> Async.StartAsTask :> Task
+

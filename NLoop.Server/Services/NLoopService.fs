@@ -77,6 +77,25 @@ type NLoopExtensions() =
 
 
       this
+        .AddSingleton<NLoop.Domain.Utils.Store>(fun sp ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          EventStore.eventStore(opts.Value.EventStoreUrl |> Uri)
+        )
+        .AddSingleton<GetDBSubscription>(Func<IServiceProvider, _>(fun sp parameters ->
+          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
+          let conn = sp.GetRequiredService<IEventStoreConnection>()
+          EventStoreDBSubscription(
+            { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
+            parameters.Owner,
+            parameters.Target,
+            loggerFactory.CreateLogger(),
+            parameters.HandleEvent,
+            parameters.OnFinishCatchUp
+            |> Option.map(fun onFinishCatchup -> (fun re -> onFinishCatchup (re |> box))),
+            conn)
+          :> IDatabaseSubscription
+        ))
         .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
