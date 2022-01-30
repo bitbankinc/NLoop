@@ -16,6 +16,7 @@
 | [Ply][ply] | [MIT License][ply-license] |  | For handling `task` in F# CE |
 | [System.Commandline][system-commandline] | [MIT License][system-commandline-license] | | For parsing commandline options |
 | [NReco.Logging.File][nreco.logging] | [MIT License][nreco.logging-license] | | For logging into the file |
+| [ameier38/ouroboros][ouroboros] | [MIT License][ouroboros-license] | | It does not depend directly, but an idea of how to implement an event-sourcing is heavily influenced by this project. |
 
 
 [esdb]:https://github.com/EventStore/EventStore
@@ -43,3 +44,5 @@
 [system-commandline-license]: https://github.com/dotnet/command-line-api/blob/main/LICENSE.md
 [nreco.logging]: https://github.com/nreco/logging
 [nreco.logging-license]: https://github.com/nreco/logging/blob/master/LICENSE
+[ouroboros]: https://github.com/ameier38/ouroboros
+[ouroboros-license]: https://github.com/ameier38/ouroboros/blob/master/LICENSE
