@@ -112,7 +112,7 @@ type SwapActor(
   /// not ideal in terms of performance, ideally we should allow a concurrent update
   /// and handle the StoreError (e.g. retry or abort)
   /// :todo:
-  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command> * TaskCompletionSource> 10
+  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command>> 10
 
   let _worker = task {
     let mutable finished = false
@@ -120,7 +120,7 @@ type SwapActor(
       let! channelOpened = workQueue.Reader.WaitToReadAsync()
       finished <- not <| channelOpened
       if not finished then
-        let! swapId, cmd, cts = workQueue.Reader.ReadAsync()
+        let! swapId, cmd = workQueue.Reader.ReadAsync()
         match! handler.Execute swapId cmd with
         | Ok events ->
           events
@@ -137,7 +137,6 @@ type SwapActor(
         | Error s ->
           logger.LogError($"Error when executing swap handler %A{s}")
           eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
-        cts.SetResult()
   }
 
   member val Handler = handler with get
@@ -151,10 +150,8 @@ type SwapActor(
                  EffectiveDate = UnixDateTime.UtcNow } }
 
     let! channelOpened = workQueue.Writer.WaitToWriteAsync()
-    let cts = TaskCompletionSource()
     if channelOpened then
-      do! workQueue.Writer.WriteAsync((swapId, cmd, cts))
-      do! cts.Task
+      do! workQueue.Writer.WriteAsync((swapId, cmd))
   }
 
   interface ISwapActor with

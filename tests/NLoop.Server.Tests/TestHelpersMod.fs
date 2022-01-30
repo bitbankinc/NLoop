@@ -15,6 +15,7 @@ open System.CommandLine.Builder
 open System.CommandLine.Parsing
 
 open BoltzClient
+open EventStore.ClientAPI
 open FSharp.Control
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -72,6 +73,13 @@ module TestHelpersMod =
   let getServerLTCLndClient() =
     let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
     getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
+
+  let [<Literal>] eventStoreUrl = "tcp://admin:changeit@localhost:1113"
+  let getEventStoreDBConnection() =
+    let connSettings = ConnectionSettings.Create().DisableTls().Build()
+    let conn = EventStoreConnection.Create(connSettings, eventStoreUrl)
+    do conn.ConnectAsync().GetAwaiter().GetResult()
+    conn
 
   let walletAddress =
     new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))

@@ -17,6 +17,7 @@
     <Compile Include="IntegrationTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />
     <Compile Include="BlockListenerTest.fs" />
+    <Compile Include="SwapExecutorTest.fs" />
     <Compile Include="Program.fs" />
     <Content Include="README.md" />
   </ItemGroup>
