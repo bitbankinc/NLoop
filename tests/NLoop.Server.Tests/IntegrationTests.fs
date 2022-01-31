@@ -88,7 +88,7 @@ type IntegrationTests() =
     let cli = ExternalClients.GetExternalServiceClients()
     use cts = new CancellationTokenSource()
     cts.CancelAfter(30000)
-    let! _ = cli.AssureChannelIsOpen(LNMoney.Satoshis(5000000L), cts.Token)
+    let! _ = cli.AssureChannelIsOpen(LNMoney.Satoshis(500000L), cts.Token)
 
     let! resp =
       let req = {
@@ -131,10 +131,10 @@ type IntegrationTests() =
       use cts = new CancellationTokenSource()
       cts.CancelAfter(5000)
       do! cli.AssureWalletIsReady(cts.Token)
-      let! unspent = cli.User.BitcoinLnd.ListUnspent(Network.RegTest, cts.Token)
+      let! unspent = cli.User.BitcoinLnd.ListUnspent(BlockHeightOffset32.One, Network.RegTest, cts.Token)
       Assert.NotEmpty(unspent)
 
-      let coins = unspent |> Seq.map(fun u -> u.AsCoin() :> ICoin)
+      let coins = unspent |> Seq.map(fun u -> u.AsCoin())
       let outputAmount = Money.Satoshis 100000L
       let! change = cli.User.BitcoinLnd.GetDepositAddress(Network.RegTest, cts.Token)
       let psbt =

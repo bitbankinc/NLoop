@@ -223,6 +223,7 @@ type WalletUtxo = {
   Address: BitcoinAddress
   Amount: Money
   PrevOut: OutPoint
+  MaybeRedeem: Script option
 }
   with
   member this.AsCoin() =
@@ -231,18 +232,22 @@ type WalletUtxo = {
     c.Outpoint <- this.PrevOut
     c.TxOut <-
       TxOut(this.Amount, this.Address.ScriptPubKey)
-    c
+    match this.MaybeRedeem with
+    | Some redeem ->
+      c.ToScriptCoin(redeem) :> ICoin
+    | None -> c :> ICoin
 
   static member FromRPCDto(u: UnspentCoin) =
     {
       WalletUtxo.Address = u.Address
       Amount = u.Amount
       PrevOut = u.OutPoint
+      MaybeRedeem = u.RedeemScript |> Option.ofObj
     }
 
 
 type IWalletClient =
-  abstract member ListUnspent: network: Network * ?ct: CancellationToken -> Task<WalletUtxo seq>
+  abstract member ListUnspent: minConf: BlockHeightOffset32 * network: Network * ?ct: CancellationToken -> Task<WalletUtxo seq>
   abstract member SignSwapTxPSBT: psbt: PSBT * ?ct: CancellationToken -> Task<PSBT>
   abstract member GetDepositAddress: network: Network * ?ct: CancellationToken -> Task<BitcoinAddress>
 

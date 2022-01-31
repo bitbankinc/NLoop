@@ -19,6 +19,7 @@ open LndClient
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Hosting
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.RPC
@@ -31,7 +32,7 @@ open NLoopClient
 
 [<AutoOpen>]
 module internal ExtensionHelpers =
-  let getLndRestSettings path port =
+  let getLndGrpcSettings path port =
     let lndMacaroonPath = Path.Join(path, "admin.macaroon")
     let lndCertThumbprint =
       getCertFingerPrintHex(Path.Join(path, "tls.cert"))
@@ -284,22 +285,15 @@ type Clients = {
         .ConfigureAppConfiguration(fun _b ->())
         .ConfigureLogging(Main.configureLogging)
         .ConfigureTestServices(fun s ->
-          let lnClientProvider =
-            { new ILightningClientProvider with
-                member this.TryGetClient(cryptoCode) =
-                  externalClients.User.BitcoinLnd :> INLoopLightningClient |> Some
-                member this.GetAllClients() =
-                  seq [externalClients.User.BitcoinLnd]
-            }
           let cliOpts: ParseResult =
             let p =
               let rc = NLoopServerCommandLine.getRootCommand()
               CommandLineBuilder(rc)
                 .UseMiddleware(Main.useWebHostMiddleware)
                 .Build()
-            let uri, lndCertThumbprint, lndMacaroonPath =
-              getLndRestSettings lndUserPath lndUserRestPort
-            p.Parse($"""--network RegTest
+            let lndUri, lndCertThumbprint, lndMacaroonPath =
+              getLndGrpcSettings lndUserPath lndUserRestPort
+            p.Parse($"""--network regtest
                     --datadir {dataPath}
                     --nohttps true
                     --btc.rpcuser=johndoe
@@ -308,17 +302,17 @@ type Clients = {
                     --ltc.rpcuser=johndoe
                     --ltc.rpcpassword=unsafepassword
                     --ltc.rpcport={litecoinPort}
-                    --lndserver {uri}
+                    --lndgrpcserver {lndUri}
                     --lndmacaroonfilepath {lndMacaroonPath}
                     --lndcertthumbprint {lndCertThumbprint}
                     --eventstoreurl tcp://admin:changeit@localhost:{esdbTcpPort}
                     --boltzhost http://localhost
                     --boltzport {esdbHttpPort}
+                    --exchanges BitBank --exchanges BitMEX \
                     --boltzhttps false
                     """)
           s
             .AddSingleton<BindingContext>(BindingContext(cliOpts))
-            .AddSingleton<ILightningClientProvider>(lnClientProvider)
             .AddSingleton<BoltzClient>(externalClients.Server.Boltz)
           |> ignore
         )

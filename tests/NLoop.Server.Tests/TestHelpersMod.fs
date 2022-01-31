@@ -330,8 +330,10 @@ type TestHelpers =
     let p = defaultArg parameters DummyWalletClientParameters.Default
     {
       new IWalletClient with
-        member this.ListUnspent(_, _ct) =
-          p.ListUnspent() |> Seq.map(WalletUtxo.FromRPCDto) |> Task.FromResult
+        member this.ListUnspent(_minConf, _, _ct) =
+          p.ListUnspent()
+          |> Seq.filter(fun u -> u.Confirmations >= _minConf.Value)
+          |> Seq.map(WalletUtxo.FromRPCDto) |> Task.FromResult
         member this.SignSwapTxPSBT(psbt, _ct) =
           p.SignSwapTxPSBT psbt |> Task.FromResult
         member this.GetDepositAddress(_network, _ct) =

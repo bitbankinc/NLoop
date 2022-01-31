@@ -6,6 +6,7 @@ open FSharp.Control.Tasks
 open System.Threading
 open LndClient
 open NBitcoin.RPC
+open NBitcoin.RPC
 
 
 type RPCBlockchainClient(rpc: RPCClient) =
@@ -45,11 +46,13 @@ type RPCBlockchainClient(rpc: RPCClient) =
 
 type BitcoindWalletClient(rpc: RPCClient) =
   interface IWalletClient with
-    member this.ListUnspent(_n, _ct) =
+    member this.ListUnspent(minConf, _n, _ct) =
       task {
-        let! resp = rpc.ListUnspentAsync()
+        let! resp =
+          rpc.ListUnspentAsync()
         return
           resp
+          |> Seq.filter(fun r -> r.Confirmations >= minConf.Value)
           |> Seq.map(WalletUtxo.FromRPCDto)
       }
     member this.SignSwapTxPSBT(psbt, _ct) = task {
