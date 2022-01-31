@@ -73,15 +73,15 @@ type IntegrationTests() =
           for state in invoiceSubscription do
             match state.InvoiceState with
             | IncomingInvoiceStateUnion.Settled ->
-              return true
-            | state ->
-                printfn $"state: {state}"
+              yield true
+            | _state ->
                 let! _ = cli.Litecoin.GenerateToAddressAsync(3, litecoinAddr) |> Async.AwaitTask
-                ()
+                yield false
         }
         |> AsyncSeq.toArrayAsync
         |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
-      isInvoiceSettled |> Assert.Single |> Assert.True
+
+      Assert.Contains(isInvoiceSettled, id)
     }
 
   [<Fact>]
@@ -140,30 +140,3 @@ type IntegrationTests() =
       ()
     }
 
-  [<Fact>]
-  [<Trait("Docker", "On")>]
-  member this.LoopInIntegrationTest() =
-    task {
-      use cli = Clients.Create()
-      use cts = new CancellationTokenSource()
-      cts.CancelAfter(30000)
-      let! _ =
-        let req = {
-          ChannelBalanceRequirement.MinimumIncoming = 200000L |> LNMoney.Satoshis
-          MinimumOutgoing = LNMoney.Zero
-        }
-        cli.ExternalClients.AssureChannelIsOpen(req, cts.Token)
-
-      let! _resp =
-        let req = NLoopClient.LoopInRequest()
-        req.Amount <- 100000L
-        req.Pair_id <- "BTC/LTC"
-        req.Max_swap_fee <- 40000L
-        cli.NLoopClient.InAsync(req, cts.Token)
-
-      let litecoinSwapTxAddress = BitcoinAddress.Create(_resp.Address, Litecoin.Instance.Regtest)
-      let! c =
-        cli.ExternalClients.Litecoin.GetAddressInfoAsync(litecoinSwapTxAddress)
-
-      ()
-    }
