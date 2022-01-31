@@ -330,11 +330,11 @@ type TestHelpers =
     let p = defaultArg parameters DummyWalletClientParameters.Default
     {
       new IWalletClient with
-        member this.ListUnspent() =
-          p.ListUnspent() |> Task.FromResult
-        member this.SignSwapTxPSBT(psbt) =
+        member this.ListUnspent(_, _ct) =
+          p.ListUnspent() |> Seq.map(WalletUtxo.FromRPCDto) |> Task.FromResult
+        member this.SignSwapTxPSBT(psbt, _ct) =
           p.SignSwapTxPSBT psbt |> Task.FromResult
-        member this.GetDepositAddress() =
+        member this.GetDepositAddress(_network, _ct) =
           p.GetDepositAddress() |> Task.FromResult
     }
 
@@ -402,7 +402,7 @@ type TestHelpers =
       .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
         cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
       ))
-      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
+      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp _cc ->
         sp.GetRequiredService<IWalletClient>()
       ))
       |> ignore

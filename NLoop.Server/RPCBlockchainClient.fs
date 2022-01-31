@@ -4,6 +4,7 @@ open System
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
+open LndClient
 open NBitcoin.RPC
 
 
@@ -44,12 +45,18 @@ type RPCBlockchainClient(rpc: RPCClient) =
 
 type BitcoindWalletClient(rpc: RPCClient) =
   interface IWalletClient with
-    member this.ListUnspent() = rpc.ListUnspentAsync()
-    member this.SignSwapTxPSBT(psbt) = task {
+    member this.ListUnspent(_n, _ct) =
+      task {
+        let! resp = rpc.ListUnspentAsync()
+        return
+          resp
+          |> Seq.map(WalletUtxo.FromRPCDto)
+      }
+    member this.SignSwapTxPSBT(psbt, _ct) = task {
       let! resp = rpc.WalletProcessPSBTAsync(psbt, sign=true)
       return resp.PSBT
     }
-    member this.GetDepositAddress() =
+    member this.GetDepositAddress(_n, _ct) =
       let req = GetNewAddressRequest()
       req.AddressType <- Nullable(AddressType.P2SHSegwit)
       rpc.GetNewAddressAsync(req)

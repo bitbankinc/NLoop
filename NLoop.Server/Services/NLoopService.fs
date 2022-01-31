@@ -10,6 +10,7 @@ open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
+open LndClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
@@ -137,7 +138,15 @@ type NLoopExtensions() =
         |> ignore
       this
         .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient))
-        .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetWalletClient))
+        .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp cc ->
+          let opts = sp.GetService<IOptions<NLoopOptions>>()
+          if opts.Value.OffChainCrypto |> Array.contains cc then
+            sp.GetRequiredService<ILightningClientProvider>().GetClient(cc)
+            :?> NLoopLndGrpcClient :> IWalletClient
+          else
+            opts.Value.GetWalletClient cc
+          )
+        )
         |> ignore
       this
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
@@ -171,9 +180,10 @@ type NLoopExtensions() =
               getter.Invoke cc
             else
               let walletClient = sp.GetService<GetWalletClient>()(cc)
+              let network = opts.Value.GetNetwork(cc)
               task {
                 try
-                  let! r = walletClient.GetDepositAddress()
+                  let! r = walletClient.GetDepositAddress(network)
                   return Ok r
                 with
                 | ex ->

@@ -118,7 +118,7 @@ type ExternalClients = {
       return (walletClient, btcAddress, ltcAddress)
   }
 
-  member private this.AssureWalletIsReady(ct) = task {
+  member this.AssureWalletIsReady(ct) = task {
     let! walletClient, btcAddress, ltcAddress = this.AssureWalletHasEnoughBalance(ct)
 
     let assureLndHasEnoughCash (cli: NLoopLndGrpcClient) = task {

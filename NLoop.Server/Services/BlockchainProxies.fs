@@ -1,5 +1,6 @@
 namespace NLoop.Server.Services
 
+open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Chain
 open DotNetLightning.Utils
@@ -39,12 +40,13 @@ type RPCFeeEstimator(getClient: GetBlockchainClient, logger: ILogger<RPCFeeEstim
           |> FeeRate
     }
 
-type BitcoinUTXOProvider(getWalletClient: GetWalletClient) =
+type BitcoinUTXOProvider(getWalletClient: GetWalletClient, opts: IOptions<NLoopOptions>) =
 
   interface IUTXOProvider with
     member this.GetUTXOs(amount, cryptoCode) = task {
       let cli = getWalletClient(cryptoCode)
-      let! us = cli.ListUnspent()
+      let network = opts.Value.GetNetwork(cryptoCode)
+      let! us = cli.ListUnspent(network, CancellationToken.None)
       let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
       if whatWeHave < amount then
         return

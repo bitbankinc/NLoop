@@ -61,6 +61,7 @@ type SwapExecutorTest() =
         obs
         |> Observable.chooseOrError
           (function | Swap.Event.NewTipReceived _ -> Some () | _ -> None)
+      // ... and there is no error
       Assertion.isOk result
       ()
     }

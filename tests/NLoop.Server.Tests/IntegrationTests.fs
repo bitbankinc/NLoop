@@ -121,3 +121,29 @@ type IntegrationTests() =
 
     ()
   }
+  [<Fact>]
+  [<Trait("Docker", "On")>]
+  member this.TestWalletKit() =
+    task {
+      let cli = ExternalClients.GetExternalServiceClients()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(5000)
+      do! cli.AssureWalletIsReady(cts.Token)
+      let! unspent = cli.User.BitcoinLnd.ListUnspent(Network.RegTest, cts.Token)
+      Assert.NotEmpty(unspent)
+
+      let coins = unspent |> Seq.map(fun u -> u.AsCoin() :> ICoin)
+      let outputAmount = Money.Satoshis 100000L
+      let! change = cli.User.BitcoinLnd.GetDepositAddress(Network.RegTest, cts.Token)
+      let psbt =
+        Transactions.createSwapPSBT
+          coins
+          swapRedeem
+          outputAmount
+          (NLoop.Server.Constants.FallbackFeeSatsPerByte |> decimal |> FeeRate)
+          change
+          Network.RegTest
+        |> function | Ok psbt -> psbt | Error e -> failwith e
+      let! psbt = cli.User.BitcoinLnd.FundPSBT(psbt, cts.Token)
+      Assert.True(psbt.IsAllFinalized())
+    }

@@ -13,7 +13,6 @@ type BlockWithHeight with
       Height = nextHeight
     }
 
-
   member this.CreateInfinite(network: Network) =
     Seq.unfold(fun (b: BlockWithHeight) ->
       let addr = (new Key()).PubKey.WitHash.GetAddress(network)
