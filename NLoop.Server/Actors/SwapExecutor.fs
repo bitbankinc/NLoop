@@ -61,7 +61,7 @@ module Observable =
       )
       |> Observable.catchWith(fun ex -> Observable.Return(Error $"Error while handling observable {ex}"))
       |> Observable.first
-      |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
+      |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable
 
 type SwapActor(opts: IOptions<NLoopOptions>,
                lightningClientProvider: ILightningClientProvider,

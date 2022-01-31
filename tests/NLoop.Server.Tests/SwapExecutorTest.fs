@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
 open Microsoft.AspNetCore.TestHost
@@ -44,6 +45,8 @@ type SwapExecutorTest() =
         |> Observable.replay
       use _ = obs.Connect()
 
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(5000)
       let loopOutCmd =
         let loopOutParams = {
           Swap.LoopOutParams.MaxPrepayFee = Money.Coins 100000m
@@ -51,7 +54,7 @@ type SwapExecutorTest() =
           Swap.LoopOutParams.Height = BlockHeight.Zero
         }
         Swap.Command.NewLoopOut(loopOutParams, loopOut1)
-      do! swapExecutor.Execute(swapId, loopOutCmd)
+      do! swapExecutor.Execute(swapId, loopOutCmd, nameof(this.TestConcurrentUpdateCore))
       // execute 100 commands in parallel
       do!
         Array.create 100 (Swap.Command.NewBlock(b1, SupportedCryptoCode.BTC))
@@ -61,6 +64,7 @@ type SwapExecutorTest() =
         obs
         |> Observable.chooseOrError
           (function | Swap.Event.NewTipReceived _ -> Some () | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       // ... and there is no error
       Assertion.isOk result
       ()

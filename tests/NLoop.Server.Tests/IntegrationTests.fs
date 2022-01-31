@@ -27,7 +27,7 @@ type IntegrationTests() =
     task {
       let cli = ExternalClients.GetExternalServiceClients()
       use cts = new CancellationTokenSource()
-      cts.CancelAfter(10000)
+      cts.CancelAfter(30000)
       let req = {
         ChannelBalanceRequirement.MinimumOutgoing = LNMoney.Zero
         ChannelBalanceRequirement.MinimumIncoming = LNMoney.Satoshis(200001L)
@@ -92,7 +92,7 @@ type IntegrationTests() =
   member this.TestListenSwaps() = task {
     let cli = ExternalClients.GetExternalServiceClients()
     use cts = new CancellationTokenSource()
-    cts.CancelAfter(10000)
+    cts.CancelAfter(30000)
     let! _ = cli.AssureChannelIsOpen(LNMoney.Satoshis(500000L), cts.Token)
 
     let! resp =
@@ -149,7 +149,7 @@ type IntegrationTests() =
     task {
       use cli = Clients.Create()
       use cts = new CancellationTokenSource()
-      cts.CancelAfter(10000)
+      cts.CancelAfter(30000)
       let! _ =
         let req = {
           ChannelBalanceRequirement.MinimumIncoming = 1000000L |> LNMoney.Satoshis
@@ -169,7 +169,10 @@ type IntegrationTests() =
         cli.NLoopClient.InAsync(req, cts.Token)
 
       let! Ok txHex =
-        obs |> Observable.chooseOrError(function | Swap.Event.OurSwapTxPublished p -> Some p.TxHex | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.OurSwapTxPublished p -> Some p.TxHex | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
+
       let tx = Transaction.Parse(txHex, Litecoin.Instance.Regtest)
 
       let! rawTx = cli.ExternalClients.Litecoin.GetRawTransactionAsync(tx.GetHash())
@@ -179,17 +182,24 @@ type IntegrationTests() =
       let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(3, ltcAddr)
 
       let! Ok txId =
-        obs |> Observable.chooseOrError(function | Swap.Event.OurSwapTxConfirmed p -> Some p.TxId | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.OurSwapTxConfirmed p -> Some p.TxId | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       Assert.Equal(tx.GetHash(), txId)
       let! Ok actualAmount =
         obs
         |> Observable.chooseOrError(function | Swap.Event.OffChainPaymentReceived p -> Some p.Amount | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       Assert.Equal(actualAmount.Satoshi, amount)
       let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(3, ltcAddr)
       let! Ok () =
-        obs |> Observable.chooseOrError(function | Swap.Event.SuccessTxConfirmed _ -> Some () | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.SuccessTxConfirmed _ -> Some () | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       let! Ok () =
-        obs |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully _ -> Some () | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully _ -> Some () | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       ()
     }
   [<Fact>]
@@ -215,24 +225,39 @@ type IntegrationTests() =
         cli.NLoopClient.OutAsync(req, cts.Token)
 
       let! Ok _offerStartedData =
-        obs |> Observable.chooseOrError(function | Swap.Event.OffChainOfferStarted o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.OffChainOfferStarted o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
 
       let! _theirTxInfo =
-        obs |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxPublished o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxPublished o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
 
       let! ltcAddr = cli.ExternalClients.Litecoin.GetNewAddressAsync()
       let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
       let! _start =
-        obs |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxConfirmedFirstTime o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxConfirmedFirstTime o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
+
       let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
       let! _start =
-        obs |> Observable.chooseOrError(function | Swap.Event.ClaimTxPublished o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.ClaimTxPublished o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       let! _offerResolved =
-        obs |> Observable.chooseOrError(function | Swap.Event.OffchainOfferResolved o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.OffchainOfferResolved o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
       let! _start =
-        obs |> Observable.chooseOrError(function | Swap.Event.ClaimTxConfirmed o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.ClaimTxConfirmed o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       let! _start =
-        obs |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully o -> Some o | _ -> None)
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully o -> Some o | _ -> None)
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
       ()
     }
