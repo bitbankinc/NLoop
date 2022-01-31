@@ -56,23 +56,39 @@ module TestHelpersMod =
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
 
+  let getLndGrpcSettings path port =
+    let lndMacaroonPath = Path.Combine(path, "admin.macaroon")
+    let lndCertThumbprint =
+      getCertFingerPrintHex(Path.Combine(path, "tls.cert"))
+    let uri = $"https://localhost:%d{port}"
+    (uri, lndCertThumbprint, lndMacaroonPath)
   let getLightningClient path port network =
     let settings =
-      let tls = Path.Combine(path, "tls.cert") |> getCertFingerPrintHex |> Some
-      let macaroonPath = Some (Path.Combine(path, "admin.macaroon"))
-      LndGrpcSettings.Create($"https://localhost:{port}", None, macaroonPath, tls, true)
+      let uri, tls, macaroonPath = getLndGrpcSettings path port
+      LndGrpcSettings.Create(uri, None, Some macaroonPath, Some tls, true)
       |> function | Ok s -> s | Error e -> failwith e
     NLoopLndGrpcClient(settings, network)
 
+  let [<Literal>] bitcoinPort = 43782
+  let [<Literal>] litecoinPort = 43783
+  let [<Literal>] lndUserGrpcPort = 32777
+  let [<Literal>] lndServerGrpcPort_BTC = 32778
+  let [<Literal>] lndServerGrpcPort_LTC = 32779
+  let [<Literal>] boltzServerPort = 6028
+  let [<Literal>] esdbTcpPort = 1113
+  let [<Literal>] esdbHttpPort = 2113
+  let dataPath =
+    Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data")
+
+  let lndUserPath = Path.Combine(dataPath, "lnd_user")
   let getUserLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
-    getLightningClient path 32777 Network.RegTest
+    getLightningClient lndUserPath lndUserGrpcPort Network.RegTest
   let getServerBTCLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
-    getLightningClient path 32778 Network.RegTest
+    let path = Path.Combine(dataPath, "lnd_server_btc")
+    getLightningClient path lndServerGrpcPort_BTC Network.RegTest
   let getServerLTCLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
-    getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
+    let path = Path.Combine(dataPath, "lnd_server_ltc")
+    getLightningClient path lndServerGrpcPort_LTC NBitcoin.Altcoins.Litecoin.Instance.Regtest
 
   let [<Literal>] eventStoreUrl = "tcp://admin:changeit@localhost:1113"
   let getEventStoreDBConnection() =

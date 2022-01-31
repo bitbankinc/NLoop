@@ -5,16 +5,19 @@ open System.Threading.Tasks
 open BoltzClient
 open DotNetLightning.Utils
 open LndClient
-open Microsoft.AspNetCore.TestHost
+open Microsoft.Extensions.DependencyInjection
 open NBitcoin.Altcoins
 open NBitcoin.RPC
 open NLoop.Domain
+open NLoop.Server
+open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Tests
 open Xunit
 open NBitcoin
 open FSharp.Control.Tasks
 open FSharp.Control
+open FSharp.Control.Reactive
 
 type IntegrationTests() =
 
@@ -24,7 +27,7 @@ type IntegrationTests() =
     task {
       let cli = ExternalClients.GetExternalServiceClients()
       use cts = new CancellationTokenSource()
-      cts.CancelAfter(30000)
+      cts.CancelAfter(10000)
       let req = {
         ChannelBalanceRequirement.MinimumOutgoing = LNMoney.Zero
         ChannelBalanceRequirement.MinimumIncoming = LNMoney.Satoshis(200001L)
@@ -89,7 +92,7 @@ type IntegrationTests() =
   member this.TestListenSwaps() = task {
     let cli = ExternalClients.GetExternalServiceClients()
     use cts = new CancellationTokenSource()
-    cts.CancelAfter(30000)
+    cts.CancelAfter(10000)
     let! _ = cli.AssureChannelIsOpen(LNMoney.Satoshis(500000L), cts.Token)
 
     let! resp =
@@ -140,3 +143,96 @@ type IntegrationTests() =
       ()
     }
 
+  [<Fact>]
+  [<Trait("Docker", "On")>]
+  member this.LoopInIntegrationTest() =
+    task {
+      use cli = Clients.Create()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(10000)
+      let! _ =
+        let req = {
+          ChannelBalanceRequirement.MinimumIncoming = 1000000L |> LNMoney.Satoshis
+          MinimumOutgoing = LNMoney.Zero
+        }
+        cli.ExternalClients.AssureChannelIsOpen(req, cts.Token)
+
+      let eventAggregator = cli.NLoopServer.Services.GetRequiredService<IEventAggregator>()
+      let obs = eventAggregator.GetObservable<Swap.EventWithId, Swap.ErrorWithId>() |> Observable.replay
+      use _ = obs |> Observable.connect
+      let amount = 100000L
+      let! _resp =
+        let req = NLoopClient.LoopInRequest()
+        req.Amount <- amount
+        req.Pair_id <- "BTC/LTC"
+        req.Max_swap_fee <- 60000L
+        cli.NLoopClient.InAsync(req, cts.Token)
+
+      let! Ok txHex =
+        obs |> Observable.chooseOrError(function | Swap.Event.OurSwapTxPublished p -> Some p.TxHex | _ -> None)
+      let tx = Transaction.Parse(txHex, Litecoin.Instance.Regtest)
+
+      let! rawTx = cli.ExternalClients.Litecoin.GetRawTransactionAsync(tx.GetHash())
+      Assert.Equal(txHex, rawTx.ToHex())
+
+      let! ltcAddr = cli.ExternalClients.Litecoin.GetNewAddressAsync()
+      let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(3, ltcAddr)
+
+      let! Ok txId =
+        obs |> Observable.chooseOrError(function | Swap.Event.OurSwapTxConfirmed p -> Some p.TxId | _ -> None)
+      Assert.Equal(tx.GetHash(), txId)
+      let! Ok actualAmount =
+        obs
+        |> Observable.chooseOrError(function | Swap.Event.OffChainPaymentReceived p -> Some p.Amount | _ -> None)
+      Assert.Equal(actualAmount.Satoshi, amount)
+      let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(3, ltcAddr)
+      let! Ok () =
+        obs |> Observable.chooseOrError(function | Swap.Event.SuccessTxConfirmed _ -> Some () | _ -> None)
+      let! Ok () =
+        obs |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully _ -> Some () | _ -> None)
+      ()
+    }
+  [<Fact>]
+  [<Trait("Docker", "On")>]
+  member this.LoopOutIntegrationTest() =
+    task {
+      use cli = Clients.Create()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(10000)
+      let! _ =
+        cli.ExternalClients.AssureChannelIsOpen(1000000L |> LNMoney.Satoshis, cts.Token)
+
+      let eventAggregator = cli.NLoopServer.Services.GetRequiredService<IEventAggregator>()
+      let obs = eventAggregator.GetObservable<Swap.EventWithId, Swap.ErrorWithId>() |> Observable.replay
+      use _ = obs |> Observable.connect
+      let amount = 100000L
+      let! _resp =
+        let req = NLoopClient.LoopOutRequest()
+        req.Amount <- amount
+        req.Pair_id <- "LTC/BTC"
+        req.Max_swap_fee <- 60000L
+        req.Swap_tx_conf_requirement <- 1
+        cli.NLoopClient.OutAsync(req, cts.Token)
+
+      let! Ok _offerStartedData =
+        obs |> Observable.chooseOrError(function | Swap.Event.OffChainOfferStarted o -> Some o | _ -> None)
+
+      let! _theirTxInfo =
+        obs |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxPublished o -> Some o | _ -> None)
+
+      let! ltcAddr = cli.ExternalClients.Litecoin.GetNewAddressAsync()
+      let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
+      let! _start =
+        obs |> Observable.chooseOrError(function | Swap.Event.TheirSwapTxConfirmedFirstTime o -> Some o | _ -> None)
+      let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
+      let! _start =
+        obs |> Observable.chooseOrError(function | Swap.Event.ClaimTxPublished o -> Some o | _ -> None)
+      let! _offerResolved =
+        obs |> Observable.chooseOrError(function | Swap.Event.OffchainOfferResolved o -> Some o | _ -> None)
+      let! _ = cli.ExternalClients.Litecoin.GenerateToAddressAsync(1, ltcAddr)
+      let! _start =
+        obs |> Observable.chooseOrError(function | Swap.Event.ClaimTxConfirmed o -> Some o | _ -> None)
+      let! _start =
+        obs |> Observable.chooseOrError(function | Swap.Event.FinishedSuccessfully o -> Some o | _ -> None)
+      ()
+    }

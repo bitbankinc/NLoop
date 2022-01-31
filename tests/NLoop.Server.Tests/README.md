@@ -50,3 +50,7 @@ cd tests/NLoop.Server.Tests
 rm -rf data
 git checkout -- data
 ```
+
+For tests those which have a trait "Docker=On", you should first run `docker-compose up` in the background,
+These tests are too heavy that it won't run in the CI, but it is necessary to assure the health of the app.
+

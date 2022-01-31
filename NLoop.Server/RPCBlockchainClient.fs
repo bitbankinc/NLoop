@@ -58,7 +58,7 @@ type BitcoindWalletClient(rpc: RPCClient) =
       task {
         let p = Dictionary<string, obj>()
         p.Add("address", dest.ToString());
-        p.Add("amount", amount)
+        p.Add("amount", amount.ToDecimal(MoneyUnit.BTC))
         p.Add("comment", "nloop:FundToAddress")
         p.Add("conf_target", confTarget.Value |> int)
         let! resp = rpc.SendCommandWithNamedArgsAsync(RPCOperations.sendtoaddress.ToString(), p).ConfigureAwait false

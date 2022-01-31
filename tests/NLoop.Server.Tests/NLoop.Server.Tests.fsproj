@@ -55,4 +55,8 @@
     </None>
   </ItemGroup>
 
+  <PropertyGroup>
+    <OtherFlags>$(OtherFlags) --nowarn:0025</OtherFlags>
+  </PropertyGroup>
+
 </Project>

@@ -34,24 +34,7 @@ open NLoopClient
 
 [<AutoOpen>]
 module internal ExtensionHelpers =
-  let getLndGrpcSettings path port =
-    let lndMacaroonPath = Path.Join(path, "admin.macaroon")
-    let lndCertThumbprint =
-      getCertFingerPrintHex(Path.Join(path, "tls.cert"))
-    let uri = $"https://localhost:%d{port}"
-    (uri, lndCertThumbprint, lndMacaroonPath)
-  let [<Literal>] bitcoinPort = 43782
-  let [<Literal>] litecoinPort = 43783
-  let [<Literal>] lndUserRestPort = 32736
-  let [<Literal>] lndServerRestPort = 32737
-  let [<Literal>] boltzServerPort = 6028
-  let [<Literal>] esdbTcpPort = 1113
-  let [<Literal>] esdbHttpPort = 2113
   let [<Literal>] walletName = "cashcow"
-  let dataPath =
-    Directory.GetCurrentDirectory()
-    |> fun d -> Path.Join(d, "..", "..", "..", "data")
-  let lndUserPath = Path.Join(dataPath, "lnd_user")
   let privKey1 = new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
   let privKey2 = new Key(hex.DecodeData("0202020202020202020202020202020202020202020202020202020202020202"))
   let privKey3 = new Key(hex.DecodeData("0303030303030303030303030303030303030303030303030303030303030303"))
@@ -185,8 +168,8 @@ type ExternalClients = {
           Amount = requirement.MinimumOutgoing + requirement.MinimumIncoming + LNMoney.Satoshis(10000) // buffer
           NodeId = nodeId
           CloseAddress = None }
-      let! r = this.User.BitcoinLnd.OpenChannel(req, ct) |> Async.AwaitTask
       let! ct = Async.CancellationToken
+      let! r = this.User.BitcoinLnd.OpenChannel(req, ct) |> Async.AwaitTask
       ct.ThrowIfCancellationRequested()
       match r with
       | Ok _fundingOutPoint ->
@@ -295,7 +278,7 @@ type Clients = {
                 .UseMiddleware(Main.useWebHostMiddleware)
                 .Build()
             let lndUri, lndCertThumbprint, lndMacaroonPath =
-              getLndGrpcSettings lndUserPath lndUserRestPort
+              getLndGrpcSettings lndUserPath lndUserGrpcPort
             p.Parse($"""--network regtest
                     --datadir {dataPath}
                     --nohttps true
