@@ -4,9 +4,11 @@ open System.Threading
 open BoltzClient
 open DotNetLightning.Utils
 open LndClient
+open Microsoft.AspNetCore.TestHost
 open NBitcoin.Altcoins
 open NBitcoin.RPC
 open NLoop.Domain
+open NLoop.Server.DTOs
 open NLoop.Server.Tests
 open Xunit
 open NBitcoin
@@ -146,4 +148,32 @@ type IntegrationTests() =
         |> function | Ok psbt -> psbt | Error e -> failwith e
       let! psbt = cli.User.BitcoinLnd.FundPSBT(psbt, cts.Token)
       Assert.True(psbt.IsAllFinalized())
+    }
+
+  [<Fact>]
+  [<Trait("Docker", "On")>]
+  member this.LoopInIntegrationTest() =
+    task {
+      use cli = Clients.Create()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(30000)
+      let! _ =
+        let req = {
+          ChannelBalanceRequirement.MinimumIncoming = 200000L |> LNMoney.Satoshis
+          MinimumOutgoing = LNMoney.Zero
+        }
+        cli.ExternalClients.AssureChannelIsOpen(req, cts.Token)
+
+      let! _resp =
+        let req = NLoopClient.LoopInRequest()
+        req.Amount <- 100000L
+        req.Pair_id <- "BTC/LTC"
+        req.Max_swap_fee <- 40000L
+        cli.NLoopClient.InAsync(req, cts.Token)
+
+      let litecoinSwapTxAddress = BitcoinAddress.Create(_resp.Address, Litecoin.Instance.Regtest)
+      let! c =
+        cli.ExternalClients.Litecoin.GetAddressInfoAsync(litecoinSwapTxAddress)
+
+      ()
     }

@@ -414,6 +414,7 @@ type TestHelpers =
     App.configureServicesTest services
     TestHelpers.ConfigureTestServices(services, configureServices)
     services.BuildServiceProvider()
+
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     WebHostBuilder()
@@ -427,4 +428,3 @@ type TestHelpers =
         TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
-

@@ -187,7 +187,7 @@ type ExternalClients = {
       ct.ThrowIfCancellationRequested()
       match r with
       | Ok _fundingOutPoint ->
-        let rec waitToSync(count) = async {
+        let rec waitToSync count = async {
           do! Async.Sleep(500)
           let! ct = Async.CancellationToken
           ct.ThrowIfCancellationRequested()
@@ -271,7 +271,7 @@ type ExternalClients = {
 
 type Clients = {
   NLoopClient: NLoopClient
-  External: ExternalClients
+  ExternalClients: ExternalClients
   NLoopServer: TestServer
 }
   with
@@ -280,7 +280,7 @@ type Clients = {
     let testHost =
       WebHostBuilder()
         .UseContentRoot(dataPath)
-        .UseStartup<TestStartup>()
+        .UseStartup<Startup>()
         .ConfigureAppConfiguration(fun _b ->())
         .ConfigureLogging(Main.configureLogging)
         .ConfigureTestServices(fun s ->
@@ -329,7 +329,11 @@ type Clients = {
       nloopClient.BaseUrl <- httpClient.BaseAddress.ToString()
       nloopClient
     {
-      External = externalClients
+      ExternalClients = externalClients
       NLoopClient = userNLoop
       NLoopServer = testHost
     }
+
+  interface IDisposable with
+    member this.Dispose() =
+      this.NLoopServer.Dispose()
