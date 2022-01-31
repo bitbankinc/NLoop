@@ -87,11 +87,6 @@ type GetBlockchainClient = SupportedCryptoCode -> IBlockChainClient
 type GetSwapKey = unit -> Task<Key>
 type GetSwapPreimage = unit -> Task<PaymentPreimage>
 
-type IWalletClient =
-  abstract member ListUnspent: unit -> Task<UnspentCoin[]>
-  abstract member SignSwapTxPSBT: psbt: PSBT -> Task<PSBT>
-  abstract member GetDepositAddress: unit -> Task<BitcoinAddress>
-
 type GetWalletClient = SupportedCryptoCode -> IWalletClient
 
 type GetNetwork = SupportedCryptoCode -> Network

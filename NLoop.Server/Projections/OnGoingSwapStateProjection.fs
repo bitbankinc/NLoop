@@ -29,7 +29,8 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
                   opts: IOptions<NLoopOptions>,
                   actor: ISwapActor,
                   eventAggregator: IEventAggregator,
-                  conn: IEventStoreConnection) as this =
+                  getSubscription: GetDBSubscription
+                  ) as this =
   inherit BackgroundService()
   let log = loggerFactory.CreateLogger<OnGoingSwapStateProjection>()
   let catchupCompletion = TaskCompletionSource()
@@ -39,7 +40,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
 
   let ongoingEvents = ConcurrentBag()
 
-  let handleEvent (eventAggregator: IEventAggregator) : EventHandler =
+  let handleEvent (eventAggregator: IEventAggregator) : SubscriptionEventHandler =
     fun event -> unitTask {
       try
         if not <| event.StreamId.Value.StartsWith(Swap.entityType) then () else
@@ -50,10 +51,14 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
         | Ok r ->
           this.State <-
             (
-              if this.State |> Map.containsKey r.StreamId |> not then
-                this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
-              else
-                this.State
+              match r.Data with
+              | Swap.Event.NewLoopOutAdded { LoopOut = { ChainName = c } }
+              | Swap.Event.NewLoopInAdded { LoopIn = { ChainName = c } } ->
+                if String.Equals(c, opts.Value.Network, StringComparison.OrdinalIgnoreCase) && this.State |> Map.containsKey r.StreamId |> not then
+                  this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
+                else
+                  this.State
+              | _ -> this.State
             )
             |> Map.change
               r.StreamId
@@ -90,14 +95,16 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     ()
 
   let subscription =
-    EventStoreDBSubscription(
-      { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-      nameof(OnGoingSwapStateProjection),
-      SubscriptionTarget.All,
-      loggerFactory.CreateLogger(),
-      handleEvent eventAggregator,
-      onFinishCatchup,
-      conn)
+    let param = {
+      SubscriptionParameter.Owner =
+        nameof(OnGoingSwapStateProjection)
+      Target = SubscriptionTarget.All
+      HandleEvent =
+        handleEvent eventAggregator
+      OnFinishCatchUp =
+        Some onFinishCatchup
+    }
+    getSubscription(param)
 
   member this.State
     with get(): Map<_, StartHeight * Swap.State> = _state

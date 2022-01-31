@@ -14,10 +14,10 @@
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="LiquidityTest.fs" />
     <Compile Include="AutoLoopManagerTests.fs" />
-    <Compile Include="LightningClientTests.fs" />
-    <Compile Include="BoltzClientTests.fs" />
+    <Compile Include="IntegrationTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />
     <Compile Include="BlockListenerTest.fs" />
+    <Compile Include="SwapExecutorTest.fs" />
     <Compile Include="Program.fs" />
     <Content Include="README.md" />
   </ItemGroup>
@@ -54,5 +54,9 @@
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <PropertyGroup>
+    <OtherFlags>$(OtherFlags) --nowarn:0025</OtherFlags>
+  </PropertyGroup>
 
 </Project>

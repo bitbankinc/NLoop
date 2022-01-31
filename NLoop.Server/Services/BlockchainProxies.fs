@@ -1,5 +1,6 @@
 namespace NLoop.Server.Services
 
+open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Chain
 open DotNetLightning.Utils
@@ -31,31 +32,11 @@ type RPCFeeEstimator(getClient: GetBlockchainClient, logger: ILogger<RPCFeeEstim
       try
         return! getClient(cc).EstimateFee(target)
       with
-      | :? RPC.NoEstimationException as ex ->
+      | :? NoEstimationException as ex ->
         logger.LogWarning $"Failed estimate fee for {cc}: (target blockcount: {target}). using fallback fee. ({ex.Message})"
         return
           Constants.FallbackFeeSatsPerByte
           |> decimal
           |> FeeRate
     }
-
-type BitcoinUTXOProvider(getWalletClient: GetWalletClient) =
-
-  interface IUTXOProvider with
-    member this.GetUTXOs(amount, cryptoCode) = task {
-      let cli = getWalletClient(cryptoCode)
-      let! us = cli.ListUnspent()
-      let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
-      if whatWeHave < amount then
-        return
-          (cryptoCode, whatWeHave, amount)
-          |> UTXOProviderError.InsufficientFunds
-          |> Error
-      else
-        return Ok (us |> Seq.map(fun u -> u.AsCoin() :> ICoin))
-    }
-
-    member this.SignSwapTxPSBT(psbt, cryptoCode) =
-      let cli = getWalletClient(cryptoCode)
-      cli.SignSwapTxPSBT(psbt)
 

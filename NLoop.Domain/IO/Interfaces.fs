@@ -12,20 +12,13 @@ type IFeeEstimator =
 type IBroadcaster =
   abstract member BroadcastTx: tx: Transaction * cryptoCode: SupportedCryptoCode -> Task
 
-type UTXOProviderError =
-  | InsufficientFunds of cryptoCode: SupportedCryptoCode * WhatWeHave: Money * WhatWeNeed: Money
-  with
-  member this.Msg =
-    "utxo provider error: " +
-    match this with
-    | InsufficientFunds(cc, whatWeHave, whatWeNeed) ->
-      $"Insufficient funds in {cc}. what we have ({whatWeHave.Satoshi} sats). " +
-      $"what we need ({whatWeNeed.Satoshi} sats)"
-
-type IUTXOProvider =
-  /// Get UTXO from your wallet
-  abstract member GetUTXOs: amountToPay: Money * cryptoCode: SupportedCryptoCode -> Task<Result<ICoin seq, UTXOProviderError>>
-  /// Sign psbt for UTXOs provided by `GetUTXOs`
-  abstract member SignSwapTxPSBT: psbt: PSBT * cryptoCode: SupportedCryptoCode -> Task<PSBT>
-
+type WalletFundingRequest = {
+  CryptoCode: SupportedCryptoCode
+  DestAddress: BitcoinAddress
+  Amount: Money
+  TargetConf: BlockHeightOffset32
+}
+type PayToAddress =
+  WalletFundingRequest ->
+    Task<Transaction>
 type GetAddress = delegate of SupportedCryptoCode -> Task<Result<BitcoinAddress, string>>

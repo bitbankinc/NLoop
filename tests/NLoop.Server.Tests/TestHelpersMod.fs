@@ -15,6 +15,7 @@ open System.CommandLine.Builder
 open System.CommandLine.Parsing
 
 open BoltzClient
+open EventStore.ClientAPI
 open FSharp.Control
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -55,23 +56,46 @@ module TestHelpersMod =
   let getCertFingerPrintHex (filePath: string) =
     GetCertFingerPrint filePath |> hex.EncodeData
 
+  let getLndGrpcSettings path port =
+    let lndMacaroonPath = Path.Combine(path, "admin.macaroon")
+    let lndCertThumbprint =
+      getCertFingerPrintHex(Path.Combine(path, "tls.cert"))
+    let uri = $"https://localhost:%d{port}"
+    (uri, lndCertThumbprint, lndMacaroonPath)
   let getLightningClient path port network =
     let settings =
-      let tls = Path.Combine(path, "tls.cert") |> getCertFingerPrintHex |> Some
-      let macaroonPath = Some (Path.Combine(path, "admin.macaroon"))
-      LndGrpcSettings.Create($"https://localhost:{port}", None, macaroonPath, tls, true)
+      let uri, tls, macaroonPath = getLndGrpcSettings path port
+      LndGrpcSettings.Create(uri, None, Some macaroonPath, Some tls, true)
       |> function | Ok s -> s | Error e -> failwith e
     NLoopLndGrpcClient(settings, network)
 
-  let userLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_user")
-    getLightningClient path 32777 Network.RegTest
-  let serverBTCLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_btc")
-    getLightningClient path 32778 Network.RegTest
-  let serverLTCLndClient() =
-    let path = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data", "lnd_server_ltc")
-    getLightningClient path 32779 NBitcoin.Altcoins.Litecoin.Instance.Regtest
+  let [<Literal>] bitcoinPort = 43782
+  let [<Literal>] litecoinPort = 43783
+  let [<Literal>] lndUserGrpcPort = 32777
+  let [<Literal>] lndServerGrpcPort_BTC = 32778
+  let [<Literal>] lndServerGrpcPort_LTC = 32779
+  let [<Literal>] boltzServerPort = 6028
+  let [<Literal>] esdbTcpPort = 1113
+  let [<Literal>] esdbHttpPort = 2113
+  let dataPath =
+    Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "data")
+
+  let lndUserPath = Path.Combine(dataPath, "lnd_user")
+  let getUserLndClient() =
+    getLightningClient lndUserPath lndUserGrpcPort Network.RegTest
+  let getServerBTCLndClient() =
+    let path = Path.Combine(dataPath, "lnd_server_btc")
+    getLightningClient path lndServerGrpcPort_BTC Network.RegTest
+  let getServerLTCLndClient() =
+    let path = Path.Combine(dataPath, "lnd_server_ltc")
+    getLightningClient path lndServerGrpcPort_LTC NBitcoin.Altcoins.Litecoin.Instance.Regtest
+
+  let [<Literal>] eventStoreUrl = "tcp://admin:changeit@localhost:1113"
+  let getEventStoreDBConnection() =
+    let connSettings = ConnectionSettings.Create().DisableTls().Build()
+    let conn = EventStoreConnection.Create(connSettings, eventStoreUrl)
+    do conn.ConnectAsync().GetAwaiter().GetResult()
+    conn
 
   let walletAddress =
     new Key(hex.DecodeData("9898989898989898989898989898989898989898989898989898989898989898"))
@@ -92,6 +116,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
+  GetHodlInvoice: PaymentHash -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
   SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
@@ -99,7 +124,7 @@ type DummyLnClientParameters = {
   static member Default = {
     ListChannels = []
     QueryRoutes = fun _ _ _ -> Route[]
-    GetInvoice = fun preimage amount expiry memo hint ->
+    GetInvoice = fun _preimage amount expiry memo _hint ->
       let tags: TaggedFields = {
         Fields = [ TaggedField.DescriptionTaggedField(memo) ]
       }
@@ -108,6 +133,7 @@ type DummyLnClientParameters = {
       |> ResultUtils.Result.deref
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
     GetChannelInfo = fun _cId -> failwith "todo"
+    GetHodlInvoice = fun _ _ _ _ _ -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -172,15 +198,13 @@ type DummyBlockChainClientParameters = {
   }
 
 type DummyWalletClientParameters = {
-  ListUnspent: unit -> UnspentCoin[]
-  SignSwapTxPSBT: PSBT -> PSBT
+  FundToAddress: BitcoinAddress * Money * BlockHeightOffset32 -> Task<uint256>
   GetDepositAddress: unit -> BitcoinAddress
 }
   with
   static member Default =
     {
-      ListUnspent = fun () -> failwith "todo"
-      SignSwapTxPSBT = fun _ -> failwith "todo"
+      FundToAddress = fun (_,_,_) -> failwith "todo"
       GetDepositAddress = fun () -> TestHelpersMod.walletAddress
     }
 
@@ -199,7 +223,8 @@ type TestHelpers =
                                  routeHints: RouteHint[],
                                  memo: string,
                                  ?ct: CancellationToken) =
-          Task.FromResult(failwith "todo")
+          parameters.GetHodlInvoice paymentHash value expiry memo routeHints
+          |> Task.FromResult
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,
@@ -306,7 +331,7 @@ type TestHelpers =
     {
       new ISwapActor with
         member this.Handler =
-          failwith "todo"
+            failwith "todo"
         member this.Aggregate =
           failwith "todo"
         member this.Execute(swapId, msg, source) =
@@ -319,11 +344,10 @@ type TestHelpers =
     let p = defaultArg parameters DummyWalletClientParameters.Default
     {
       new IWalletClient with
-        member this.ListUnspent() =
-          p.ListUnspent() |> Task.FromResult
-        member this.SignSwapTxPSBT(psbt) =
-          p.SignSwapTxPSBT psbt |> Task.FromResult
-        member this.GetDepositAddress() =
+        member this.FundToAddress(_, _, _,  _) =
+          failwith "todo"
+
+        member this.GetDepositAddress(_network, _ct) =
           p.GetDepositAddress() |> Task.FromResult
     }
 
@@ -391,7 +415,7 @@ type TestHelpers =
       .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
         cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
       ))
-      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp cc ->
+      .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp _cc ->
         sp.GetRequiredService<IWalletClient>()
       ))
       |> ignore
@@ -403,6 +427,7 @@ type TestHelpers =
     App.configureServicesTest services
     TestHelpers.ConfigureTestServices(services, configureServices)
     services.BuildServiceProvider()
+
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     WebHostBuilder()
@@ -416,4 +441,3 @@ type TestHelpers =
         TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
-

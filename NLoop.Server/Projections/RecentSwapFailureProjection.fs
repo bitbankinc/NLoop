@@ -20,7 +20,7 @@ type IRecentSwapFailureProjection =
 /// Used in AutoLoop to backoff the failure
 type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
                                  loggerFactory: ILoggerFactory,
-                                 conn: IEventStoreConnection) as this =
+                                 getDBSubscription: GetDBSubscription) as this =
   inherit BackgroundService()
 
   /// We have no big reason to choose this number.
@@ -50,7 +50,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       | Error _ -> ()
       | Ok r ->
         match r.Data with
-        | Swap.Event.NewLoopOutAdded { LoopOut = o } ->
+        | Swap.Event.NewLoopOutAdded { LoopOut = o } when String.Equals(o.ChainName, opts.Value.Network, StringComparison.OrdinalIgnoreCase) ->
           this.FailedLoopOutSwapState <-
             this.FailedLoopOutSwapState
             |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
@@ -61,7 +61,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
             this.FailedLoopOutSwapState <-
               this.FailedLoopOutSwapState
               |> dropOldest
-        | Swap.Event.NewLoopInAdded { LoopIn = i } ->
+        | Swap.Event.NewLoopInAdded { LoopIn = i } when String.Equals(i.ChainName, opts.Value.Network, StringComparison.OrdinalIgnoreCase)  ->
           i.LastHop
           |> Option.iter(fun lastHop ->
             this.FailedLoopInSwapState <-
@@ -91,15 +91,15 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       | ex -> log.LogCritical $"{ex}"
   }
   let subscription =
-    EventStoreDBSubscription(
-      { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-      nameof(RecentSwapFailureProjection),
-      SubscriptionTarget.All,
-      loggerFactory.CreateLogger(),
-      handleEvent,
-      (fun _ -> ()),
-      conn
-    )
+    {
+      SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
+      Target =
+        SubscriptionTarget.All
+      HandleEvent = handleEvent
+      OnFinishCatchUp = None
+    }
+    |> getDBSubscription
+
 
   let mutable failedLoopOutSwapState = Map.empty<_, struct(ShortChannelId[] *  UnixDateTime voption)>
   let mutable failedLoopInSwapState = Map.empty<_, struct(NodeId * UnixDateTime voption)>

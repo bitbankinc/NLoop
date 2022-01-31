@@ -398,7 +398,6 @@ module Swap =
     | TransactionError of string
     | UnExpectedError of exn
     | FailedToGetAddress of string
-    | UTXOProviderError of UTXOProviderError
     | InputError of string
     | CanNotSafelyRevealPreimage
     | CounterPartyReturnedBogusResponse of BogusResponseError
@@ -409,7 +408,6 @@ module Swap =
     member this.Msg =
       "SwapError: " +
       match this with
-      | UTXOProviderError e -> e.Msg
       | x -> x.ToString()
 
   let inline private expectTxError (txName: string) (r: Result<_, Transactions.Error>) =
@@ -423,7 +421,6 @@ module Swap =
 
   let inline private expectOfferError(r: Result<_, string>) =
     r |> Result.mapError OfferFailed
-
   let private jsonConverterOpts =
     let o = JsonSerializerOptions()
     o.AddNLoopJsonConverters()
@@ -458,8 +455,7 @@ module Swap =
   type Deps = {
     Broadcaster: IBroadcaster
     FeeEstimator: IFeeEstimator
-    UTXOProvider: IUTXOProvider
-    GetChangeAddress: GetAddress
+    PayToAddress: PayToAddress
     GetRefundAddress: GetAddress
     /// Used for pre-paying miner fee.
     /// This is not for paying an actual swap invoice, since we cannot expect it to get finished immediately.
@@ -529,8 +525,8 @@ module Swap =
     }
 
   let executeCommand
-    ({ Broadcaster = broadcaster; FeeEstimator = feeEstimator; UTXOProvider = utxoProvider;
-       GetChangeAddress = getChangeAddress; GetRefundAddress = getRefundAddress
+    ({ Broadcaster = broadcaster; FeeEstimator = feeEstimator; PayToAddress = payToAddress
+       GetRefundAddress = getRefundAddress
        PayInvoiceImmediate = payInvoiceImmediate; Offer = offer;
      } as deps)
     (s: State)
@@ -617,47 +613,35 @@ module Swap =
           do! loopIn.Validate() |> expectInputError
           let! additionalEvents = taskResult {
               let struct (_baseAsset, quoteAsset) = loopIn.PairId.Value
-              let! utxos =
-                utxoProvider.GetUTXOs(loopIn.ExpectedAmount, quoteAsset)
-                |> TaskResult.mapError(UTXOProviderError)
               let! feeRate =
                 feeEstimator.Estimate
                   loopIn.HTLCConfTarget
                   quoteAsset
-              let! change =
-                getChangeAddress.Invoke(quoteAsset)
-                |> TaskResult.mapError(FailedToGetAddress)
-              let psbt =
-                Transactions.createSwapPSBT
-                  utxos
-                  loopIn.RedeemScript
-                  loopIn.ExpectedAmount
-                  feeRate
-                  change
-                  loopIn.QuoteAssetNetwork
-                |> function | Ok x -> x | Error e -> failwith $"%A{e}"
-              let! psbt = utxoProvider.SignSwapTxPSBT(psbt, quoteAsset)
-              match psbt.TryFinalize() with
-              | false, e ->
-                return raise <| Exception $"%A{e |> Seq.toList}"
-              | true, _ ->
-                let tx = psbt.ExtractTransaction()
+              let estimatedFee =
+                Transactions.dummySwapTxFee feeRate
+              if loopIn.MaxMinerFee < estimatedFee then
+                // we give up executing the swap here rather than dealing with the fee-market nitty-gritty.
+                return [
+                  let msg = $"OnChain FeeRate is too high. (actual fee: {estimatedFee}. Our maximum: {loopIn.MaxMinerFee})"
+                  FinishedByError { Id = loopIn.Id
+                                    Error = msg }
+                ]
+              else
+                let! tx =
+                  let req = {
+                    WalletFundingRequest.Amount = loopIn.ExpectedAmount
+                    CryptoCode = quoteAsset
+                    DestAddress = loopIn.RedeemScript.WitHash.GetAddress(loopIn.QuoteAssetNetwork)
+                    TargetConf = loopIn.HTLCConfTarget
+                  }
+                  payToAddress(req)
                 let fee = feeRate.GetFee(tx)
-                if loopIn.MaxMinerFee < fee then
-                  // we give up executing the swap here rather than dealing with the fee-market nitty-gritty.
-                  return [
-                    let msg = $"OnChain FeeRate is too high. (actual fee: {fee}. Our maximum: {loopIn.MaxMinerFee})"
-                    FinishedByError { Id = loopIn.Id
-                                      Error = msg }
-                  ]
-                else
-                  do! broadcaster.BroadcastTx(tx, quoteAsset)
-                  let! index =
-                    tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
-                    |> expectBogusSwapTx
-                  return [
-                    OurSwapTxPublished { Fee = fee; TxHex = tx.ToHex(); HtlcOutIndex = index }
-                  ]
+                let! index =
+                  tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
+                  |> expectBogusSwapTx
+                return [
+                  OurSwapTxPublished { Fee = fee; TxHex = tx.ToHex(); HtlcOutIndex = index }
+                ]
           }
           return [NewLoopInAdded{ Height = h; LoopIn = loopIn }] @ additionalEvents |> enhance
         | CommitReceivedOffChainPayment amt, In(_, loopIn) ->
@@ -972,8 +956,7 @@ module Swap =
     Enrich = id
   }
 
-  let getRepository eventStoreUri =
-    let store = eventStore eventStoreUri
+  let getRepository store =
     Repository.Create
       store
       serializer
@@ -989,7 +972,7 @@ module Swap =
     Error: EventSourcingError<Error>
   }
 
-  let getHandler aggr eventStoreUri =
-    getRepository eventStoreUri
+  let getHandler aggr store =
+    getRepository store
     |> Handler.Create aggr
 

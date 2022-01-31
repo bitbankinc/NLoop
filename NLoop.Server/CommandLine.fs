@@ -170,6 +170,12 @@ module NLoopServerCommandLine =
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o
+       let o = Option<int>(b (nameof(opts.WalletMinConf)), $"We do not use funds from the wallet if it has less confirmation than this value. (default: {opts.WalletMinConf})")
+       o.Argument <-
+         let a = Argument<int>()
+         a.Arity <- ArgumentArity.ZeroOrOne
+         a
+       o
      ]
 
   let getOptions(): Option seq =

@@ -47,6 +47,7 @@ module private Constants =
     LndClient.ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
+    RemoteBalance = Money.Zero
     NodeId = peer1
   }
   let pairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
@@ -54,6 +55,7 @@ module private Constants =
     LndClient.ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
+    RemoteBalance = Money.Zero
     NodeId = peer2
   }
   let chanRule = {
@@ -405,6 +407,7 @@ type LiquidityTest() =
         ListChannelResponse.Id = chanId3
         Cap = Money.Satoshis(10000L)
         LocalBalance = Money.Satoshis(10000L)
+        RemoteBalance = Money.Zero
         NodeId = peer1
       }
       let existingSwapState = seq [ Swap.State.Out(BlockHeight.One, chan1Out) ]
@@ -561,14 +564,17 @@ type LiquidityTest() =
         { ListChannelResponse.NodeId = peer1
           Cap = 20000L |> Money.Satoshis
           LocalBalance = 8000L |> Money.Satoshis
+          RemoteBalance = (20000L - 8000L) |> Money.Satoshis
           Id = chanId1 }
         { ListChannelResponse.NodeId = peer1
           Cap = 10000L |> Money.Satoshis
           LocalBalance = 9000L |> Money.Satoshis
+          RemoteBalance = (10000L - 9000L) |> Money.Satoshis
           Id = chanId2 }
         { ListChannelResponse.NodeId = peer2
           Cap = 5000L |> Money.Satoshis
           LocalBalance = 2000L |> Money.Satoshis
+          RemoteBalance = (5000L - 2000L) |> Money.Satoshis
           Id = chanId3 }
       ]
       let r = {

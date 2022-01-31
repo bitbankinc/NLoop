@@ -4,8 +4,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open NBitcoin.DataEncoders
 open NLoop.Domain
-open NLoop.Domain
-open NLoop.Domain
+open NLoop.Tests
 open RandomUtils
 open System
 open System.Threading.Tasks
@@ -44,26 +43,6 @@ module Helpers =
   let pubkey5 = privKey5.PubKey
   let pubkey6 = privKey6.PubKey
   let pubkey7 = privKey7.PubKey
-  type BlockWithHeight with
-    member this.CreateNext(addr: BitcoinAddress) =
-      let nextHeight = this.Height + BlockHeightOffset16.One
-      {
-        Block = this.Block.CreateNextBlockWithCoinbase(addr, nextHeight.Value |> int)
-        Height = nextHeight
-      }
-
-
-    member this.CreateInfinite(network: Network) =
-      Seq.unfold(fun (b: BlockWithHeight) ->
-        let addr = (new Key()).PubKey.WitHash.GetAddress(network)
-        let next = b.CreateNext(addr)
-        (b, next) |> Some
-        )
-        this
-    member this.CreateNextMany(network: Network, n: int) =
-      this.CreateInfinite(network)
-      |> Seq.take n
-
 
   type LoopOut with
     member this.GetGenesis() = {
@@ -201,36 +180,19 @@ type SwapDomainTests() =
         with
         member this.Estimate target cryptoCode = FeeRate(10m) |> Task.FromResult }
 
-  let mockUtxoProvider(keys: Key []) =
-    { new IUTXOProvider
-        with
-        member this.GetUTXOs(a, _cryptoCode) =
-          let utxos =
-            keys |> Seq.map(fun key ->
-              let prevOutput = TxOut(Money.Coins(1m), key.PubKey.WitHash)
-              let prevTxo = OutPoint(RandomUtils.GetUInt256(), RandomUtils.GetUInt32())
-              Coin(prevTxo, prevOutput) :> ICoin
-            )
-          utxos
-          |> Ok
-          |> Task.FromResult
-        member this.SignSwapTxPSBT(psbt, _cryptoCode) =
-          psbt.SignWithKeys(keys)
-          |> Task.FromResult
-    }
   let getChangeAddress = GetAddress(fun _cryptoCode ->
       (new Key()).PubKey.WitHash.GetAddress(Network.RegTest)
       |> Ok
       |> Task.FromResult
     )
 
+  let payToAddress = fun (req: WalletFundingRequest) -> failwith "todo"
   let mockDeps() =
     {
       Swap.Deps.Broadcaster = mockBroadcaster
       Swap.Deps.FeeEstimator = mockFeeEstimator
-      Swap.Deps.UTXOProvider = mockUtxoProvider [||]
-      Swap.Deps.GetChangeAddress = getChangeAddress
       Swap.Deps.GetRefundAddress = getChangeAddress
+      Swap.Deps.PayToAddress = payToAddress
       Swap.Deps.PayInvoiceImmediate =
         fun _n _parameters req ->
           let r = {
@@ -253,19 +215,9 @@ type SwapDomainTests() =
       }
     }
 
-  let getTestRepository() =
-    let store = InMemoryStore.eventStore()
-    Repository.Create
-      store
-      Swap.serializer
-      "swap in-memory repo"
-
-  let getHandler deps repo =
+  let getHandler deps store =
     let aggr = Swap.getAggregate deps
-    if useRealDB then
-      Swap.getHandler aggr ("tcp://admin:changeit@localhost:1113" |> Uri)
-    else
-      Handler.Create<_> aggr repo
+    Swap.getHandler aggr store
 
   let executeCommand handler swapId useRealDB =
     fun cmd -> taskResult {
@@ -286,12 +238,12 @@ type SwapDomainTests() =
       |> List.sequenceTaskResultM
       |> TaskResult.map(List.concat)
       |> fun t -> t.GetAwaiter().GetResult()
-  let commandsToEvents assureRunSequentially deps repo swapId useRealDB commands =
-    let handler = getHandler deps repo
+  let commandsToEvents assureRunSequentially deps store swapId useRealDB commands =
+    let handler = getHandler deps store
     commandsToEventsCore assureRunSequentially handler swapId useRealDB commands
 
-  let commandsToState assureRunSequentially deps repo swapId useRealDB commands =
-    let handler = getHandler deps repo
+  let commandsToState assureRunSequentially deps store swapId useRealDB commands =
+    let handler = getHandler deps store
     // we discard the newly generated events. and re-load the events from the repository
     // and reconstitute the state again entirely from the events in the repository.
     let _newEvents = commandsToEventsCore assureRunSequentially handler swapId useRealDB commands
@@ -384,8 +336,8 @@ type SwapDomainTests() =
       |> List.map(fun x -> x ||> getCommand)
     let events =
       let deps = mockDeps()
-      let repo = getTestRepository()
-      commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB commands
+      let store = InMemoryStore.getEventStore()
+      commandsToEvents assureRunSynchronously deps store loopOut.Id useRealDB commands
     Assertion.isOk events
 
   static member TestLoopOut_SuccessTestData =
@@ -410,26 +362,7 @@ type SwapDomainTests() =
     let loopOut = { loopOut with Preimage = paymentPreimage }
     let txBroadcasted = ResizeArray()
     let mutable i = 0
-    let repo = getTestRepository()
-    let commandsToEvents (commands: Swap.Command list) =
-      let deps =
-        let broadcaster = {
-          new IBroadcaster with
-            member this.BroadcastTx(tx, cc) =
-              txBroadcasted.Add(tx)
-              Task.CompletedTask
-        }
-        { mockDeps() with
-            UTXOProvider =
-              let fundsKey = new Key()
-              mockUtxoProvider([|fundsKey|])
-            Broadcaster = broadcaster }
-      commands
-      |> List.map(fun c ->
-        i <- i + 1
-        (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
-      )
-      |> commandsToEvents assureRunSynchronously deps repo loopOut.Id useRealDB
+    let store = InMemoryStore.getEventStore()
     let swapTx =
       let fee = Money.Satoshis(30m)
       let txb =
@@ -442,6 +375,23 @@ type SwapDomainTests() =
         .SendFees(fee)
         .SetChange((new Key()).PubKey.WitHash)
         .BuildTransaction(true)
+    let commandsToEvents (commands: Swap.Command list) =
+      let deps =
+        let broadcaster = {
+          new IBroadcaster with
+            member this.BroadcastTx(tx, cc) =
+              txBroadcasted.Add(tx)
+              Task.CompletedTask
+        }
+        { mockDeps() with
+            PayToAddress = fun (_req: WalletFundingRequest) -> Task.FromResult swapTx
+            Broadcaster = broadcaster }
+      commands
+      |> List.map(fun c ->
+        i <- i + 1
+        (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
+      )
+      |> commandsToEvents assureRunSynchronously deps store loopOut.Id useRealDB
     let _ =
       let events =
         [
@@ -593,7 +543,7 @@ type SwapDomainTests() =
           SwapTxConfRequirement = confRequirement
     }
     let mutable i = 0
-    let repo = getTestRepository()
+    let store = InMemoryStore.getEventStore()
     let commandsToState (commands: Swap.Command list) =
       let deps =
         mockDeps()
@@ -602,7 +552,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToState assureRunSynchronously deps repo loopOut.Id useRealDB
+      |> commandsToState assureRunSynchronously deps store loopOut.Id useRealDB
 
     let confirmationCommands =
       [
@@ -624,14 +574,32 @@ type SwapDomainTests() =
     let quoteAsset =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let baseAsset = SupportedCryptoCode.BTC
-    let loopIn =
-      { loopIn.Normalize() with
-          PairId = PairId (baseAsset, quoteAsset)
-        }
     let initialBlockHeight = BlockHeight.Zero
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(2us)
     use key = new Key()
-    let repo = getTestRepository()
+    let loopIn =
+      let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+      let tmp =
+        { loopIn.Normalize() with
+            PairId = PairId (baseAsset, quoteAsset)
+            RedeemScript =
+              let remoteClaimKey = new Key()
+              Scripts.swapScriptV1
+                preimage.Hash
+                remoteClaimKey.PubKey
+                loopIn.RefundPrivateKey.PubKey
+                timeoutBlockHeight
+            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+            TimeoutBlockHeight = timeoutBlockHeight
+            ChainName = Network.RegTest.ChainName.ToString()
+          }
+      let addr =
+        key.PubKey.GetAddress(ScriptPubKeyType.Segwit, tmp.QuoteAssetNetwork)
+      {
+        tmp with
+            LoopIn.Address = addr.ToString()
+      }
+    let store = InMemoryStore.getEventStore()
     let txBroadcasted = ResizeArray()
     use fundsKey = new Key()
     let mutable i = 0
@@ -644,35 +612,32 @@ type SwapDomainTests() =
               Task.CompletedTask
         }
         { mockDeps() with
-            UTXOProvider = mockUtxoProvider([|fundsKey|])
+            PayToAddress = fun (_req: WalletFundingRequest) ->
+              let swapTx =
+                let fee = Money.Satoshis(30m)
+                let txb =
+                  loopIn
+                    .QuoteAssetNetwork
+                    .CreateTransactionBuilder()
+                txb
+                  .AddRandomFunds(loopIn.ExpectedAmount + fee + Money.Coins(1m))
+                  .Send(loopIn.RedeemScript.WitHash.ScriptPubKey, _req.Amount)
+                  .SendFees(fee)
+                  .SetChange((new Key()).PubKey.WitHash)
+                  .BuildTransaction(true)
+              txBroadcasted.Add(swapTx)
+              Task.FromResult swapTx
             Broadcaster = mockBroadcaster }
       commands
       |> List.map(fun c ->
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB
+      |> commandsToEvents assureRunSynchronously deps store loopIn.Id useRealDB
 
     // act
     let events =
       [
-        let loopIn =
-          let addr =
-            key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.QuoteAssetNetwork)
-          let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-          {
-            loopIn with
-              LoopIn.Address = addr.ToString()
-              ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
-              TimeoutBlockHeight = timeoutBlockHeight
-              RedeemScript =
-                let remoteClaimKey = new Key()
-                Scripts.swapScriptV1
-                  preimage.Hash
-                  remoteClaimKey.PubKey
-                  loopIn.RefundPrivateKey.PubKey
-                  timeoutBlockHeight
-          }
         Swap.Command.NewLoopIn(initialBlockHeight, loopIn)
       ]
       |> commandsToEvents
@@ -727,16 +692,34 @@ type SwapDomainTests() =
     let quoteAsset =
       if testAltcoin then SupportedCryptoCode.LTC else SupportedCryptoCode.BTC
     let baseAsset = SupportedCryptoCode.BTC
-    let loopIn =
-      { loopIn.Normalize() with
-          PairId = PairId(baseAsset, quoteAsset)
-        }
-    use key = new Key()
-    let repo = getTestRepository()
-    let txBroadcasted = ResizeArray()
-    use fundsKey = new Key()
+    let key = new Key()
     let initialBlockHeight = BlockHeight.Zero
     let timeoutBlockHeight = initialBlockHeight + BlockHeightOffset16(2us)
+    let loopIn =
+      let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
+      let tmp =
+        { loopIn.Normalize() with
+            PairId = PairId(baseAsset, quoteAsset)
+            ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
+            TimeoutBlockHeight = timeoutBlockHeight
+            RedeemScript =
+              let remoteClaimKey = new Key()
+              Scripts.swapScriptV1
+                preimage.Hash
+                remoteClaimKey.PubKey
+                loopIn.RefundPrivateKey.PubKey
+                timeoutBlockHeight
+            ChainName = Network.RegTest.ChainName.ToString()
+          }
+      let addr =
+        key.PubKey.GetAddress(ScriptPubKeyType.Segwit, tmp.QuoteAssetNetwork)
+      { tmp
+          with
+          LoopIn.Address = addr.ToString()
+       }
+    let store = InMemoryStore.getEventStore()
+    let txBroadcasted = ResizeArray()
+    use fundsKey = new Key()
     let mutable i = 0
     let commandsToEvents (commands: Swap.Command list) =
       let deps =
@@ -747,7 +730,21 @@ type SwapDomainTests() =
               Task.CompletedTask
         }
         { mockDeps() with
-            UTXOProvider = mockUtxoProvider([|fundsKey|])
+            PayToAddress = fun (_req) ->
+              let swapTx =
+                let fee = Money.Satoshis(30m)
+                let txb =
+                  loopIn
+                    .QuoteAssetNetwork
+                    .CreateTransactionBuilder()
+                txb
+                  .AddRandomFunds(loopIn.ExpectedAmount + fee + Money.Coins(1m))
+                  .Send(loopIn.RedeemScript.WitHash.ScriptPubKey, _req.Amount)
+                  .SendFees(fee)
+                  .SetChange((new Key()).PubKey.WitHash)
+                  .BuildTransaction(true)
+              txBroadcasted.Add(swapTx)
+              Task.FromResult swapTx
             Broadcaster = mockBroadcaster }
 
       commands
@@ -755,24 +752,7 @@ type SwapDomainTests() =
         i <- i + 1
         (DateTime(2001, 01, 30, i, 0, 0), c) ||> getCommand
       )
-      |> commandsToEvents assureRunSynchronously deps repo loopIn.Id useRealDB
-    let loopIn =
-      let addr =
-        key.PubKey.GetAddress(ScriptPubKeyType.Segwit, loopIn.QuoteAssetNetwork)
-      let preimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-      {
-        loopIn with
-          LoopIn.Address = addr.ToString()
-          ExpectedAmount = if loopIn.ExpectedAmount.Satoshi <= 1000L then Money.Coins(0.5m) else loopIn.ExpectedAmount
-          TimeoutBlockHeight = timeoutBlockHeight
-          RedeemScript =
-            let remoteClaimKey = new Key()
-            Scripts.swapScriptV1
-              preimage.Hash
-              remoteClaimKey.PubKey
-              loopIn.RefundPrivateKey.PubKey
-              timeoutBlockHeight
-      }
+      |> commandsToEvents assureRunSynchronously deps store loopIn.Id useRealDB
     // act
     let events =
       [

@@ -12,6 +12,7 @@ open System.Threading.Tasks
 open NBitcoin
 open DotNetLightning.Utils
 open DotNetLightning.Payment
+open NBitcoin.RPC
 
 [<RequireQualifiedAccess>]
 type MacaroonInfo =
@@ -51,6 +52,7 @@ type ListChannelResponse = {
   Id: ShortChannelId
   Cap: Money
   LocalBalance: Money
+  RemoteBalance: Money
   NodeId: PubKey
 }
 
@@ -216,6 +218,39 @@ type INLoopLightningClient =
   abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
 
 open FSharp.Control.Tasks
+
+type WalletUtxo = {
+  Address: BitcoinAddress
+  Amount: Money
+  PrevOut: OutPoint
+  MaybeRedeem: Script option
+}
+  with
+  member this.AsCoin() =
+    let c = ScriptCoin()
+    c.Amount <- this.Amount
+    c.Outpoint <- this.PrevOut
+    c.TxOut <-
+      TxOut(this.Amount, this.Address.ScriptPubKey)
+    match this.MaybeRedeem with
+    | Some redeem ->
+      c.ToScriptCoin(redeem) :> ICoin
+    | None -> c :> ICoin
+
+  static member FromRPCDto(u: UnspentCoin) =
+    {
+      WalletUtxo.Address = u.Address
+      Amount = u.Amount
+      PrevOut = u.OutPoint
+      MaybeRedeem = u.RedeemScript |> Option.ofObj
+    }
+
+
+type IWalletClient =
+  abstract member FundToAddress: dest: BitcoinAddress * amount: Money * confTarget: BlockHeightOffset32 * ?ct: CancellationToken ->
+    Task<uint256>
+  abstract member GetDepositAddress: network: Network * ?ct: CancellationToken -> Task<BitcoinAddress>
+
 [<AbstractClass;Sealed;Extension>]
 type LightningClientExtensions =
 

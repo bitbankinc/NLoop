@@ -9,7 +9,7 @@ open FSharp.Control.Tasks
 [<RequireQualifiedAccess>]
 module InMemoryStore =
 
-  let eventStore() =
+  let getEventStoreWithSubscription(onEvent: SerializedRecordedEvent -> unit) =
     let streams: ConcurrentDictionary<StreamId, Stack<SerializedRecordedEvent>> =
       ConcurrentDictionary()
     let readLast: StreamId -> Task<Result<_,_>>  =
@@ -69,6 +69,7 @@ module InMemoryStore =
                     CreatedDate = DateTime.UtcNow |> UnixDateTime.Create |> function Ok e -> e | Error e -> failwith $"Unreachable! {e}"
                     Meta = e.Meta
                   })
+                |> List.map(fun re -> onEvent re; re)
                 |> List.iter(v.Push)
                 v
               streams.AddOrUpdate(streamId, (fun _ -> Stack() |> updateStack), fun _streamId -> updateStack)
@@ -76,10 +77,12 @@ module InMemoryStore =
               Ok ()
             with
             | ex ->
-              ($"Failed to writeStream %A{ex}") |> StoreError |> Error
+              $"Failed to writeStream %A{ex}" |> StoreError |> Error
         r |> Task.FromResult
     {
       Store.ReadLast = readLast
       ReadStream = readStream
       WriteStream = writeStream
     }
+  let getEventStore() =
+    getEventStoreWithSubscription(fun _ -> ())

@@ -1,12 +1,14 @@
 namespace LndClient
 
 open System
+open System.Collections.Generic
 open System.Linq
 open System.IO
 open System.Net.Http
 open System.Runtime.CompilerServices
 open System.Security.Cryptography.X509Certificates
 open System.Threading
+open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
@@ -21,6 +23,8 @@ open FSharp.Control.Tasks
 open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
+open NBitcoin.RPC
+open NBitcoin.RPC
 open Routerrpc
 
 type LndGrpcSettings = internal {
@@ -174,6 +178,7 @@ module Extensions =
         Cap = o.Capacity |> Money.Satoshis
         LocalBalance = o.LocalBalance |> Money.Satoshis
         NodeId = o.RemotePubkey |> PubKey
+        RemoteBalance = o.RemoteBalance |> Money.Satoshis
       }
   type LndClient.HopHint with
     member h.ToGrpcType() =
@@ -261,7 +266,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     }
 
   member this.GetDepositAddress(ct) = this.GetDepositAddress(Some ct)
-  member this.GetHodlInvoice(paymentHash: DotNetLightning.Utils.Primitives.PaymentHash, value: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
+  member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash, value: LNMoney, ?expiry: TimeSpan, ?routeHints, ?memo, ?ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
       let req = AddHoldInvoiceRequest()
@@ -269,12 +274,20 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         paymentHash.ToBytes()
         |> ByteString.CopyFrom
       req.Value <- value.Satoshi
-      req.Expiry <- expiry.Seconds |> int64
-      req.Memo <- memo
-      for r in routeHints do
-        let lnRouteHint = RouteHint()
-        lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-        req.RouteHints.Add(lnRouteHint)
+      expiry |> Option.iter(fun e ->
+        req.Expiry <- e.Seconds |> int64
+      )
+      routeHints |> Option.iter(fun routeHintsValue ->
+        for r in routeHintsValue do
+          let lnRouteHint = RouteHint()
+          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+          req.RouteHints.Add(lnRouteHint)
+      )
+      match memo with
+      | Some m ->
+        req.Memo <- m
+      | None ->
+        req.Memo <- "hodl_invoice_requested_by_LndGrpcClient"
       let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
       return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
     }
@@ -286,7 +299,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       return m |> box
     }
 
-  member this.SubscribeSingleInvoice(invoiceHash: DotNetLightning.Utils.Primitives.PaymentHash, ct) =
+  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
     let ct = defaultArg ct CancellationToken.None
     let resp =
       let req = SubscribeSingleInvoiceRequest()
@@ -311,8 +324,10 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
       }
     )
+  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
+    this.SubscribeSingleInvoice(invoiceHash, Some ct)
 
-  member this.TrackPayment(invoiceHash: DotNetLightning.Utils.Primitives.PaymentHash, ct) =
+  member this.TrackPayment(invoiceHash: Primitives.PaymentHash, ct) =
     let ct = defaultArg ct CancellationToken.None
     let resp =
       let req = TrackPaymentRequest()
@@ -339,21 +354,34 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       }
     )
 
-  member this.GetInvoice(paymentPreimage: PaymentPreimage, amount: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
+  member this.GetInvoice(amount: LNMoney, ?paymentPreimage: PaymentPreimage, ?expiry: TimeSpan, ?routeHints, ?memo, ?ct) =
     task {
       let req = Invoice()
       let ct = defaultArg ct CancellationToken.None
-      req.RPreimage <- paymentPreimage.ToByteArray() |> ByteString.CopyFrom
+      paymentPreimage |> Option.iter( fun img ->
+        req.RPreimage <-
+          img.ToByteArray() |> ByteString.CopyFrom
+      )
       req.Value <- amount.Satoshi
-      req.Expiry <- expiry.Seconds |> int64
-      for r in routeHints do
-        let lnRouteHint = RouteHint()
-        lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-        req.RouteHints.Add(lnRouteHint)
-      req.Memo <- memo
+      expiry |> Option.iter(fun e ->
+        req.Expiry <- e.Seconds |> int64
+      )
+      routeHints |> Option.iter(fun routeHintsValue ->
+        for r in routeHintsValue do
+          let lnRouteHint = RouteHint()
+          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
+          req.RouteHints.Add(lnRouteHint)
+      )
+      match memo with
+      | Some m ->
+        req.Memo <- m
+      | None ->
+        req.Memo <- "invoice_requested_by_LndGrpcClient"
       let! r = client.AddInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
       return r.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
     }
+  member this.GetInvoice(paymentPreimage: PaymentPreimage, amount: LNMoney, expiry: TimeSpan, routeHints, memo, ct) =
+    this.GetInvoice(amount, paymentPreimage, expiry, routeHints, memo, ct)
   member this.ListChannels(ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
@@ -362,11 +390,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       return
         r.Channels
         |> Seq.map(fun c ->
-          { ListChannelResponse.Id = c.ChanId |> ShortChannelId.FromUInt64
-            Cap = c.Capacity |> Money.Satoshis
-            LocalBalance = c.LocalBalance |> Money.Satoshis
-            NodeId = c.RemotePubkey |> PubKey
-          })
+          let pendingSum = c.PendingHtlcs |> Seq.sumBy(fun p -> p.Amount) |> Money.Satoshis
+          let c = ListChannelResponse.FromGrpcType c
+          { c
+            with
+              LocalBalance = c.LocalBalance - pendingSum
+              RemoteBalance = c.RemoteBalance - pendingSum
+          }
+        )
         |> Seq.toList
     }
   member this.ListChannels(ct) = this.ListChannels(Some ct)
@@ -418,6 +449,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       | ex ->
         return Error $"Unexpected error while sending offchain offer: {ex.ToString()}"
     }
+  member this.SendPayment(param, ct) = this.SendPayment(param, Some ct)
 
   member this.Offer(param, ct) = task {
     let ct = defaultArg ct CancellationToken.None
@@ -544,15 +576,56 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     }
   }
 
+  member this.SettleInvoice(preimage: PaymentPreimage, ct) =
+    task {
+      let ct = defaultArg ct CancellationToken.None
+      let! _ =
+        let msg = SettleInvoiceMsg()
+        msg.Preimage <- ByteString.CopyFrom(preimage.ToByteArray())
+        invoiceClient.SettleInvoiceAsync(msg, this.DefaultHeaders, this.Deadline, ct)
+      ()
+    } :> Task
+
+
+  member this.SendCoins(dest: BitcoinAddress, amt: Money, targetConf: BlockHeightOffset32, ct) =
+    task {
+      let! resp =
+        let req = SendCoinsRequest()
+        req.Addr <- dest.ToString()
+        req.Amount <- amt.Satoshi
+        req.TargetConf <- targetConf.Value |> int
+        client.SendCoinsAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return resp.Txid |> uint256.Parse
+    }
+  member this.GetDepositAddress(network, ct) =
+    task {
+      let! resp =
+        let req = NewAddressRequest()
+        req.Type <- Lnrpc.AddressType.WitnessPubkeyHash
+        client.NewAddressAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return BitcoinAddress.Create(resp.Address, network)
+    }
+
+  interface IWalletClient with
+    member this.GetDepositAddress(network, ct) =
+      let ct = defaultArg ct CancellationToken.None
+      this.GetDepositAddress(network, ct)
+
+    member this.FundToAddress(dest: BitcoinAddress, amt: Money, targetConf, ?ct) =
+      let ct = defaultArg ct CancellationToken.None
+      this.SendCoins(dest, amt, targetConf, ct)
+
   interface INLoopLightningClient with
     member this.ConnectPeer(nodeId, host, ct) = this.ConnectPeer(nodeId, host, ct)
     member this.GetDepositAddress(ct) = this.GetDepositAddress(ct)
     member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
+      let ct = defaultArg ct CancellationToken.None
       this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct)
     member this.GetInfo(ct) = this.GetInfo ct
     member this.SubscribeSingleInvoice(invoiceHash, ct) = this.SubscribeSingleInvoice(invoiceHash, ct)
     member this.TrackPayment(invoiceHash, ct) = this.TrackPayment(invoiceHash, ct)
     member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
+      let ct = defaultArg ct CancellationToken.None
       this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct)
     member this.ListChannels(ct) = this.ListChannels ct
     member this.SendPayment(param, ct) = this.SendPayment (param, ct)

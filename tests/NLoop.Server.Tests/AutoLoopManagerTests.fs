@@ -474,6 +474,7 @@ type AutoLoopManagerTests() =
       ListChannelResponse.Cap = 10000L |> Money.Satoshis
       Id = chanId3
       LocalBalance = 10000L |> Money.Satoshis
+      RemoteBalance = Money.Zero
       NodeId = peer2
     }
 
@@ -576,12 +577,14 @@ type AutoLoopManagerTests() =
       ListChannelResponse.Id = chanId1
       Cap = 100000L |> Money.Satoshis
       LocalBalance = Money.Zero
+      RemoteBalance = 100000L |> Money.Satoshis
       NodeId = peer1
     }
     let chan2 = {
       ListChannelResponse.Id = chanId2
       Cap = 200000L |> Money.Satoshis
       LocalBalance = Money.Zero
+      RemoteBalance = 200000L |> Money.Satoshis
       NodeId = peer2
     }
 
@@ -689,6 +692,7 @@ type AutoLoopManagerTests() =
         1000000L |> Money.Satoshis
       LocalBalance =
         1000000L |> Money.Satoshis
+      RemoteBalance = Money.Zero
     }
     let chan2 = {
       ListChannelResponse.Id = chanId2
@@ -696,6 +700,8 @@ type AutoLoopManagerTests() =
       Cap =
         200000L |> Money.Satoshis
       LocalBalance = Money.Zero
+      RemoteBalance =
+        200000L |> Money.Satoshis
     }
     let channels = [chan1; chan2]
     let outRule =  {

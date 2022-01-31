@@ -19,22 +19,6 @@ open Xunit
 
 [<AutoOpen>]
 module private BlockchainListenerTestHelper =
-  let privKey1 = new Key(hex.DecodeData("0101010101010101010101010101010101010101010101010101010101010101"))
-  let privKey2 = new Key(hex.DecodeData("0202020202020202020202020202020202020202020202020202020202020202"))
-  let privKey3 = new Key(hex.DecodeData("0303030303030303030303030303030303030303030303030303030303030303"))
-  let privKey4 = new Key(hex.DecodeData("0404040404040404040404040404040404040404040404040404040404040404"))
-  let privKey5 = new Key(hex.DecodeData("0505050505050505050505050505050505050505050505050505050505050505"))
-  let privKey6 = new Key(hex.DecodeData("0606060606060606060606060606060606060606060606060606060606060606"))
-  let privKey7 = new Key(hex.DecodeData("0707070707070707070707070707070707070707070707070707070707070707"))
-  let privKey8 = new Key(hex.DecodeData("0808080808080808080808080808080808080808080808080808080808080808"))
-  let pubkey1 = privKey1.PubKey
-  let pubkey2 = privKey2.PubKey
-  let pubkey3 = privKey3.PubKey
-  let pubkey4 = privKey4.PubKey
-  let pubkey5 = privKey5.PubKey
-  let pubkey6 = privKey6.PubKey
-  let pubkey7 = privKey7.PubKey
-  let pubkey8 = privKey8.PubKey
 
   type BlockWithHeight with
     member this.CreateNext(addr: BitcoinAddress) =

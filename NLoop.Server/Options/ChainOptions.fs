@@ -24,11 +24,11 @@ type IChainOptions =
   abstract member ZmqPort: int with get, set
   // --- ---
 
-  // --- swap params ---
 
-  /// Confirmation target for the sweep in on-chain swap
-  abstract member SweepConf: int with get, set
-
+  // --- --=
+  /// UTXO we have in the wallet must have greater confirmation than this.
+  /// Otherwise it is not used as our funds.
+  abstract member WalletMinConf: int with get, set
   // --- properties and methods ---
 
 [<Extension;AbstractClass;Sealed>]
@@ -67,10 +67,7 @@ type BTCChainOptions(n: Network) =
     member val ZmqPort = 0 with get, set
     // --- ---
 
-    // --- swap params ---
-
-    /// Confirmation target for the sweep in on-chain swap
-    member val SweepConf = 6 with get, set
+    member val WalletMinConf = 1 with get, set
 
 
 type LTCChainOptions(n: Network) =
@@ -92,8 +89,4 @@ type LTCChainOptions(n: Network) =
     member val ZmqPort = 0 with get, set
     // --- ---
 
-    // --- swap params ---
-
-    /// Confirmation target for the sweep in on-chain swap
-    member val SweepConf = 18 with get, set
-
+    member val WalletMinConf = 3 with get, set

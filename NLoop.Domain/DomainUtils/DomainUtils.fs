@@ -379,3 +379,24 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
   // todo: use asyncSeq
   abstract member GetAllEntities: ?ct: CancellationToken -> Task<Result<Map<StreamId, 'TState>, StoreError>>
 
+[<RequireQualifiedAccess>]
+type Checkpoint =
+  | StreamStart
+  | StreamPosition of int64
+
+type IDatabaseSubscription =
+  abstract member SubscribeAsync: checkpoint: Checkpoint * ct: CancellationToken -> Task
+
+[<RequireQualifiedAccess>]
+type SubscriptionTarget =
+  | All
+  | SpecificStream of streamId: StreamId
+
+type SubscriptionEventHandler = SerializedRecordedEvent -> Task
+type SubscriptionParameter = {
+  Owner: string
+  Target: SubscriptionTarget
+  HandleEvent: SubscriptionEventHandler
+  OnFinishCatchUp: (obj -> unit) option
+}
+type GetDBSubscription = SubscriptionParameter -> IDatabaseSubscription
