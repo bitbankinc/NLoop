@@ -227,7 +227,7 @@ type WalletUtxo = {
 }
   with
   member this.AsCoin() =
-    let c = Coin()
+    let c = ScriptCoin()
     c.Amount <- this.Amount
     c.Outpoint <- this.PrevOut
     c.TxOut <-
@@ -247,8 +247,8 @@ type WalletUtxo = {
 
 
 type IWalletClient =
-  abstract member ListUnspent: minConf: BlockHeightOffset32 * network: Network * ?ct: CancellationToken -> Task<WalletUtxo seq>
-  abstract member SignSwapTxPSBT: psbt: PSBT * ?ct: CancellationToken -> Task<PSBT>
+  abstract member FundToAddress: dest: BitcoinAddress * amount: Money * confTarget: BlockHeightOffset32 * ?ct: CancellationToken ->
+    Task<uint256>
   abstract member GetDepositAddress: network: Network * ?ct: CancellationToken -> Task<BitcoinAddress>
 
 [<AbstractClass;Sealed;Extension>]

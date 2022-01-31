@@ -233,7 +233,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     Lightning.LightningClient(channel)
   let invoiceClient = Invoices.InvoicesClient(channel)
   let routerClient = Router.RouterClient(channel)
-  let walletClient = Walletrpc.WalletKit.WalletKitClient(channel)
 
   member val Client = client with get
 
@@ -587,53 +586,17 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       ()
     } :> Task
 
-  member this.FundPSBT(psbt: PSBT, ct) =
+
+  member this.SendCoins(dest: BitcoinAddress, amt: Money, targetConf: BlockHeightOffset32, ct) =
     task {
       let! resp =
-        let req = Walletrpc.FundPsbtRequest()
-        req.Psbt <- psbt.ToBytes() |> ByteString.CopyFrom
-        req.ClearFees()
-        req.SatPerVbyte <-
-          let fee = psbt.GetEstimatedFeeRate()
-          uint64 (fee.SatoshiPerByte * 4m)
-        walletClient.FundPsbtAsync(req, this.DefaultHeaders, this.Deadline, ct)
-      return PSBT.Parse(resp.FundedPsbt.ToByteArray() |> hex.EncodeData, network)
+        let req = SendCoinsRequest()
+        req.Addr <- dest.ToString()
+        req.Amount <- amt.Satoshi
+        req.TargetConf <- targetConf.Value |> int
+        client.SendCoinsAsync(req, this.DefaultHeaders, this.Deadline, ct)
+      return resp.Txid |> uint256.Parse
     }
-
-  member this.FundPSBT(destinationToAmount: seq<BitcoinAddress * Money>, target: BlockHeightOffset32, network: Network, ct) =
-    task {
-      let! resp =
-        let req = Walletrpc.FundPsbtRequest()
-        let d =
-          destinationToAmount
-          |> Seq.map(fun (addr, amount) -> (addr.ToString(), amount.Satoshi |> uint64))
-          |> dict
-        req.Raw.Outputs.Add(d)
-        req.TargetConf <- target.Value
-        walletClient.FundPsbtAsync(req, this.DefaultHeaders, this.Deadline, ct)
-      return PSBT.Parse(resp.FundedPsbt.ToByteArray() |> hex.EncodeData, network)
-    }
-
-  member this.ListUnspent(minConf: BlockHeightOffset32, n: Network, ct: CancellationToken) =
-    task {
-      let! utxo =
-        let req = Walletrpc.ListUnspentRequest()
-        req.MinConfs <- minConf.Value |> int
-        req.MaxConfs <- Int32.MaxValue
-        walletClient.ListUnspentAsync(req, this.DefaultHeaders, this.Deadline, ct)
-      return
-        utxo.Utxos
-        |> Seq.map(fun u ->
-          {
-            WalletUtxo.Amount = u.AmountSat |> Money.Satoshis
-            Address = BitcoinAddress.Create(u.Address, n)
-            PrevOut =
-              OutPoint(uint256.Parse u.Outpoint.TxidStr, u.Outpoint.OutputIndex)
-            MaybeRedeem = None
-          }
-        )
-    }
-
   member this.GetDepositAddress(network, ct) =
     task {
       let! resp =
@@ -648,12 +611,9 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       let ct = defaultArg ct CancellationToken.None
       this.GetDepositAddress(network, ct)
 
-    member this.ListUnspent (minConf, network, ct) =
+    member this.FundToAddress(dest: BitcoinAddress, amt: Money, targetConf, ?ct) =
       let ct = defaultArg ct CancellationToken.None
-      this.ListUnspent(minConf, network, ct)
-    member this.SignSwapTxPSBT(psbt, ct) =
-      let ct = defaultArg ct CancellationToken.None
-      this.FundPSBT(psbt, ct)
+      this.SendCoins(dest, amt, targetConf, ct)
 
   interface INLoopLightningClient with
     member this.ConnectPeer(nodeId, host, ct) = this.ConnectPeer(nodeId, host, ct)

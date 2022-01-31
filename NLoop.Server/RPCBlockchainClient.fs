@@ -1,12 +1,15 @@
 namespace NLoop.Server
 
 open System
+open System.Collections.Generic
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
 open LndClient
+open NBitcoin
 open NBitcoin.RPC
 open NBitcoin.RPC
+open NLoop.Domain.IO
 
 
 type RPCBlockchainClient(rpc: RPCClient) =
@@ -46,20 +49,20 @@ type RPCBlockchainClient(rpc: RPCClient) =
 
 type BitcoindWalletClient(rpc: RPCClient) =
   interface IWalletClient with
-    member this.ListUnspent(minConf, _n, _ct) =
-      task {
-        let! resp =
-          rpc.ListUnspentAsync()
-        return
-          resp
-          |> Seq.filter(fun r -> r.Confirmations >= minConf.Value)
-          |> Seq.map(WalletUtxo.FromRPCDto)
-      }
-    member this.SignSwapTxPSBT(psbt, _ct) = task {
-      let! resp = rpc.WalletProcessPSBTAsync(psbt, sign=true)
-      return resp.PSBT
-    }
     member this.GetDepositAddress(_n, _ct) =
       let req = GetNewAddressRequest()
       req.AddressType <- Nullable(AddressType.P2SHSegwit)
       rpc.GetNewAddressAsync(req)
+
+    member this.FundToAddress(dest, amount, confTarget, _ct) =
+      task {
+        let p = Dictionary<string, obj>()
+        p.Add("address", dest.ToString());
+        p.Add("amount", amount)
+        p.Add("comment", "nloop:FundToAddress")
+        p.Add("conf_target", confTarget.Value |> int)
+        let! resp = rpc.SendCommandWithNamedArgsAsync(RPCOperations.sendtoaddress.ToString(), p).ConfigureAwait false
+        return uint256.Parse(resp.Result.ToString())
+      }
+
+

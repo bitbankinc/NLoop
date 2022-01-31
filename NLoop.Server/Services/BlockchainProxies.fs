@@ -40,27 +40,3 @@ type RPCFeeEstimator(getClient: GetBlockchainClient, logger: ILogger<RPCFeeEstim
           |> FeeRate
     }
 
-type BitcoinUTXOProvider(getWalletClient: GetWalletClient, opts: IOptions<NLoopOptions>) =
-
-  interface IUTXOProvider with
-    member this.GetUTXOs(amount, cryptoCode) = task {
-      let cli = getWalletClient(cryptoCode)
-      let network = opts.Value.GetNetwork(cryptoCode)
-      let cOpts = opts.Value.ChainOptions.[cryptoCode]
-      let minConf = cOpts.WalletMinConf |> uint32 |> BlockHeightOffset32
-      let! us = cli.ListUnspent(minConf, network, CancellationToken.None)
-      let whatWeHave = us |> Seq.sumBy(fun u -> u.Amount)
-      if whatWeHave < amount then
-        return
-          (cryptoCode, whatWeHave, amount)
-          |> UTXOProviderError.InsufficientFunds
-          |> Error
-      else
-        return
-          us |> Seq.map(fun u -> u.AsCoin()) |> Ok
-    }
-
-    member this.SignSwapTxPSBT(psbt, cryptoCode) =
-      let cli = getWalletClient(cryptoCode)
-      cli.SignSwapTxPSBT(psbt)
-

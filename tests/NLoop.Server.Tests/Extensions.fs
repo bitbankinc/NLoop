@@ -20,6 +20,8 @@ open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Hosting
+open Microsoft.Extensions.Logging
+open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.RPC
@@ -265,7 +267,7 @@ type ExternalClients = {
       BoltzClient(httpClient)
     {
       ExternalClients.Bitcoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{bitcoinPort}"), Network.RegTest)
-      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Network.RegTest)
+      Litecoin = RPCClient("johndoe:unsafepassword", Uri($"http://localhost:{litecoinPort}"), Litecoin.Instance.Regtest)
       User = {| BitcoinLnd = getUserLndClient() |}
       Server = {| BitcoinLnd = getServerBTCLndClient(); LitecoinLnd = getServerLTCLndClient(); Boltz = serverBoltz |}
     }
@@ -276,8 +278,9 @@ type Clients = {
   NLoopServer: TestServer
 }
   with
-  static member Create() =
+  static member Create(?logServer: bool) =
     let externalClients = ExternalClients.GetExternalServiceClients()
+    let logServer = defaultArg logServer false
     let testHost =
       WebHostBuilder()
         .UseContentRoot(dataPath)
@@ -315,6 +318,8 @@ type Clients = {
             .AddSingleton<BindingContext>(BindingContext(cliOpts))
             .AddSingleton<BoltzClient>(externalClients.Server.Boltz)
           |> ignore
+          if logServer then () else
+            s.AddSingleton<ILoggerFactory, NullLoggerFactory>() |> ignore
         )
         |> fun b -> new TestServer(b)
     let userNLoop =

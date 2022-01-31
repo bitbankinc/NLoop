@@ -30,13 +30,12 @@ open System.Reactive.Linq
 
 [<AutoOpen>]
 module internal SwapActorHelpers =
-  let getSwapDeps b f u g payInvoice offer =
+  let getSwapDeps b f g payInvoice payToAddress offer =
     { Swap.Deps.Broadcaster = b
       Swap.Deps.FeeEstimator = f
-      Swap.Deps.UTXOProvider = u
-      Swap.Deps.GetChangeAddress = g
       Swap.Deps.GetRefundAddress = g
       Swap.Deps.PayInvoiceImmediate = payInvoice
+      Swap.Deps.PayToAddress = payToAddress
       Swap.Deps.Offer = offer
       }
 
@@ -64,14 +63,14 @@ module Observable =
       |> Observable.first
       |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable |> Async.StartAsTask
 
-type SwapActor(
+type SwapActor(opts: IOptions<NLoopOptions>,
                lightningClientProvider: ILightningClientProvider,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
-               utxoProvider: IUTXOProvider,
-               getChangeAddress: GetAddress,
                eventAggregator: IEventAggregator,
                getAllSwapEvents: GetAllEvents<Swap.Event>,
+               getRefundAddress: GetAddress,
+               getWalletClient: GetWalletClient,
                store: Store,
                logger: ILogger<SwapActor>) =
   let aggr =
@@ -92,6 +91,13 @@ type SwapActor(
             }
           | Error e -> return raise <| exn $"Failed payment {e}"
         }
+    let fundFromWallet =
+      fun (req: WalletFundingRequest) -> task {
+        let cli = getWalletClient(req.CryptoCode)
+        let! txid = cli.FundToAddress(req.DestAddress, req.Amount, req.TargetConf)
+        let blockchainCli = opts.Value.GetBlockChainClient(req.CryptoCode)
+        return! blockchainCli.GetRawTransaction(TxId txid)
+      }
     let offer =
       fun (cc: SupportedCryptoCode) (param: Swap.PayInvoiceParams) (i: PaymentRequest) ->
         let req = {
@@ -101,8 +107,7 @@ type SwapActor(
           TimeoutSeconds = Constants.OfferTimeoutSeconds
         }
         lightningClientProvider.GetClient(cc).Offer(req)
-
-    getSwapDeps broadcaster feeEstimator utxoProvider getChangeAddress payInvoiceImmediate offer
+    getSwapDeps broadcaster feeEstimator getRefundAddress payInvoiceImmediate fundFromWallet offer
     |> Swap.getAggregate
   let mutable handler =
     Swap.getHandler aggr store

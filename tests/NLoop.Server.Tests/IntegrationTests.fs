@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System.Threading
+open System.Threading.Tasks
 open BoltzClient
 open DotNetLightning.Utils
 open LndClient
@@ -72,14 +73,15 @@ type IntegrationTests() =
           for state in invoiceSubscription do
             match state.InvoiceState with
             | IncomingInvoiceStateUnion.Settled ->
-              return ()
+              return true
             | state ->
                 printfn $"state: {state}"
                 let! _ = cli.Litecoin.GenerateToAddressAsync(3, litecoinAddr) |> Async.AwaitTask
                 ()
         }
-        |> AsyncSeq.tryFirst
-      Assertion.isSome(isInvoiceSettled)
+        |> AsyncSeq.toArrayAsync
+        |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, cts.Token)
+      isInvoiceSettled |> Assert.Single |> Assert.True
     }
 
   [<Fact>]
@@ -131,23 +133,11 @@ type IntegrationTests() =
       use cts = new CancellationTokenSource()
       cts.CancelAfter(5000)
       do! cli.AssureWalletIsReady(cts.Token)
-      let! unspent = cli.User.BitcoinLnd.ListUnspent(BlockHeightOffset32.One, Network.RegTest, cts.Token)
-      Assert.NotEmpty(unspent)
-
-      let coins = unspent |> Seq.map(fun u -> u.AsCoin())
-      let outputAmount = Money.Satoshis 100000L
-      let! change = cli.User.BitcoinLnd.GetDepositAddress(Network.RegTest, cts.Token)
-      let psbt =
-        Transactions.createSwapPSBT
-          coins
-          swapRedeem
-          outputAmount
-          (NLoop.Server.Constants.FallbackFeeSatsPerByte |> decimal |> FeeRate)
-          change
-          Network.RegTest
-        |> function | Ok psbt -> psbt | Error e -> failwith e
-      let! psbt = cli.User.BitcoinLnd.FundPSBT(psbt, cts.Token)
-      Assert.True(psbt.IsAllFinalized())
+      let dest = pubkey1.WitHash.GetAddress(Network.RegTest)
+      let amt = Money.Satoshis(100000L)
+      let! txid = cli.User.BitcoinLnd.SendCoins(dest, amt, BlockHeightOffset32(6u), cts.Token)
+      let _tx = cli.Bitcoin.GetRawTransactionAsync(txid)
+      ()
     }
 
   [<Fact>]

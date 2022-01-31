@@ -80,13 +80,13 @@ module Transactions =
     psbt.AddScripts(redeemScript)
     |> Ok
 
-  let dummySwapTx (feeRate) =
-    let coinBase = Network.RegTest.CreateTransaction()
+  let private coinBase = Network.RegTest.CreateTransaction()
+  let private dummyCoin =
     coinBase.Outputs
       .Add(TxOut(Money.Coins(1.1m), Scripts.pubkey1)) |> ignore
-    let dummyCoin =
-      coinBase.Outputs.AsCoins()
-      |> Seq.cast<ICoin>
+    coinBase.Outputs.AsCoins()
+    |> Seq.cast<ICoin>
+  let dummySwapTx (feeRate) =
     let dummyChange = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
     createSwapPSBT
       dummyCoin
@@ -103,6 +103,10 @@ module Transactions =
         .ExtractTransaction()
       )
     |> Result.valueOr(failwith)
+
+  let dummySwapTxFee feeRate =
+    let swapTx = dummySwapTx feeRate
+    swapTx.GetFee(dummyCoin |> Seq.toArray)
 
   let createRefundTx
     (lockupTxHex: string)

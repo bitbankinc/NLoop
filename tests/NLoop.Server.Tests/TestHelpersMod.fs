@@ -182,15 +182,13 @@ type DummyBlockChainClientParameters = {
   }
 
 type DummyWalletClientParameters = {
-  ListUnspent: unit -> UnspentCoin[]
-  SignSwapTxPSBT: PSBT -> PSBT
+  FundToAddress: BitcoinAddress * Money * BlockHeightOffset32 -> Task<uint256>
   GetDepositAddress: unit -> BitcoinAddress
 }
   with
   static member Default =
     {
-      ListUnspent = fun () -> failwith "todo"
-      SignSwapTxPSBT = fun _ -> failwith "todo"
+      FundToAddress = fun (_,_,_) -> failwith "todo"
       GetDepositAddress = fun () -> TestHelpersMod.walletAddress
     }
 
@@ -330,12 +328,9 @@ type TestHelpers =
     let p = defaultArg parameters DummyWalletClientParameters.Default
     {
       new IWalletClient with
-        member this.ListUnspent(_minConf, _, _ct) =
-          p.ListUnspent()
-          |> Seq.filter(fun u -> u.Confirmations >= _minConf.Value)
-          |> Seq.map(WalletUtxo.FromRPCDto) |> Task.FromResult
-        member this.SignSwapTxPSBT(psbt, _ct) =
-          p.SignSwapTxPSBT psbt |> Task.FromResult
+        member this.FundToAddress(_, _, _,  _) =
+          failwith "todo"
+
         member this.GetDepositAddress(_network, _ct) =
           p.GetDepositAddress() |> Task.FromResult
     }

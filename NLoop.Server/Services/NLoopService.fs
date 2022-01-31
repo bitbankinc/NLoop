@@ -171,7 +171,6 @@ type NLoopExtensions() =
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
-        .AddSingleton<IUTXOProvider, BitcoinUTXOProvider>()
         .AddSingleton<GetAddress>(Func<IServiceProvider, GetAddress>(fun sp ->
           let opts = sp.GetService<IOptions<NLoopOptions>>()
           GetAddress(fun cc ->
