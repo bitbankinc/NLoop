@@ -829,6 +829,9 @@ module Swap =
                 return []
             }
           return events @ (e |> enhance)
+        | NewBlock _, HasNotStarted ->
+          // ignore if the new block has come before we start anything
+          return []
         | NewBlock _, Out _
         | NewBlock _, In _ ->
           // ignore if it is the cryptocode that we are not interested in.
