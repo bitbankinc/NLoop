@@ -152,7 +152,9 @@ type NLoopExtensions() =
         .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
         |> ignore
       this
-        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp -> sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient))
+        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp ->
+          sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient
+        ))
         .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp cc ->
           let opts = sp.GetService<IOptions<NLoopOptions>>()
           if opts.Value.OffChainCrypto |> Array.contains cc then
