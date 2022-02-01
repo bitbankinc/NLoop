@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System.Collections.Concurrent
+open System.Threading
 open System.Threading.Tasks
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
@@ -43,7 +44,10 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
   interface IHostedService with
     member this.StartAsync(ct) = unitTask {
       logger.LogInformation $"Starting blockchain listeners ..."
-      do! swapState.FinishCatchup
+      use cts = CancellationTokenSource.CreateLinkedTokenSource(ct)
+      cts.CancelAfter(9000)
+      let! _ = Task.WhenAny(swapState.FinishCatchup, Task.Delay(10000, cts.Token))
+      cts.Token.ThrowIfCancellationRequested()
 
       let roundTrip cc = unitTask {
         let cOpts = opts.Value.ChainOptions.[cc]

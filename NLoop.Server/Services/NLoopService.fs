@@ -4,6 +4,7 @@ open System
 open System.CommandLine
 open System.CommandLine.Binding
 open System.CommandLine.Hosting
+open System.Threading
 open System.Threading.Tasks
 open ExchangeSharp
 open FSharp.Control.Tasks
@@ -68,9 +69,23 @@ type NLoopExtensions() =
       this
         .AddSingleton<IEventStoreConnection>(fun sp ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+          let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
           let connSettings =
             ConnectionSettings.Create().DisableTls().Build()
           let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
+          conn.AuthenticationFailed.Add(fun args ->
+            logger.LogError $"connection to eventstore failed "
+            failwith $"reason: {args.Reason}"
+          )
+          conn.ErrorOccurred.Add(fun args ->
+            logger.LogError $"error in eventstore connection: {args.Exception}"
+          )
+          conn.Disconnected.Add(fun args ->
+            logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
+          )
+          conn.Reconnecting.Add(fun _args ->
+            logger.LogInformation $"Reconnecting to event store... {_args.ToStringInvariant()}"
+          )
           do conn.ConnectAsync().GetAwaiter().GetResult()
           conn
         )
