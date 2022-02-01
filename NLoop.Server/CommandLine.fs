@@ -198,14 +198,16 @@ module NLoopServerCommandLine =
       o
 
       let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OnChainCrypto).ToLowerInvariant()}",
-                                            $"the cryptocode we want to support for on-chain swap (default: %A{NLoopOptions.Instance.OnChainCrypto})")
+                                            $"the cryptocode we want to support for on-chain swap (default: %A{NLoopOptions.Instance.OnChainCrypto}). " +
+                                            "You can specify this option more than once")
       o.Argument <-
         let a = Argument<SupportedCryptoCode[]>()
         a.Arity <- ArgumentArity.ZeroOrMore
         a
       o
       let o = Option<SupportedCryptoCode[]>($"--{nameof(NLoopOptions.Instance.OffChainCrypto).ToLowerInvariant()}",
-                                            $"the cryptocode we want to support for off-chain swap (default: %A{NLoopOptions.Instance.OffChainCrypto})")
+                                            $"the cryptocode we want to support for off-chain swap (default: %A{NLoopOptions.Instance.OffChainCrypto}). " +
+                                            "You can specify this option more than once")
       o.Argument <-
         let a = Argument<SupportedCryptoCode[]>()
         a.Arity <- ArgumentArity.ZeroOrMore
