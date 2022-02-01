@@ -14,7 +14,7 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 * Complete immutable audit log with event-sourcing. Which enables you to easily audit how much you have paied as fee during swaps.
 * Minimum trust against the server. It validates every information we get from the server.
 * Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
-
+* As an real-world example of F#/ASP.NET/DDD/EventSourcing
 
 ## How to
 
