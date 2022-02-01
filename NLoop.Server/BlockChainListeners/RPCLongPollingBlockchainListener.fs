@@ -6,7 +6,6 @@ open System.Threading
 open System.Threading.Tasks
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Hosting
-open Microsoft.Extensions.Options
 open Microsoft.Extensions.Logging
 open NBitcoin.RPC
 open NLoop.Domain

@@ -22,6 +22,7 @@ RUN dotnet tool restore
 COPY ["BoltzClient/BoltzClient.fsproj", "BoltzClient/"]
 COPY ["LndGrpcClient/LndGrpcClient.csproj", "LndGrpcClient/"]
 COPY ["LndClient/LndClient.fsproj", "LndClient/"]
+COPY ["LightningLoopClient/LightningLoopClient.csproj", "LightningLoopClient/"]
 COPY ["NLoop.OpenAPIClient/NLoop.OpenAPIClient.csproj", "NLoop.OpenAPIClient/"]
 COPY ["NLoop.Domain/NLoop.Domain.fsproj", "NLoop.Domain/"]
 COPY ["NLoop.Server/NLoop.Server.fsproj", "NLoop.Server/"]

@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LndGrpcClient", "LndGrpcCli
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BoltzClient", "BoltzClient\BoltzClient.fsproj", "{FB6FD234-3842-4740-84FF-919599598E9B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LightningLoopClient", "LightningLoopClient\LightningLoopClient.csproj", "{F845DBB2-DE59-4AAC-9B59-15189716F462}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,6 +77,10 @@ Global
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F845DBB2-DE59-4AAC-9B59-15189716F462}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F845DBB2-DE59-4AAC-9B59-15189716F462}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F845DBB2-DE59-4AAC-9B59-15189716F462}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F845DBB2-DE59-4AAC-9B59-15189716F462}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{345E44E3-D14F-4741-BB17-8BADD58BC303} = {4CF4C444-22AD-4BBD-A6F1-38051BC11435}
