@@ -52,9 +52,10 @@ module SwapDTO =
         ()
       if isNull addr then Error($"Boltz returned invalid bitcoin address for lockup address ({this.LockupAddress}): error msg: {e.Message}") else
       let actualSpk = addr.ScriptPubKey
-      let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
-      if (actualSpk <> expectedSpk) then
-        Error $"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript}) does not match"
+      let expectedSpk_wsh = this.RedeemScript.WitHash.ScriptPubKey
+      let expectedSpk_shwsh = this.RedeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey
+      if (actualSpk <> expectedSpk_wsh && actualSpk <> expectedSpk_shwsh) then
+        Error $"lockupAddress {this.LockupAddress} and redeem script ({this.RedeemScript.ToHex()}) does not match"
       else if this.Invoice.PaymentHash <> PaymentHash(preimageHash) then
         Error "Payment Hash in invoice does not match preimage hash we specified in request"
       else
@@ -122,9 +123,10 @@ module SwapDTO =
         ()
       if isNull addr then Error $"Boltz returned invalid bitcoin address ({this.Address}): error msg: {e.Message}" else
       let actualSpk = addr.ScriptPubKey
-      let expectedSpk = this.RedeemScript.WitHash.ScriptPubKey
-      if (actualSpk <> expectedSpk) then
-        Error $"Address {this.Address} and redeem script ({this.RedeemScript}) does not match"
+      let expectedSpk_wsh = this.RedeemScript.WitHash.ScriptPubKey
+      let expectedSpk_shwsh = this.RedeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey
+      if (actualSpk <> expectedSpk_wsh && actualSpk <> expectedSpk_shwsh) then
+        Error $"Address {this.Address} and redeem script ({this.RedeemScript.ToHex()}) does not match"
       else
         let swapServiceFee =
           (decimal ourInvoiceAmount.Satoshi) - (decimal this.ExpectedAmount.Satoshi / rate)
