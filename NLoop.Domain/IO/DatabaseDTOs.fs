@@ -65,6 +65,7 @@ type LoopOut = {
   RedeemScript: Script
   Invoice: string
   ClaimAddress: string
+
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   OnChainAmount: Money
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
@@ -100,6 +101,12 @@ type LoopOut = {
   member this.QuoteAssetNetwork =
     let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.PossibleLockupAddress =
+    seq [
+      this.RedeemScript.WitHash.GetAddress(this.BaseAssetNetwork)
+      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.BaseAssetNetwork)
+    ]
 
   member this.AcceptZeroConf =
     this.SwapTxConfRequirement = BlockHeightOffset32.Zero

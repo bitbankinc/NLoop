@@ -599,7 +599,7 @@ module Swap =
             { TheirSwapTxPublishedData.TxHex = swapTxHex }
             |> TheirSwapTxPublished
 
-          if loopOut.AcceptZeroConf then
+          if loopOut.AcceptZeroConf && loopOut.ClaimTransactionId.IsNone then
             let tx = Transaction.Parse(swapTxHex, loopOut.QuoteAssetNetwork)
             match! sweepOrBump deps height tx loopOut with
             | Some claimTxId ->
@@ -662,8 +662,21 @@ module Swap =
             // To make it reorg-safe, we must track the confirmation of swap tx.
             let maybeSwapTxConfirmedEvent =
               let maybeSwapTx =
-                loopOut.SwapTx
-                |> Option.bind(fun swapTx -> block.Transactions |> Seq.tryFind(fun t -> t.GetHash() = swapTx.GetHash()))
+                match loopOut.SwapTx with
+                | Some swapTx ->
+                  let isTxIdMatch = fun (t: Transaction) -> t.GetHash() = swapTx.GetHash()
+                  block.Transactions |> Seq.tryFind isTxIdMatch
+                | None ->
+                  let isAddressMatch =
+                    let addresses = loopOut.PossibleLockupAddress
+                    fun (t: Transaction) ->
+                      t.Outputs
+                      |> Seq.exists(fun o ->
+                        let addr = o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork)
+                        addresses|> Seq.contains addr
+                      )
+                  block.Transactions |> Seq.tryFind isAddressMatch
+
               match maybeSwapTx with
               | Some _ when loopOut.SwapTxHeight.IsNone ->
                 [TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash() })] |> enhance
