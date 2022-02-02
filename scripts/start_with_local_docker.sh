@@ -25,7 +25,7 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --lndmacaroonfilepath ${admin_macaroon} \
   --lndcertthumbprint ${certthumbprint} \
   --eventstoreurl tcp://admin:changeit@localhost:1113 \
-  --boltzhost https://localhost \
+  --boltzhost http://localhost \
   --boltzport 6028 \
   --exchanges BitBank \
   --exchanges BitMEX \
