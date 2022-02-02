@@ -8,6 +8,11 @@ open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Altcoins
 
+[<Struct>]
+type SwapAddressType =
+  | P2SH_P2WSH = 0uy
+  | P2WSH = 1uy
+
 type PeerConnectionString = {
   NodeId: PubKey
   EndPoint: EndPoint

@@ -631,13 +631,13 @@ module Swap =
                   let req = {
                     WalletFundingRequest.Amount = loopIn.ExpectedAmount
                     CryptoCode = quoteAsset
-                    DestAddress = loopIn.RedeemScript.WitHash.GetAddress(loopIn.QuoteAssetNetwork)
+                    DestAddress = loopIn.SwapAddress
                     TargetConf = loopIn.HTLCConfTarget
                   }
                   payToAddress(req)
                 let fee = feeRate.GetFee(tx)
                 let! index =
-                  tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
+                  tx.ValidateOurSwapTxOut(loopIn.AddressType, loopIn.RedeemScript, loopIn.ExpectedAmount)
                   |> expectBogusSwapTx
                 return [
                   OurSwapTxPublished { Fee = fee; TxHex = tx.ToHex(); HtlcOutIndex = index }
@@ -745,7 +745,7 @@ module Swap =
                   | Some tx ->
                     // 1. our swap tx is confirmed.
                     let! index =
-                      tx.ValidateOurSwapTxOut(loopIn.RedeemScript, loopIn.ExpectedAmount)
+                      tx.ValidateOurSwapTxOut(loopIn.AddressType, loopIn.RedeemScript, loopIn.ExpectedAmount)
                       |> expectBogusSwapTx
                     return
                       [

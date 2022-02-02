@@ -399,7 +399,7 @@ type SwapExecutor(
           | Error e ->
             do! swapActor.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)
-          | Ok () ->
+          | Ok addressType ->
             let group = {
               Swap.Group.Category = Swap.Category.In
               Swap.Group.PairId = pairId
@@ -412,7 +412,6 @@ type SwapExecutor(
               Preimage = None
               RedeemScript = inResponse.RedeemScript
               Invoice = invoice.ToString()
-              Address = inResponse.Address.ToString()
               ExpectedAmount = inResponse.ExpectedAmount
               TimeoutBlockHeight = inResponse.TimeoutBlockHeight
               SwapTxInfoHex = None
@@ -425,6 +424,7 @@ type SwapExecutor(
                 |> ValueOption.map(uint >> BlockHeightOffset32)
                 |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
               Cost = SwapCost.Zero
+              AddressType = addressType
               MaxMinerFee =
                 loopIn.Limits.MaxMinerFee
               MaxSwapFee =
@@ -444,7 +444,7 @@ type SwapExecutor(
                 (function | Swap.Event.NewLoopInAdded _ -> Some () | _ -> None)
             return {
               LoopInResponse.Id = loopIn.Id.Value
-              Address = loopIn.Address
+              Address = loopIn.SwapAddress.ToString()
             }
         with
         | :? HttpRequestException as ex ->

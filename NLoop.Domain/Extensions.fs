@@ -25,6 +25,7 @@ type PrimitiveExtensions() =
     let len = Utils.ToUInt32(this.[0..4], false) |> int32
     this.[4..(len + 4)], this.[(len + 4)..]
 
+open FsToolkit.ErrorHandling
 
 [<AbstractClass;Sealed;Extension>]
 type NBitcoinExtensions() =
@@ -48,19 +49,26 @@ type NBitcoinExtensions() =
     (unixRef <= dt) && ((dt - unixRef).TotalSeconds <= float UInt32.MaxValue)
 
   [<Extension>]
-  static member ValidateOurSwapTxOut(this: Transaction, redeemScript: Script, expectedAmount: Money): Result<_, string> =
-    let maybeTxo =
-      this.Outputs
-      |> Seq.tryFindIndex(fun txo ->
-        txo.ScriptPubKey = redeemScript.WitHash.ScriptPubKey ||
-        txo.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey)
-    match maybeTxo with
-    | None ->
-      Error "No HTLC Txo in swap tx output"
-    | Some index ->
-      let txo = this.Outputs.[index]
-      if txo.Value <> expectedAmount then
-        Error $"Tx Output Value is not the one expected (expected: {expectedAmount}) (actual: {txo.Value})"
-      else
-        Ok(index |> uint32)
+  static member ValidateOurSwapTxOut(this: Transaction, addressType: SwapAddressType, redeemScript: Script, expectedAmount: Money): Result<_, string> =
+    result {
+      let! expectedSpk =
+        if addressType = SwapAddressType.P2WSH then
+          Ok redeemScript.WitHash.ScriptPubKey
+        else if addressType = SwapAddressType.P2SH_P2WSH then
+          Ok redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey
+        else
+          Error $"Unknown Address type {addressType}"
 
+      let maybeTxo =
+        this.Outputs
+        |> Seq.tryFindIndex(fun txo -> txo.ScriptPubKey = expectedSpk)
+      match maybeTxo with
+      | None ->
+        return! Error $"No HTLC Txo in swap tx output. tx: {this.ToHex()}. redeemScript: {redeemScript.ToHex()}. expected address type: {addressType}"
+      | Some index ->
+        let txo = this.Outputs.[index]
+        if txo.Value <> expectedAmount then
+          return! Error $"Tx Output Value is not the one expected (expected: {expectedAmount}) (actual: {txo.Value})"
+        else
+          return index |> uint32
+    }

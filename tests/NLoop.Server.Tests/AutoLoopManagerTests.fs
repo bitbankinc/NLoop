@@ -243,7 +243,7 @@ type AutoLoopManagerTests() =
     LoopInResponse.Id = "resp1"
     Address = "resp1-address"
   }
-  let ongoingLoopOutFromRequest(req: LoopOutRequest, initTime: DateTimeOffset) =
+  let ongoingLoopOutFromRequest(req: LoopOutRequest) =
     {
       LoopOut.OnChainAmount = req.Amount
       Id = SwapId swapId
@@ -273,14 +273,13 @@ type AutoLoopManagerTests() =
       Cost = SwapCost.Zero
     }
 
-  let ongoingLoopInFromRequest(req: LoopInRequest, initTime: DateTimeOffset) =
+  let ongoingLoopInFromRequest(req: LoopInRequest) =
     {
       LoopIn.Id = SwapId swapId
       RefundPrivateKey = refundKey
       Preimage = None
       RedeemScript = swapRedeem
       Invoice = invoice.ToString()
-      Address = TestHelpersMod.lndAddress.ToString()
       ExpectedAmount = req.Amount
       TimeoutBlockHeight = BlockHeight(32u)
       HTLCConfTarget =
@@ -297,6 +296,7 @@ type AutoLoopManagerTests() =
       LastHop = req.LastHop
       IsOffChainPaymentReceived = false
       IsOurSuccessTxConfirmed = false
+      AddressType = SwapAddressType.P2WSH
       Cost = SwapCost.Zero
     }
 
@@ -437,8 +437,8 @@ type AutoLoopManagerTests() =
         with
           OngoingOut =
             [
-              ongoingLoopOutFromRequest(chan1Swap, testTime)
-              ongoingLoopOutFromRequest(chan2Swap, testTime)
+              ongoingLoopOutFromRequest chan1Swap
+              ongoingLoopOutFromRequest chan2Swap
             ]
     }
     do! ctx.RunStep(step)
@@ -677,7 +677,7 @@ type AutoLoopManagerTests() =
       AutoLoopStep.Create(min = 1L, max = peer2ExpectedAmount.Satoshi + 1L)
         with
         QuotesIn = [(quoteRequest2, quote2Affordable)]
-        OngoingIn = [ongoingLoopInFromRequest(peer1Swap, testTime)]
+        OngoingIn = [ongoingLoopInFromRequest peer1Swap]
         ExpectedIn = [(peer2Swap, dummyInResp)]
     }
     do! ctx.RunStep(step)
