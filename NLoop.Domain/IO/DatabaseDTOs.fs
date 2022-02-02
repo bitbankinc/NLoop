@@ -131,9 +131,10 @@ type LoopIn = {
   [<JsonConverter(typeof<ScriptJsonConverter>)>]
   RedeemScript: Script
   Invoice: string
-  Address: string
+
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
   ExpectedAmount: Money
+
   [<JsonConverter(typeof<BlockHeightJsonConverter>)>]
   TimeoutBlockHeight: BlockHeight
 
@@ -159,6 +160,8 @@ type LoopIn = {
   IsOffChainPaymentReceived: bool
   IsOurSuccessTxConfirmed: bool
 
+  AddressType: SwapAddressType
+
   Cost: SwapCost
 }
   with
@@ -168,6 +171,14 @@ type LoopIn = {
   member this.QuoteAssetNetwork =
     let struct (_, cryptoCode) = this.PairId.Value
     cryptoCode.ToNetworkSet().GetNetwork(this.ChainName |> ChainName)
+
+  member this.SwapAddress =
+    match this.AddressType with
+    | SwapAddressType.P2WSH ->
+      this.RedeemScript.WitHash.GetAddress(this.QuoteAssetNetwork)
+    | SwapAddressType.P2SH_P2WSH ->
+      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.QuoteAssetNetwork)
+    | x -> failwith $"Unreachable! Unknown address type: {x}"
 
   member this.PaymentRequest =
     PaymentRequest.Parse(this.Invoice)

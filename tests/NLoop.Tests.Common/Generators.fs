@@ -214,7 +214,7 @@ type DomainTypeGenerator =
   static member UnixDateTime(): Arbitrary<UnixDateTime> =
       Arb.generate<uint64>
       |> Gen.map UnixDateTime.Create
-      |> Gen.filter(function | Ok s -> true | Error _ -> false)
+      |> Gen.filter(function | Ok _ -> true | Error _ -> false)
       |> Gen.map(function Ok s -> s  | Error _ -> failwith "Unreachable")
       |> Arb.fromGen
 

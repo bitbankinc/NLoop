@@ -125,19 +125,28 @@ module SwapDTO =
       let actualSpk = addr.ScriptPubKey
       let expectedSpk_wsh = this.RedeemScript.WitHash.ScriptPubKey
       let expectedSpk_shwsh = this.RedeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey
-      if (actualSpk <> expectedSpk_wsh && actualSpk <> expectedSpk_shwsh) then
-        Error $"Address {this.Address} and redeem script ({this.RedeemScript.ToHex()}) does not match"
-      else
-        let swapServiceFee =
-          (decimal ourInvoiceAmount.Satoshi) - (decimal this.ExpectedAmount.Satoshi / rate)
-          |> Money.Satoshis
-        if maxSwapServiceFee < swapServiceFee then
-          let msg =
-            $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable fee ({maxSwapServiceFee.Satoshi} sats)\n" +
-            "You may want to specify higher max swap fee in your request."
-          Error msg
+      let maybeAddressType =
+        if (actualSpk = expectedSpk_wsh) then
+          Some SwapAddressType.P2WSH
+        else if (actualSpk = expectedSpk_shwsh) then
+          Some SwapAddressType.P2SH_P2WSH
         else
-          (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
+          None
+      match maybeAddressType with
+      | None ->
+        Error $"Address {this.Address} and redeem script ({this.RedeemScript.ToHex()}) does not match"
+      | Some addressType ->
+          let swapServiceFee =
+            (decimal ourInvoiceAmount.Satoshi) - (decimal this.ExpectedAmount.Satoshi / rate)
+            |> Money.Satoshis
+          if maxSwapServiceFee < swapServiceFee then
+            let msg =
+              $"What swap service claimed as their fee ({swapServiceFee.Satoshi} sats) is larger than our max acceptable fee ({maxSwapServiceFee.Satoshi} sats)\n" +
+              "You may want to specify higher max swap fee in your request."
+            Error msg
+          else
+            (this.RedeemScript |> Scripts.validateSwapScript preimageHash refundPubKey this.TimeoutBlockHeight)
+            |> Result.map(fun () -> addressType)
 
   type GetNodesResponse = {
     Nodes: Map<string, NodeInfo>
