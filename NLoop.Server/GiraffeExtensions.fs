@@ -50,7 +50,7 @@ module CustomHandlers =
         let rpcClient = getClient(cc)
         let! info = rpcClient.GetBlockChainInfo()
         ctx.SetBlockHeight(cc, info.Height.Value |> uint64)
-        if info.Progress < 0.99999.f then
+        if info.Progress < 0.99999f then
           errorMsg <- $"{cc} blockchain is not synced. VerificationProgress: %f{info.Progress}. Please wait until its done."
         else
           ()
