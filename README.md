@@ -25,7 +25,7 @@ We have a two binaries for you to work with.
 * `nloop-cli` ... command line tool to work with `nloopd` (TBD)
 
 Download the latest binary from [the release page](https://github.com/joemphilips/NLoop/releases)
-and run with `--help` to see the possible configuration option
+and run with `--help` to see the possible configuration option.
 
 `nloopd` must connect to following services to work correctly.
 
@@ -60,6 +60,15 @@ Check out our [`openapi.yml`](./openapi.yml) (or [its rendered version](https://
 There is a one endpoint which is not included in the spec.
 That is a WebSocket endpoint for listening to events.
 * `/v1/events`
+
+## configuration options
+
+You can see the complete list of startup configuration options with `--help`
+But CLI option is not the only way to specify those variables.
+You can also use environment variables start from `NLOOP_`.
+
+e.g. for cli options `--eventstoreurl`, `NLOOP_EVENTSTOREURL` is equivalent.
+
 
 ## Future plans
 
