@@ -2,6 +2,7 @@ namespace NLoop.Domain
 
 open System
 open System.Text.Json
+open System.Text.Json.Serialization
 open System.Threading.Tasks
 open System.Threading.Tasks
 open DotNetLightning.Utils
@@ -190,7 +191,7 @@ module Swap =
 
   type TheirSwapTxConfirmedFirstTimeData = {
     BlockHash: uint256
-    TxHex: string
+    TxHex: string option
     Height: BlockHeight
   }
 
@@ -260,8 +261,8 @@ module Swap =
   /// will ignore the unknown field in the record when deserializing. and if the union case is unknown,
   /// it will deserialize it as `UnknownTagEvent` and do not use for state-reconstruction.
   /// So the rule of thumb is
-  /// 0. Union must always hold record types as its data.
-  /// 1. You can add member to the field freely.
+  /// 0. The union must always hold record types as its data.
+  /// 1. You can add member to the field freely, as long as it has a property `option` or `ValueOption`
   /// 2. You cannot remove (or alter) the member from the field, you must create another union-case and treat it as a
   ///    new type of an event in that case.
   /// 3. If you add a new union-case, define the unique (and previously unused) two-bytes tag for it and add it to
@@ -683,7 +684,7 @@ module Swap =
 
               maybeSwapTx
               |> Option.map(fun tx ->
-                TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash(); TxHex = tx.ToHex() })
+                TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash(); TxHex = tx.ToHex() |> Some })
               )
               |> Option.toList
               |> enhance
@@ -908,7 +909,11 @@ module Swap =
     | TheirSwapTxPublished { TxHex = tx }, Out(h, x) ->
       Out (h, { x with SwapTxHex = Some tx })
     | TheirSwapTxConfirmedFirstTime item, Out(h, x) ->
-      Out(h, { x with SwapTxHeight = Some item.Height; SwapTxHex = item.TxHex |> Some })
+      let swapTxHex =
+        match item.TxHex with
+        | Some x -> Some x
+        | None -> x.SwapTxHex
+      Out(h, { x with SwapTxHeight = Some item.Height; SwapTxHex = swapTxHex })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
                  Cost = updateCost x.Cost })
