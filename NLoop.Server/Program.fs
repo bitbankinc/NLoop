@@ -166,8 +166,7 @@ type Startup(_conf: IConfiguration, env: IHostEnvironment) =
 module Main =
 
   let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
-      builder
-        .AddConsole() |> ignore
+      builder.AddConsole() |> ignore
 
       let isProduction = ctx.HostingEnvironment.IsProduction()
       if isProduction |> not then
@@ -183,11 +182,7 @@ module Main =
       builder
         .AddFile(filePath, configureFileLogging)
         .AddConfiguration(ctx.Configuration.GetSection("Logging"))
-#if DEBUG
         .SetMinimumLevel(LogLevel.Debug)
-#else
-        .SetMinimumLevel(LogLevel.Information)
-#endif
         |> ignore
 
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
