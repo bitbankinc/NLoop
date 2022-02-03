@@ -190,6 +190,7 @@ module Swap =
 
   type TheirSwapTxConfirmedFirstTimeData = {
     BlockHash: uint256
+    TxHex: string
     Height: BlockHeight
   }
 
@@ -663,10 +664,10 @@ module Swap =
             let maybeSwapTxConfirmedEvent =
               let maybeSwapTx =
                 match loopOut.SwapTx with
-                | Some swapTx ->
+                | Some swapTx when loopOut.SwapTxHeight.IsNone ->
                   let isTxIdMatch = fun (t: Transaction) -> t.GetHash() = swapTx.GetHash()
                   block.Transactions |> Seq.tryFind isTxIdMatch
-                | None ->
+                | None when loopOut.SwapTxHeight.IsNone ->
                   let isAddressMatch =
                     let addresses = loopOut.PossibleLockupAddress
                     fun (t: Transaction) ->
@@ -676,10 +677,11 @@ module Swap =
                         addresses|> Seq.contains addr
                       )
                   block.Transactions |> Seq.tryFind isAddressMatch
+                | _ -> None
 
               match maybeSwapTx with
-              | Some _ when loopOut.SwapTxHeight.IsNone ->
-                [TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash() })] |> enhance
+              | Some tx when loopOut.SwapTxHeight.IsNone ->
+                [TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash(); TxHex = tx.ToHex() })] |> enhance
               | _ ->
                 []
 
@@ -903,7 +905,7 @@ module Swap =
     | TheirSwapTxPublished { TxHex = tx }, Out(h, x) ->
       Out (h, { x with SwapTxHex = Some tx })
     | TheirSwapTxConfirmedFirstTime item, Out(h, x) ->
-      Out(h, { x with SwapTxHeight = Some item.Height })
+      Out(h, { x with SwapTxHeight = Some item.Height; SwapTxHex = item.TxHex |> Some })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
                  Cost = updateCost x.Cost })

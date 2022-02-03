@@ -427,7 +427,7 @@ type SwapDomainTests() =
           (Swap.Command.NewBlock(b1, loopOut.PairId.Base))
         ]
         |> commandsToEvents
-      Assert.Contains(Swap.Event.TheirSwapTxConfirmedFirstTime({ BlockHash = b1.Block.Header.GetHash(); Height = b1.Height }),
+      Assert.Contains(Swap.Event.TheirSwapTxConfirmedFirstTime({ BlockHash = b1.Block.Header.GetHash(); Height = b1.Height; TxHex = swapTx.ToHex() }),
                       events |> Result.deref |> List.map(fun e -> e.Data))
       if loopOut.AcceptZeroConf then
         let lastEvent = events |> getLastEvent
