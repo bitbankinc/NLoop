@@ -35,29 +35,29 @@ module Transactions =
     (lockupTx: Transaction)
     (n: Network) =
     let createClaimTxFromTransactionBuilder(setFeeOp: TransactionBuilder -> TransactionBuilder) =
-        let txB = n.CreateTransactionBuilder()
-        let coins = lockupTx.Outputs.AsCoins()
-        let mutable sc = null
-        for c in coins do
-          if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
-            sc <- ScriptCoin(c, redeemScript)
-            txB.AddCoins(sc) |> ignore
-        if (sc |> isNull) then
-          let actualOutputs = lockupTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
-          Error(RedeemScriptMismatch(actualOutputs, redeemScript))
-        else
-          let tx =
-            setFeeOp(txB)
-              .SendAllRemaining(output)
-              .SetOptInRBF(true)
-              .BuildTransaction(false)
-          let signature = tx.SignInput(key, sc)
-          let witnessItems =
-            WitScript(Op.GetPushOp(signature.ToBytes())) +
-              WitScript(Op.GetPushOp(preimage.ToByteArray())) +
-              WitScript(Op.GetPushOp(redeemScript.ToBytes()))
-          tx.Inputs.[0].WitScript <- witnessItems
-          Ok tx
+      let txB = n.CreateTransactionBuilder()
+      let coins = lockupTx.Outputs.AsCoins()
+      let mutable sc = null
+      for c in coins do
+        if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
+          sc <- ScriptCoin(c, redeemScript)
+          txB.AddCoins(sc) |> ignore
+      if (sc |> isNull) then
+        let actualOutputs = lockupTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
+        Error(RedeemScriptMismatch(actualOutputs, redeemScript))
+      else
+        let tx =
+          setFeeOp(txB)
+            .SendAllRemaining(output)
+            .SetOptInRBF(true)
+            .BuildTransaction(false)
+        let signature = tx.SignInput(key, sc)
+        let witnessItems =
+          WitScript(Op.GetPushOp(signature.ToBytes())) +
+            WitScript(Op.GetPushOp(preimage.ToByteArray())) +
+            WitScript(Op.GetPushOp(redeemScript.ToBytes()))
+        tx.Inputs.[0].WitScript <- witnessItems
+        Ok tx
     result {
       let! dummyTx =
         createClaimTxFromTransactionBuilder(fun txB -> txB.SendEstimatedFees(feeRate))
