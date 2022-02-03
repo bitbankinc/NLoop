@@ -258,7 +258,7 @@ module Swap =
   /// in Event-Sourcing system, there is no DB migration.
   /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
   /// We use json serializer and record types to achieve this goal. json serializer
-  /// will ignore the unknown field in the record when deserializing. and if the union case is unknown,
+  /// will ignore the unknown field in the record when deserializing. and if the union case itself is unknown,
   /// it will deserialize it as `UnknownTagEvent` and do not use for state-reconstruction.
   /// So the rule of thumb is
   /// 0. The union must always hold record types as its data.
@@ -854,6 +854,8 @@ module Swap =
         | NewBlock _, Out _
         | NewBlock _, In _ ->
           // ignore if it is the cryptocode that we are not interested in.
+          // If this case happens, it is safe but it hurts the performance.
+          // Thus we check upper layer is using the API correctly only in debug build.
           assert false
           return []
         | UnConfirmBlock(blockHash), Out(_heightBefore, _)

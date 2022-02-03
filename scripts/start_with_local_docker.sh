@@ -28,6 +28,5 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --boltzhost http://localhost \
   --boltzport 6028 \
   --exchanges BitBank \
-  --exchanges BitMEX \
-  --boltzhttps false
+  --exchanges BitMEX
 
