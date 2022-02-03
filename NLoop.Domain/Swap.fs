@@ -10,6 +10,7 @@ open FSharp.Control.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils.Primitives
 open NBitcoin
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Domain.Utils

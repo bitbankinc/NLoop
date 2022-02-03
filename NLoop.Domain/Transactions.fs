@@ -31,33 +31,41 @@ module Transactions =
     (key: Key)
     (preimage: PaymentPreimage)
     (redeemScript: Script)
-    (fee:  FeeRate)
+    (feeRate: FeeRate)
     (lockupTx: Transaction)
     (n: Network) =
-    let txB = n.CreateTransactionBuilder()
-    let coins = lockupTx.Outputs.AsCoins()
-    let mutable sc = null
-    for c in coins do
-      if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
-        sc <- ScriptCoin(c, redeemScript)
-        txB.AddCoins(sc) |> ignore
-    if (sc |> isNull) then
-      let actualOutputs = lockupTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
-      Error(RedeemScriptMismatch(actualOutputs, redeemScript))
-    else
-      let tx =
-        txB
-          .SendEstimatedFees(fee)
-          .SendAllRemaining(output)
-          .SetOptInRBF(true)
-          .BuildTransaction(false)
-      let signature = tx.SignInput(key, sc)
-      let witnessItems =
-        WitScript(Op.GetPushOp(signature.ToBytes())) +
-          WitScript(Op.GetPushOp(preimage.ToByteArray())) +
-          WitScript(Op.GetPushOp(redeemScript.ToBytes()))
-      tx.Inputs.[0].WitScript <- witnessItems
-      Ok tx
+    let createClaimTxFromTransactionBuilder(setFeeOp: TransactionBuilder -> TransactionBuilder) =
+        let txB = n.CreateTransactionBuilder()
+        let coins = lockupTx.Outputs.AsCoins()
+        let mutable sc = null
+        for c in coins do
+          if (c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey || c.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey) then
+            sc <- ScriptCoin(c, redeemScript)
+            txB.AddCoins(sc) |> ignore
+        if (sc |> isNull) then
+          let actualOutputs = lockupTx.Outputs |> Seq.map(fun o -> o.ScriptPubKey)
+          Error(RedeemScriptMismatch(actualOutputs, redeemScript))
+        else
+          let tx =
+            setFeeOp(txB)
+              .SendAllRemaining(output)
+              .SetOptInRBF(true)
+              .BuildTransaction(false)
+          let signature = tx.SignInput(key, sc)
+          let witnessItems =
+            WitScript(Op.GetPushOp(signature.ToBytes())) +
+              WitScript(Op.GetPushOp(preimage.ToByteArray())) +
+              WitScript(Op.GetPushOp(redeemScript.ToBytes()))
+          tx.Inputs.[0].WitScript <- witnessItems
+          Ok tx
+    result {
+      let! dummyTx =
+        createClaimTxFromTransactionBuilder(fun txB -> txB.SendEstimatedFees(feeRate))
+      let feeAdjusted =
+        feeRate.GetFee(dummyTx.GetVirtualSize())
+      let! tx = createClaimTxFromTransactionBuilder(fun txB -> txB.SendFees(feeAdjusted))
+      return tx
+    }
 
   let createSwapPSBT
     (inputs: ICoin seq)
@@ -86,14 +94,14 @@ module Transactions =
       .Add(TxOut(Money.Coins(1.1m), Scripts.pubkey1)) |> ignore
     coinBase.Outputs.AsCoins()
     |> Seq.cast<ICoin>
-  let dummySwapTx (feeRate) =
+  let dummySwapTx feeRate =
     let dummyChange = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
     createSwapPSBT
       dummyCoin
-      (Scripts.dummySwapScriptV1)
+      Scripts.dummySwapScriptV1
       (Money.Coins(1m))
-      (feeRate)
-      (dummyChange)
+      feeRate
+      dummyChange
       Network.RegTest
     |> Result.map(fun psbt ->
       psbt
@@ -102,7 +110,7 @@ module Transactions =
         .Finalize()
         .ExtractTransaction()
       )
-    |> Result.valueOr(failwith)
+    |> Result.valueOr failwith
 
   let dummySwapTxFee feeRate =
     let swapTx = dummySwapTx feeRate
