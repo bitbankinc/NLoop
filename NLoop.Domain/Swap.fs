@@ -662,12 +662,14 @@ module Swap =
 
             // To make it reorg-safe, we must track the confirmation of swap tx.
             let maybeSwapTxConfirmedEvent =
+              // if have seen the swap tx in the block before, there is no need to search again.
+              if loopOut.SwapTxHeight.IsSome then [] else
               let maybeSwapTx =
                 match loopOut.SwapTx with
-                | Some swapTx when loopOut.SwapTxHeight.IsNone ->
+                | Some swapTx ->
                   let isTxIdMatch = fun (t: Transaction) -> t.GetHash() = swapTx.GetHash()
                   block.Transactions |> Seq.tryFind isTxIdMatch
-                | None when loopOut.SwapTxHeight.IsNone ->
+                | None ->
                   let isAddressMatch =
                     let addresses = loopOut.PossibleLockupAddress
                     fun (t: Transaction) ->
@@ -677,13 +679,13 @@ module Swap =
                         addresses|> Seq.contains addr
                       )
                   block.Transactions |> Seq.tryFind isAddressMatch
-                | _ -> None
 
-              match maybeSwapTx with
-              | Some tx when loopOut.SwapTxHeight.IsNone ->
-                [TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash(); TxHex = tx.ToHex() })] |> enhance
-              | _ ->
-                []
+              maybeSwapTx
+              |> Option.map(fun tx ->
+                TheirSwapTxConfirmedFirstTime({ Height = height; BlockHash = block.Header.GetHash(); TxHex = tx.ToHex() })
+              )
+              |> Option.toList
+              |> enhance
 
             let events = events @  maybeSwapTxConfirmedEvent
 
