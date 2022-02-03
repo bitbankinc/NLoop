@@ -53,7 +53,8 @@ type NLoopOptions() =
   member val BoltzHost = Constants.DefaultBoltzServer with get, set
   member val BoltzPort = Constants.DefaultBoltzPort with get, set
   member this.BoltzUrl =
-    let u = UriBuilder(this.BoltzHost)
+    let host = if this.BoltzHost.EndsWith "/" then this.BoltzHost else $"{this.BoltzHost}/"
+    let u = UriBuilder(host)
     u.Port <- this.BoltzPort
     u.Uri
   // -- --

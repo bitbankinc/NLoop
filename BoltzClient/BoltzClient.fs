@@ -39,10 +39,6 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
     h.BaseAddress <- uri
     BoltzClient(h)
 
-  new (host: string, ?port: int) =
-    let port = port |> Option.defaultValue(if host.StartsWith("https") then 443 else 80)
-    BoltzClient(Uri($"{host}:{port}"))
-
   member val HttpClient = httpClient with get
 
   member private this.SendCommandAsync<'TResp>(subPath: string, method: HttpMethod,
@@ -121,7 +117,7 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
 
   member this.StartListenToSwapStatusChange(id, [<O;D(null)>] ct: CancellationToken): AsyncSeq<SwapStatusResponse> =
     asyncSeq {
-      let! x = httpClient.GetStreamAsync($"/streamswapstatus?id=%s{id}", ct) |> Async.AwaitTask
+      let! x = httpClient.GetStreamAsync($"streamswapstatus?id=%s{id}", ct) |> Async.AwaitTask
       use streamReader = new StreamReader(x)
       while not <| streamReader.EndOfStream && not <| ct.IsCancellationRequested do
         let! msg = streamReader.ReadLineAsync() |> Async.AwaitTask
