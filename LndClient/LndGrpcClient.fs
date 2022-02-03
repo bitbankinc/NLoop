@@ -364,7 +364,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       )
       req.Value <- amount.Satoshi
       expiry |> Option.iter(fun e ->
-        req.Expiry <- e.Seconds |> int64
+        req.Expiry <- e.TotalSeconds |> int64
       )
       routeHints |> Option.iter(fun routeHintsValue ->
         for r in routeHintsValue do
