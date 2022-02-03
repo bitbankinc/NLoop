@@ -667,7 +667,8 @@ module Swap =
               let maybeSwapTx =
                 match loopOut.SwapTx with
                 | Some swapTx ->
-                  let isTxIdMatch = fun (t: Transaction) -> t.GetHash() = swapTx.GetHash()
+                  let h = swapTx.GetHash()
+                  let isTxIdMatch = fun (t: Transaction) -> t.GetHash() = h
                   block.Transactions |> Seq.tryFind isTxIdMatch
                 | None ->
                   let isAddressMatch =
