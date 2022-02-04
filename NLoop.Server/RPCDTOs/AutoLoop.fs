@@ -39,8 +39,8 @@ type SwapDisqualifiedReason =
     | x -> $"{x}"
 
 type LiquidityRuleType =
-  | Threshold
-  | UnKnown
+  | THRESHOLD
+  | UNKNOWN
 type LiquidityRule = {
   /// The channel id to apply this rule.
   /// PubKey and the ChannelId fields are mutually exclusive

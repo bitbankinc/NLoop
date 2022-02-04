@@ -312,7 +312,7 @@ type Rules = {
         {
           LiquidityRule.ChannelId = kv.Key |> ValueSome
           PubKey = ValueNone
-          Type = LiquidityRuleType.Threshold
+          Type = LiquidityRuleType.THRESHOLD
           IncomingThreshold = kv.Value.MinimumIncoming
           OutgoingThreshold = kv.Value.MinimumOutGoing
         }
@@ -324,7 +324,7 @@ type Rules = {
         {
           LiquidityRule.ChannelId = ValueNone
           PubKey = kv.Key.Value |> ValueSome
-          Type = LiquidityRuleType.Threshold
+          Type = LiquidityRuleType.THRESHOLD
           IncomingThreshold = kv.Value.MinimumIncoming
           OutgoingThreshold = kv.Value.MinimumOutGoing
         }
