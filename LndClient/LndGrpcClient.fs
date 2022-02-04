@@ -242,7 +242,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     // metadata
 
   member this.Deadline =
-    Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(20.))
+    Nullable(DateTime.UtcNow + TimeSpan.FromSeconds(10.))
 
   member this.ConnectPeer(nodeId: PubKey, host, ct) =
     let ct = defaultArg ct CancellationToken.None

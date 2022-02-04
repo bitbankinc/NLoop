@@ -19,17 +19,20 @@ type LightningInvoiceProvider(lightningClientProvider: ILightningClientProvider)
       let client =
         lightningClientProvider
           .GetClient(cryptoCode)
-      let! invoice =
-        client.GetInvoice(preimage, amt, TimeSpan.FromHours(25.), routeHints, $"This is an invoice for LoopIn by NLoop (label: \"{label}\")")
-      let invoiceEvent = client.SubscribeSingleInvoice(invoice.PaymentHash, ct)
-      invoiceEvent
-      |> AsyncSeq.iterAsync(fun s -> async {
-        if s.InvoiceState = IncomingInvoiceStateUnion.Settled then
-          do! onPaymentFinished(s.AmountPayed.ToMoney()) |> Async.AwaitTask
-        elif s.InvoiceState = IncomingInvoiceStateUnion.Canceled then
-          do! onPaymentCancelled("Offchain invoice cancelled") |> Async.AwaitTask
-        })
-      |> Async.StartImmediate
-
-      return invoice
+      try
+        let! invoice =
+          client.GetInvoice(preimage, amt, TimeSpan.FromHours(25.), routeHints, $"This is an invoice for LoopIn by NLoop (label: \"{label}\")")
+        let invoiceEvent = client.SubscribeSingleInvoice(invoice.PaymentHash, ct)
+        invoiceEvent
+        |> AsyncSeq.iterAsync(fun s -> async {
+          if s.InvoiceState = IncomingInvoiceStateUnion.Settled then
+            do! onPaymentFinished(s.AmountPayed.ToMoney()) |> Async.AwaitTask
+          elif s.InvoiceState = IncomingInvoiceStateUnion.Canceled then
+            do! onPaymentCancelled("Offchain invoice cancelled") |> Async.AwaitTask
+          })
+        |> Async.StartImmediate
+        return Ok invoice
+      with
+      | ex ->
+        return Error $"Failed to get invoice from lnd {ex.Message}"
     }

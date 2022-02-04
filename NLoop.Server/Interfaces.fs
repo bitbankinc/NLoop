@@ -57,11 +57,11 @@ type ILightningInvoiceProvider =
     preimage: PaymentPreimage *
     amt: LNMoney *
     label: string *
-    routeHints: LndClient.RouteHint[] *
+    routeHints: RouteHint[] *
     onPaymentFinished: OnPaymentReception *
     onCancellation: OnPaymentCancellation *
     ct: CancellationToken option
-     -> Task<PaymentRequest>
+     -> Task<Result<PaymentRequest, string>>
 
 type ISwapActor = Swap.IActor
 
