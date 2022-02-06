@@ -619,10 +619,6 @@ type SwapTraffic = {
   FailedLoopIn: Map<NodeId, DateTimeOffset>
 }
 
-type TargetPeerOrChannel = {
-  Peer: NodeId
-  Channels: ShortChannelId array
-}
 type LoopOutSwapBuilderDeps = {
   FeeEstimator: IFeeEstimator
   GetLoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, exn>>

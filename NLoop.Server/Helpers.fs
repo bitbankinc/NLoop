@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open DotNetLightning.Utils
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.Utils
@@ -23,4 +24,8 @@ module internal Helpers =
     Money.Satoshis(amount.Satoshi * (ppm |> int64) / FeeBase)
 
 
-
+[<Struct>]
+type TargetPeerOrChannel = {
+  Peer: NodeId
+  Channels: ShortChannelId array
+}

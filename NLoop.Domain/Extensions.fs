@@ -3,6 +3,7 @@ namespace NLoop.Domain
 open System
 open System
 open System.Runtime.CompilerServices
+open DotNetLightning.Utils
 open NBitcoin
 open NBitcoin.Altcoins
 
@@ -24,6 +25,10 @@ type PrimitiveExtensions() =
   static member PopWithLen(this: byte[]) =
     let len = Utils.ToUInt32(this.[0..4], false) |> int32
     this.[4..(len + 4)], this.[(len + 4)..]
+
+  [<Extension>]
+  static member ToUserFriendlyString(this: ShortChannelId) =
+    $"{this.AsString}:{this.ToUInt64()}"
 
 open FsToolkit.ErrorHandling
 

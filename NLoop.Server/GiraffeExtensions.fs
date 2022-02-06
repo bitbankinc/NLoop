@@ -61,6 +61,23 @@ module CustomHandlers =
         return! error503 errorMsg next ctx
     }
 
+  let internal checkWeHaveChannel (offChainCryptoCode: SupportedCryptoCode) (chanIds: ShortChannelId seq) =
+    fun (next: HttpFunc) (ctx: HttpContext) -> task {
+      let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)
+      let! channels = cli.ListChannels()
+      let nonExistentChannel = ResizeArray()
+      for chanId in chanIds do
+        if channels |> Seq.exists(fun actualChannel -> actualChannel.Id = chanId) |> not then
+          nonExistentChannel.Add(chanId)
+
+      if nonExistentChannel.Count > 0 then
+        return!
+          errorBadRequest
+            (nonExistentChannel |> Seq.map(fun cId -> $"Channel {cId.ToUserFriendlyString()} does not exist")) next ctx
+      else
+        return! next ctx
+    }
+
   let internal checkWeHaveRouteToCounterParty(offChainCryptoCode: SupportedCryptoCode) (amt: Money) (chanIdsSpecified: ShortChannelId[]) =
     fun (next: HttpFunc) ( ctx: HttpContext) -> task {
       let cli = ctx.GetService<ILightningClientProvider>().GetClient(offChainCryptoCode)

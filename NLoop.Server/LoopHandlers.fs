@@ -52,6 +52,7 @@ let handleLoopOut (req: LoopOutRequest) =
     let opts = ctx.GetService<IOptions<NLoopOptions>>()
     (validateLoopOutRequest opts.Value req
      >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
+     >=> checkWeHaveChannel req.PairIdValue.Quote req.OutgoingChannelIds
      >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount req.OutgoingChannelIds
      >=> validateFeeLimitAgainstServerQuote req
      >=> handleLoopOutCore req)

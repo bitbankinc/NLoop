@@ -114,11 +114,10 @@ let private dtoToFeeLimit
   else
     Error "no fee categories set"
 
-let setLiquidityParams
-  (maybeOffChainAsset: SupportedCryptoCode option)
+let setLiquidityParamsCore
+  (offchainAsset: SupportedCryptoCode)
   { SetLiquidityParametersRequest.Parameters = req }: HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
     let onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
     match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
     | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
@@ -159,6 +158,14 @@ let setLiquidityParams
         return!
           errorBadRequest [e.Message] next ctx
   }
+let setLiquidityParams
+  (maybeOffChainAsset: SupportedCryptoCode option)
+  (req: SetLiquidityParametersRequest) : HttpHandler =
+  let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
+  let targets =
+    req.Parameters.Targets
+  (checkWeHaveChannel offchainAsset targets.Channels)
+    >=> setLiquidityParamsCore offchainAsset req
 
 let suggestSwaps (maybeOffchainAsset: SupportedCryptoCode option): HttpHandler =
   fun (next: HttpFunc) (ctx: HttpContext) -> task {

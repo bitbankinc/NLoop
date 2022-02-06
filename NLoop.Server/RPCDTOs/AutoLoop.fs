@@ -8,6 +8,10 @@ open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
 
+type Targets = {
+  Peers: NodeId[]
+  Channels: ShortChannelId[]
+}
 [<RequireQualifiedAccess>]
 type SwapDisqualifiedReason =
   | SweepFeesTooHigh of {| Estimation: FeeRate; OurLimit: FeeRate |}
@@ -109,6 +113,17 @@ type LiquidityParameters = {
   [<JsonPropertyName "htlc_conf_target">]
   HTLCConfTarget: int option
 }
+  with
+  member this.Targets = {
+    Peers =
+      this.Rules
+      |> Seq.map(fun r -> r.PubKey |> ValueOption.toArray |> Array.map NodeId)
+      |> Array.concat
+    Channels =
+      this.Rules
+      |> Seq.map(fun r -> r.ChannelId |> ValueOption.toArray)
+      |> Array.concat
+  }
 
 type SetLiquidityParametersRequest = {
   [<JsonPropertyName "parameters">]
