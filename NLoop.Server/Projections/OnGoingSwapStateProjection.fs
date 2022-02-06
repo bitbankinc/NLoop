@@ -21,7 +21,7 @@ type IOnGoingSwapStateProjection =
   abstract member FinishCatchup: Task
 
 /// Create Swap Projection with Catch-up subscription.
-/// It will event RecordedEvent<Swap.Event> to EventAggregator.
+/// It will emit RecordedEvent<Swap.Event> through EventAggregator.
 /// But in catch-up process, it will hold emitting and emits only for those which has not yet completed
 /// when the catchup finishes. This is for other services such as <see cref="SwapProcessManager" />
 /// To make their own decision about doing side effects according to the latest swap state.

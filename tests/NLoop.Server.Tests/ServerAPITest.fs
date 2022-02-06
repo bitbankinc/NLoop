@@ -5,6 +5,7 @@ open System.Net
 open System.Net.Http
 open System.Net.Http.Json
 open System.Text.Json
+open System.Text.RegularExpressions
 open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
@@ -28,6 +29,7 @@ open NLoop.Domain.IO
 open NLoopClient
 open NLoop.Server.DTOs
 open NLoop.Server.Tests
+open NLoop.Server.RPCDTOs
 
 [<AutoOpen>]
 module private ServerAPITestHelpers =
@@ -207,8 +209,8 @@ type ServerAPITest() =
       ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
       ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("We have a channel but that is different from the one specified in request", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
-      ("one of the channel user specified does not exist", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId1; chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some "Failed to find route to Boltz server. Make sure the channels you specified is open and active")
+      ("We have a channel but that is different from the one specified in request", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
+      ("one of the channel user specified does not exist", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId1; chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
       let inprogressBlockchainInfo = {
         testBlockchainInfo
           with
@@ -495,3 +497,89 @@ type ServerAPITest() =
       expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
     }
 
+
+  static member TestAutoLoopAPIData =
+    let req = {
+      SetLiquidityParametersRequest.Parameters =
+        {
+          LiquidityParameters.Rules = [|
+            {
+              ChannelId = chanId1 |> ValueSome
+              PubKey = ValueNone
+              Type = LiquidityRuleType.THRESHOLD
+              IncomingThreshold = 25s<percent>
+              OutgoingThreshold = 25s<percent>
+            }
+          |]
+          FeePPM = 20L<ppm> |> ValueSome
+          SweepFeeRateSatPerKVByte = ValueNone
+          MaxSwapFeePpm = ValueNone
+          MaxRoutingFeePpm = ValueNone
+          MaxPrepayRoutingFeePpm = ValueNone
+          MaxPrepay = ValueNone
+          MaxMinerFee = ValueNone
+          SweepConfTarget = 3
+          FailureBackoffSecond = 600
+          AutoLoop = false
+          AutoMaxInFlight = 1
+          MinSwapAmountLoopOut = None
+          MaxSwapAmountLoopOut = None
+          MinSwapAmountLoopIn = None
+          MaxSwapAmountLoopIn = None
+          OnChainAsset = SupportedCryptoCode.BTC |> ValueSome
+          HTLCConfTarget = 3 |> Some
+        }
+    }
+    seq [
+      ("success", req, [channel1], HttpStatusCode.OK, None)
+      ("no channels exist", req, [], HttpStatusCode.BadRequest, Some "Channel .+ does not exist")
+      ("Channel specified does not exist", req, [channel2], HttpStatusCode.BadRequest, Some "Channel .+ does not exist")
+    ]
+    |> Seq.map(fun (n: string,
+                    req,
+                    channels: ListChannelResponse list,
+                    expectedStatusCode: HttpStatusCode,
+                    expectedErrorMsg: string option) -> [|
+      n |> box
+      req |> box
+      channels |> box
+      expectedStatusCode |> box
+      expectedErrorMsg |> box
+    |])
+  [<Theory>]
+  [<MemberData(nameof(ServerAPITest.TestAutoLoopAPIData))>]
+  member this.TestAutoLoopAPI(_name: string,
+                              req: SetLiquidityParametersRequest,
+                              channels: ListChannelResponse list,
+                              expectedStatusCode: HttpStatusCode,
+                              expectedErrorMsg: string option) =
+    task {
+      use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
+          let lnClientParam = {
+            DummyLnClientParameters.Default
+              with
+              ListChannels = channels
+          }
+          sp
+            .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
+            .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
+            |> ignore
+          ()
+        ))
+
+      let client = server.CreateClient()
+      let! resp =
+        let opts =
+          let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+          o.AddNLoopJsonConverters(Network.RegTest)
+          o
+        let content = JsonContent.Create(req, Unchecked.defaultof<_>, opts)
+        client.PostAsync("/v1/liquidity/params", content)
+      let! msg = resp.Content.ReadAsStringAsync()
+      Assert.Equal(expectedStatusCode, resp.StatusCode)
+      expectedErrorMsg |> Option.iter(fun expected ->
+        Regex.IsMatch(msg, expected)
+        |> Assert.True
+      )
+      ()
+    }

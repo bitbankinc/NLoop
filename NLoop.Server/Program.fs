@@ -78,10 +78,18 @@ module App =
             POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
             GET >=> AutoLoopHandlers.getLiquidityParams SupportedCryptoCode.BTC
           ]
-          GET >=> routef "/params/%s" (SupportedCryptoCode.Parse >> AutoLoopHandlers.getLiquidityParams)
+          GET >=> routef "/params/%s" (fun s ->
+            s.ToUpperInvariant()
+            |> SupportedCryptoCode.Parse
+            |> AutoLoopHandlers.getLiquidityParams
+          )
           POST >=> routef "/params/%s" (fun offChain ->
-            let p = SupportedCryptoCode.Parse offChain |> Some
-            bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams p))
+            offChain.ToUpperInvariant()
+            |> SupportedCryptoCode.Parse
+            |> Some
+            |> AutoLoopHandlers.setLiquidityParams
+            |> bindJson<SetLiquidityParametersRequest>
+          )
         ])
       ])
       setStatusCode 404 >=> text "Not Found"

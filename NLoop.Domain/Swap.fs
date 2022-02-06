@@ -263,7 +263,7 @@ module Swap =
   /// it will deserialize it as `UnknownTagEvent` and do not use for state-reconstruction.
   /// So the rule of thumb is
   /// 0. The union must always hold record types as its data.
-  /// 1. You can add member to the field freely, as long as it has a property `option` or `ValueOption`
+  /// 1. You can add member to the field freely, as long as its member has type `option` or `ValueOption`
   /// 2. You cannot remove (or alter) the member from the field, you must create another union-case and treat it as a
   ///    new type of an event in that case.
   /// 3. If you add a new union-case, define the unique (and previously unused) two-bytes tag for it and add it to

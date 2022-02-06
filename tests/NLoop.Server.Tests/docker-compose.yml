@@ -85,14 +85,14 @@ services:
       - "./data/litecoin:/data"
   lnd_user:
     restart: unless-stopped
-    image: nloop/lnd:v0.14.1-beta
+    image: nloop/lnd:v0.14.2-beta
     build:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: "v0.14.1-beta"
+        LND_VERSION: "v0.14.2-beta"
       cache_from:
-        - nloop/lnd:v0.14.1-beta
+        - nloop/lnd:v0.14.2-beta
     environment:
       LND_ENVIRONMENT: regtest
       LND_REST_PORT: 32736
@@ -142,14 +142,14 @@ services:
       - "./data/bitcoin:/deps/.bitcoin"
   lnd_server_btc:
     restart: unless-stopped
-    image: nloop/lnd:v0.14.1-beta
+    image: nloop/lnd:v0.14.2-beta
     build:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: "v0.14.1-beta"
+        LND_VERSION: "v0.14.2-beta"
       cache_from:
-        - nloop/lnd:v0.14.1-beta
+        - nloop/lnd:v0.14.2-beta
     environment:
       LND_ENVIRONMENT: regtest
       LND_REST_PORT: 32737
@@ -198,14 +198,14 @@ services:
 
   lnd_server_ltc:
     restart: unless-stopped
-    image: nloop/lnd:v0.14.1-beta
+    image: nloop/lnd:v0.14.2-beta
     build:
       context: ./Dockerfiles
       dockerfile: lnd
       args:
-        LND_VERSION: "v0.14.1-beta"
+        LND_VERSION: "v0.14.2-beta"
       cache_from:
-        - nloop/lnd:v0.14.1-beta
+        - nloop/lnd:v0.14.2-beta
     environment:
       LND_ENVIRONMENT: regtest
       LND_REST_PORT: 32737
@@ -251,16 +251,16 @@ services:
       - "./data/litecoin:/deps/.litecoin"
 
   boltz:
-    image: nloop/boltz:490d2a605bd7dae20a795607d61f5c722ab42054
+    image: nloop/boltz:f0f96da344e1524d571d077d92eec980874134fe
     container_name: boltz
     restart: unless-stopped
     build:
       context: ./Dockerfiles
       args:
-        BOLTZ_VERSION: "490d2a605bd7dae20a795607d61f5c722ab42054"
+        BOLTZ_VERSION: "f0f96da344e1524d571d077d92eec980874134fe"
       dockerfile: boltz
       cache_from:
-        - nloop/boltz:490d2a605bd7dae20a795607d61f5c722ab42054
+        - nloop/boltz:f0f96da344e1524d571d077d92eec980874134fe
     command:
       - "--configpath=/data/boltz/boltz.conf"
     expose:

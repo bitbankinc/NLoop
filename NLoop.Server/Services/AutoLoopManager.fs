@@ -312,7 +312,7 @@ type Rules = {
         {
           LiquidityRule.ChannelId = kv.Key |> ValueSome
           PubKey = ValueNone
-          Type = LiquidityRuleType.Threshold
+          Type = LiquidityRuleType.THRESHOLD
           IncomingThreshold = kv.Value.MinimumIncoming
           OutgoingThreshold = kv.Value.MinimumOutGoing
         }
@@ -324,7 +324,7 @@ type Rules = {
         {
           LiquidityRule.ChannelId = ValueNone
           PubKey = kv.Key.Value |> ValueSome
-          Type = LiquidityRuleType.Threshold
+          Type = LiquidityRuleType.THRESHOLD
           IncomingThreshold = kv.Value.MinimumIncoming
           OutgoingThreshold = kv.Value.MinimumOutGoing
         }
@@ -619,10 +619,6 @@ type SwapTraffic = {
   FailedLoopIn: Map<NodeId, DateTimeOffset>
 }
 
-type TargetPeerOrChannel = {
-  Peer: NodeId
-  Channels: ShortChannelId array
-}
 type LoopOutSwapBuilderDeps = {
   FeeEstimator: IFeeEstimator
   GetLoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, exn>>

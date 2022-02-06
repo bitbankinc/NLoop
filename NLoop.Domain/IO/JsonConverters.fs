@@ -145,7 +145,7 @@ type ScriptJsonConverter() =
 type ShortChannelIdJsonConverter() =
   inherit JsonConverter<ShortChannelId>()
   override this.Write(writer, value, _options) =
-    $"{value.AsString}:{value.ToUInt64()}"
+    value.ToUserFriendlyString()
     |> writer.WriteStringValue
   override this.Read(reader, _typeToConvert, _options) =
     try
