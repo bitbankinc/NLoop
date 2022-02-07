@@ -9,6 +9,7 @@ open LndClient
 open FSharp.Control.Tasks
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Internal
+open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.IO
@@ -175,6 +176,7 @@ type private AutoLoopManagerTestContext() =
         }
       services
         .AddSingleton<IFeeEstimator>(f)
+        .AddSingleton<ILoggerFactory, LoggerFactory>()
         .AddSingleton<ISwapServerClient>(dummySwapServerClient)
         .AddSingleton<ISystemClock>({ new ISystemClock with member _.UtcNow = this.TestTime })
         .AddSingleton<ISwapExecutor>(swapExecutor)
@@ -636,7 +638,7 @@ type AutoLoopManagerTests() =
       SwapDTO.LoopInQuoteRequest.Pair = loopInPair }
     let peer1Swap = {
       LoopInRequest.Amount = peer1ExpectedAmount
-      ChannelId = None
+      ChannelId = chanId1 |> Some
       LastHop = peer1 |> Some
       Label = Labels.autoIn |> Some
       PairId = pairId |> Some
@@ -665,7 +667,7 @@ type AutoLoopManagerTests() =
     }
     let peer2Swap = {
       LoopInRequest.Amount = peer2ExpectedAmount
-      ChannelId = None
+      ChannelId = chanId2 |> Some
       LastHop = peer2 |> Some
       Label = Labels.autoIn |> Some
       PairId = pairId |> Some
@@ -689,19 +691,19 @@ type AutoLoopManagerTests() =
       ListChannelResponse.Id = chanId1
       NodeId = peer1
       Cap =
-        1000000L |> Money.Satoshis
+        1_000_000L |> Money.Satoshis
       LocalBalance =
-        1000000L |> Money.Satoshis
+        1_000_000L |> Money.Satoshis
       RemoteBalance = Money.Zero
     }
     let chan2 = {
       ListChannelResponse.Id = chanId2
       NodeId = peer2
       Cap =
-        200000L |> Money.Satoshis
+        200_000L |> Money.Satoshis
       LocalBalance = Money.Zero
       RemoteBalance =
-        200000L |> Money.Satoshis
+        200_000L |> Money.Satoshis
     }
     let channels = [chan1; chan2]
     let outRule =  {
@@ -784,7 +786,7 @@ type AutoLoopManagerTests() =
     let loopInSwap =
       {
         LoopInRequest.Amount = loopInAmount
-        ChannelId = None
+        ChannelId = chanId2 |> Some
         LastHop = peer2 |> Some
         Label = Labels.autoIn |> Some
         PairId = loopInPair |> Some
@@ -802,5 +804,135 @@ type AutoLoopManagerTests() =
         ExpectedIn = [(loopInSwap, dummyInResp)]
     }
 
+    do! ctx.RunStep(step)
+  }
+
+  [<Fact>]
+  member this.TestAutoloopBothTypesInOneChannel() = task {
+    let chan1 = {
+      ListChannelResponse.Id = chanId1
+      Cap = 1_000_000L |> Money.Satoshis
+      LocalBalance = 1_000_000L |> Money.Satoshis
+      RemoteBalance = Money.Zero
+      NodeId = peer1
+    }
+    let channels = [chan1]
+    let swapFeePPM = 50000L<ppm>
+    let htlcConfTarget = BlockHeightOffset32 10u
+    // this value is smaller than the case that there is no MinimumOutgoing set for the same channel.
+    // because we take it into account when calculating the swap amount <seealso cref="ThresholdRule.SwapAmount" />
+    let loopOutAmount = 500000L |> Money.Satoshis
+    let loopOutMaxFee = ppmToSat(loopOutAmount, swapFeePPM)
+    let rule = {
+      ThresholdRule.MinimumIncoming = 40s<percent>
+      ThresholdRule.MinimumOutGoing = 40s<percent>
+    }
+    let parameters = {
+      Parameters.AutoLoop = true
+      MaxAutoInFlight = 1
+      FailureBackoff = TimeSpan.FromHours(1.)
+      SweepConfTarget = onChainAsset.DefaultParams.OnChain.SweepConfTarget
+      FeeLimit = { FeePortion.PartsPerMillion =  swapFeePPM }
+      ClientRestrictions = ClientRestrictions.NoRestriction
+      Rules = {
+        ChannelRules = Map.ofSeq[(chanId1, rule)]
+        PeerRules = Map.empty
+      }
+      HTLCConfTarget = htlcConfTarget
+      OnChainAsset = onChainAsset
+    }
+
+    use ctx = new AutoLoopManagerTestContext()
+    do! ctx.Prepare(parameters, channels)
+
+    let loopOutQuote =
+      {
+        SwapDTO.LoopOutQuote.SwapFee =
+          (loopOutMaxFee.Satoshi / 4L) |> Money.Satoshis
+        SwapDTO.LoopOutQuote.SweepMinerFee = Money.Zero
+        SwapDTO.LoopOutQuote.SwapPaymentDest = (new Key()).PubKey
+        SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(10u)
+        SwapDTO.LoopOutQuote.PrepayAmount =
+          (loopOutMaxFee.Satoshi / 4L) |> Money.Satoshis
+      }
+    let loopOutQuoteReq =
+      {
+        SwapDTO.LoopOutQuoteRequest.Amount = loopOutAmount
+        SwapDTO.LoopOutQuoteRequest.SweepConfTarget =
+          parameters.SweepConfTarget
+        SwapDTO.LoopOutQuoteRequest.Pair = loopOutPair
+      }
+    let prepayMaxFee, routeMaxFee, minerFee = parameters.FeeLimit.LoopOutFees(loopOutAmount, loopOutQuote)
+    let loopOutSwap = {
+      LoopOutRequest.Amount = loopOutAmount
+      ChannelIds = [|chanId1|] |> ValueSome
+      Address = Some(TestHelpersMod.lndAddress.ToString())
+      PairId = loopOutPair |> Some
+      SwapTxConfRequirement =
+        loopOutPair.DefaultLoopOutParameters.SwapTxConfRequirement.Value |> int |> Some
+      Label = Labels.autoOut |> Some
+      MaxSwapRoutingFee = routeMaxFee |> ValueSome
+      MaxPrepayRoutingFee = prepayMaxFee |> ValueSome
+      MaxSwapFee = loopOutQuote.SwapFee |> ValueSome
+      MaxPrepayAmount = loopOutQuote.PrepayAmount |> ValueSome
+      MaxMinerFee = minerFee |> ValueSome
+      SweepConfTarget = parameters.SweepConfTarget.Value |> int |> ValueSome
+    }
+
+    let step = {
+      AutoLoopStep.Create(1L, loopOutAmount.Satoshi + 1L)
+        with
+        QuotesOut = [(loopOutQuoteReq, loopOutQuote)]
+        ExpectedOut = [(loopOutSwap, dummyOutResp)]
+    }
+    do! ctx.RunStep(step)
+
+    // change the state of channels, and see loop-in happens.
+    let channels =
+      [
+        {
+          chan1
+            with
+            Cap =
+              200_000L |> Money.Satoshis
+            LocalBalance = Money.Zero
+            RemoteBalance =
+              200_000L |> Money.Satoshis
+        }
+      ]
+    do! ctx.Prepare(parameters, channels)
+
+    let loopInAmount = 100_000L |> Money.Satoshis
+    let loopInMaxFee = ppmToSat(loopInAmount, swapFeePPM)
+    let loopInQuote = {
+      SwapDTO.LoopInQuote.SwapFee =
+        (loopInMaxFee.Satoshi / 4L)
+        |> Money.Satoshis
+      SwapDTO.LoopInQuote.MinerFee =
+        (loopInMaxFee.Satoshi / 8L)
+        |> Money.Satoshis
+    }
+    let loopInQuoteReq = {
+      SwapDTO.LoopInQuoteRequest.Amount = loopInAmount
+      SwapDTO.LoopInQuoteRequest.Pair = loopInPair
+    }
+    let loopInSwap =
+      {
+        LoopInRequest.Amount = loopInAmount
+        ChannelId = chanId1 |> Some
+        LastHop = Some peer1
+        Label = Labels.autoIn |> Some
+        PairId = loopInPair |> Some
+        MaxMinerFee = loopInQuote.MinerFee |> ValueSome
+        MaxSwapFee = loopInQuote.SwapFee |> ValueSome
+        HtlcConfTarget = htlcConfTarget.Value |> int |> ValueSome
+      }
+
+    let step = {
+      AutoLoopStep.Create(1L, loopOutAmount.Satoshi + 1L)
+        with
+        QuotesIn = [(loopInQuoteReq, loopInQuote)]
+        ExpectedIn = [(loopInSwap, dummyInResp)]
+    }
     do! ctx.RunStep(step)
   }

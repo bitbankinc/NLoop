@@ -45,6 +45,7 @@ type SwapDisqualifiedReason =
 type LiquidityRuleType =
   | THRESHOLD
   | UNKNOWN
+open FsToolkit.ErrorHandling
 type LiquidityRule = {
   /// The channel id to apply this rule.
   /// PubKey and the ChannelId fields are mutually exclusive
@@ -67,6 +68,28 @@ type LiquidityRule = {
   OutgoingThreshold: int16<percent>
   // -----  -----
 }
+  with
+  member this.Validate() =
+    if this.IncomingThreshold < 0s<percent> || this.IncomingThreshold > 100s<percent> then
+      Error $"Invalid liquidity threshold {this.IncomingThreshold}"
+    elif this.OutgoingThreshold < 0s<percent> || this.OutgoingThreshold > 100s<percent> then
+      Error $"Invalid liquidity threshold {this.OutgoingThreshold}"
+    elif this.IncomingThreshold + this.OutgoingThreshold >= 100s<percent> then
+      Error $"Invalid liquidity threshold. The sum must be lower than 100 percent (incoming: {this.IncomingThreshold}). (outgoing {this.OutgoingThreshold})"
+    // above validations are same with those of ThresholdRule, below are optional, we may omit in the future if there
+    // are some valid use cases for setting a higher value than 40%
+    elif this.IncomingThreshold > 50s<percent> then
+      Error $"We don't currently allow setting value higher than 50 percent for incoming_threshold for the safety. It was {this.IncomingThreshold}"
+    elif this.OutgoingThreshold > 50s<percent> then
+      Error $"We don't currently allow setting value higher than 50 percent for outgoing_threshold for the safety. It was {this.OutgoingThreshold}"
+    elif this.IncomingThreshold + this.OutgoingThreshold > 60s<percent> then
+      let msg =
+        $"We don't currently allow setting value higher than 60 percent for sum of the incoming/outgoing threshold. " +
+        "It is usually a bad idea to setting such a high value for the sum. Since it will result to too-small and often " +
+        "swaps. Consider making your channel larger instead."
+      Error msg
+    else
+      Ok()
 type LiquidityParameters = {
   [<JsonPropertyName "rules">]
   Rules: LiquidityRule[]

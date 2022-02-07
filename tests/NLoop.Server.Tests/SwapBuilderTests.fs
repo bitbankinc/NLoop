@@ -102,7 +102,7 @@ type SwapBuilderTests() =
     let expectedSwap =
       SwapSuggestion.In({
         LoopInRequest.Amount = swapAmount
-        ChannelId = None
+        ChannelId = chanId1 |> Some
         Label = None
         PairId = pairId |> Some
         MaxMinerFee = quote.MinerFee |> ValueSome

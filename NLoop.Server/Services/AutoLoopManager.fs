@@ -162,10 +162,34 @@ type SwapSuggestions = {
     {
       DisqualifiedChannels =
         // a channel is disqualified iff it is disqualified both a and b
-        a.DisqualifiedChannels |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedChannels)
+        a.DisqualifiedChannels
+        |> Seq.choose(fun aKv ->
+          Map.tryFind aKv.Key b.DisqualifiedChannels
+          |> Option.map(fun br ->
+            match aKv.Value with
+            | SwapDisqualifiedReason.LiquidityOk ->
+              // a and b are loopout/in pair, if one pair has LiquidityOk. than the other pair might have
+              // another reason. We want to prioritize that reason over LiquidityOk.
+              (aKv.Key, br)
+            | _ -> (aKv.Key, aKv.Value)
+          )
+        )
+        |> Map.ofSeq
       DisqualifiedPeers =
         // a peer is disqualified iff it is disqualified both a and b
-        a.DisqualifiedPeers |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedPeers)
+        a.DisqualifiedPeers
+        |> Seq.choose(fun aKv ->
+          Map.tryFind aKv.Key b.DisqualifiedPeers
+          |> Option.map(fun br ->
+            match aKv.Value with
+            | SwapDisqualifiedReason.LiquidityOk ->
+              // a and b are loopout/in pair, if one pair has LiquidityOk. than the other pair might have
+              // another reason. We want to prioritize that reason over LiquidityOk.
+              (aKv.Key, br)
+            | _ -> (aKv.Key, aKv.Value)
+          )
+        )
+        |> Map.ofSeq
       OutSwaps = a.OutSwaps @ b.OutSwaps
       InSwaps = a.InSwaps @ b.InSwaps
     }
@@ -202,7 +226,7 @@ type Balances = {
     {
       CapacitySat = resp.Cap
       OutGoingSat = resp.LocalBalance
-      IncomingSat = resp.Cap - resp.LocalBalance
+      IncomingSat = resp.RemoteBalance
       Channels =
         let r = ResizeArray()
         resp.Id |> r.Add
@@ -213,7 +237,7 @@ type Balances = {
 type SwapSizeRestrictions = ServerRestrictions
 
 [<AutoOpen>]
-module private Extensions =
+module internal AutoLoopManagerExtensions =
 
   /// calculateSwapAmount calculates amount for a swap based on thresholds.
   /// This function can be used for loop out or loop in, but the concept is the
@@ -223,7 +247,7 @@ module private Extensions =
   ///   liquidity. We aim for this liquidity to reach the threshold amount set.
   /// * reserve: this is the side of the channel(s) that we will move liquidity
   ///   away from. This may not drop below a certain reserve threshold
-  let private calculateSwapAmount
+  let calculateSwapAmount
     (targetAmount: Money)
     (reserveAmount: Money)
     (capacity: Money)
@@ -645,7 +669,7 @@ type Config = {
               this.SwapServerClient.GetLoopOutQuote req
             return resp |> Ok
           with
-          | ex -> return Error ex
+          | :? Grpc.Core.RpcException as ex -> return Error (ex :> exn)
         }
         GetDepositAddress = this.GetDepositAddress
       }
@@ -656,7 +680,7 @@ type Config = {
             let! resp = this.SwapServerClient.GetLoopInQuote req
             return resp |> Ok
           with
-          | ex -> return Error ex
+          | :? Grpc.Core.RpcException as ex -> return Error (ex :> exn)
         }
     }
 
@@ -760,7 +784,7 @@ type SwapBuilder = {
       MaySwap = fun _ -> Task.FromResult(Ok())
       BuildSwap =
         fun
-          { Peer = peer; }
+          { Peer = peer; Channels = channelIds }
           amount
           pairId autoloop parameters -> taskResult {
         let! quote =
@@ -778,7 +802,9 @@ type SwapBuilder = {
           MaxSwapFee = quote.SwapFee |> ValueSome
           HtlcConfTarget = parameters.HTLCConfTarget.Value |> int |> ValueSome
           LastHop = peer.Value |> Some
-          ChannelId = None
+          ChannelId =
+            channelIds
+            |> Seq.tryExactlyOne
         }
         return
           SwapSuggestion.In(req)
@@ -928,13 +954,40 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   member private this.CheckAutoLoopIsPossible(existingAutoLoopOuts: _ list, existingLoopIns: _ list) =
     let par = this.Parameters.Value
     let checkInFlightNumber () =
-      if par.MaxAutoInFlight < existingAutoLoopOuts.Length + existingLoopIns.Length then
-        logger.LogDebug($"%d{par.MaxAutoInFlight} autoloops allowed, %d{existingAutoLoopOuts.Length} inflight")
+      let existingSum = existingAutoLoopOuts.Length + existingLoopIns.Length
+      if par.MaxAutoInFlight < existingSum then
+        logger.LogDebug($"%d{par.MaxAutoInFlight} autoloops allowed, %d{existingSum} inflight")
         Error (this.SingleReasonSuggestion SwapDisqualifiedReason.InFlightLimitReached)
       else
         Ok()
     result {
       do! checkInFlightNumber()
+    }
+
+
+  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, category: Swap.Category, autoloop: bool, ?ct: CancellationToken): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
+    let ct = defaultArg ct CancellationToken.None
+    taskResult {
+      let builder =
+        this.Builder category
+      let par = this.Parameters.Value
+      do! builder.MaySwap(par)
+      ct.ThrowIfCancellationRequested()
+      let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
+      do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
+      ct.ThrowIfCancellationRequested()
+      let amount =
+        rule.SwapAmount(balance, restrictions, category, opts.Value.TargetIncomingLiquidityRatio)
+      if amount = Money.Zero then
+        return! Error(SwapDisqualifiedReason.LiquidityOk)
+      else
+        return!
+          builder.BuildSwap
+            peerOrChannel
+            amount
+            (getPairId category)
+            autoloop
+            par
     }
 
   member this.SuggestLoopInOrOutSwaps(autoloop:bool, group: Swap.Group, onGoingLoopOuts: _ list, onGoingLoopIns: LoopIn list, restrictions: ServerRestrictions, ct: CancellationToken):Task<Result<SwapSuggestions, AutoLoopError>> =
@@ -944,7 +997,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         lnClient
           .ListChannels(ct)
       ct.ThrowIfCancellationRequested()
-      let peerToChannelBalance: Map<NodeId, Balances> =
+      let peerToBalance: Map<NodeId, Balances> =
         channels
         |> List.map(Balances.FromLndResponse)
         |> List.groupBy(fun b -> b.PubKey)
@@ -955,7 +1008,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         |> List.map(fun c -> c.Id, c.NodeId |> NodeId)
         |> Map.ofList
       let peersWithRules =
-        peerToChannelBalance
+        peerToBalance
         |> Map.toSeq
         |> Seq.choose(fun (nodeId, balance) ->
           par.Rules.PeerRules
@@ -987,8 +1040,6 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         match! this.SuggestSwap(traffic, balances, rule, restrictions, group.Category, autoloop, ct) with
         | Error e ->
           resp <- { resp with DisqualifiedPeers = resp.DisqualifiedPeers |> Map.add nodeId e }
-        | Ok (SwapSuggestion.In s) ->
-          suggestions.Add (SwapSuggestion.In s)
         | Ok s ->
           suggestions.Add(s)
 
@@ -1032,7 +1083,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
                 ) response.DisqualifiedChannels
           }
 
-        let allowedSwaps = par.MaxAutoInFlight - onGoingLoopOuts.Count()
+        let allowedSwaps = par.MaxAutoInFlight - onGoingLoopOuts.Length - onGoingLoopIns.Length
         let resp =
           suggestions
           |> Seq.fold(fun (acc: SwapSuggestions) (s: SwapSuggestion) ->
@@ -1074,31 +1125,6 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     | Error e -> return Error e
   }
 
-  member private this.SuggestSwap(traffic, balance: Balances, rule: ThresholdRule, restrictions: ServerRestrictions, category: Swap.Category, autoloop: bool, ?ct: CancellationToken): Task<Result<SwapSuggestion, SwapDisqualifiedReason>> =
-    let ct = defaultArg ct CancellationToken.None
-    taskResult {
-      let builder =
-        this.Builder category
-      let par = this.Parameters.Value
-      do! builder.MaySwap(par)
-      ct.ThrowIfCancellationRequested()
-      let peerOrChannel = { Peer = balance.PubKey; Channels = balance.Channels.ToArray() }
-      do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
-      ct.ThrowIfCancellationRequested()
-      let amount =
-        rule.SwapAmount(balance, restrictions, category, opts.Value.TargetIncomingLiquidityRatio)
-      if amount = Money.Zero then
-        return! Error(SwapDisqualifiedReason.LiquidityOk)
-      else
-        return!
-          builder.BuildSwap
-            peerOrChannel
-            amount
-            (getPairId category)
-            autoloop
-            par
-    }
-
   /// Gets a set of suggested swaps and dispatches them automatically if we have automated looping enabled.
   member this.AutoLoop ct: Task<Result<_, AutoLoopError>> = taskResult {
     let! suggestion = this.SuggestSwaps(true, ct)
@@ -1106,7 +1132,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
     let par = this.Parameters.Value
     for swap in suggestion.OutSwaps do
       if not <| par.AutoLoop then
-        let chanSet = swap.OutgoingChannelIds |> Array.fold(fun acc c -> $"{acc},{c} ({c.ToUInt64()})") ""
+        let chanSet = swap.OutgoingChannelIds |> Array.fold(fun acc c -> $"{acc}, {c.ToUserFriendlyString()}") ""
         logger.LogDebug($"recommended autoloop out: {swap.Amount.Satoshi} sats over {chanSet}")
       else
         let group = getGroup Swap.Category.Out

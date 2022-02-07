@@ -93,11 +93,11 @@ module CustomHandlers =
         if chanIdsSpecified.Length = 0 then
           let! r = cli.QueryRoutes(kv.Value.NodeKey, amt.ToLNMoney())
           if (r.Value.Length > 0) then
-            let chanIds = r.Value.Head.ShortChannelId
-            logger.LogDebug($"paying through the channel {chanIds} ({chanIds.ToUInt64()})")
+            let chanId = r.Value.Head.ShortChannelId
+            logger.LogDebug("paying through the channel {ChannelId})", chanId.ToUserFriendlyString())
             return! next ctx
           else
-            return! error503 $"Failed to find route to Boltz server. Make sure you have open and active channel" next ctx
+            return! error503 "Failed to find route to Boltz server. Make sure you have open and active channel" next ctx
         else
           let! routes =
             chanIdsSpecified
@@ -109,9 +109,9 @@ module CustomHandlers =
           if foundRoutes.Length > 0 then
             let chanIds =
               foundRoutes
-              |> Array.map(fun r -> r.Value.Head.ShortChannelId)
+              |> Array.map(fun r -> r.Value.Head.ShortChannelId.ToUserFriendlyString())
               |> Array.toList
-            logger.LogDebug($"paying through channels {chanIds} ({chanIds |> List.map(fun cId -> cId.ToUInt64())})")
+            logger.LogDebug("paying through channels {ChannelIds})", chanIds)
             return! next ctx
           else
             let msg = $"Failed to find route to Boltz server. Make sure the channels you specified is open and active"
