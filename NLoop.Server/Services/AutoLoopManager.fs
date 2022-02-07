@@ -928,8 +928,9 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
   member private this.CheckAutoLoopIsPossible(existingAutoLoopOuts: _ list, existingLoopIns: _ list) =
     let par = this.Parameters.Value
     let checkInFlightNumber () =
-      if par.MaxAutoInFlight < existingAutoLoopOuts.Length + existingLoopIns.Length then
-        logger.LogDebug($"%d{par.MaxAutoInFlight} autoloops allowed, %d{existingAutoLoopOuts.Length} inflight")
+      let existingSum = existingAutoLoopOuts.Length + existingLoopIns.Length
+      if par.MaxAutoInFlight < existingSum then
+        logger.LogDebug($"%d{par.MaxAutoInFlight} autoloops allowed, %d{existingSum} inflight")
         Error (this.SingleReasonSuggestion SwapDisqualifiedReason.InFlightLimitReached)
       else
         Ok()
