@@ -122,6 +122,10 @@ let setLiquidityParamsCore
     match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
     | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
     | Some man ->
+    match req.Rules |> Seq.map(fun r -> r.Validate()) |> Seq.toList |> List.sequenceResultA with
+    | Error errs ->
+      return! errorBadRequest errs next ctx
+    | Ok _ ->
     match dtoToFeeLimit (offchainAsset.DefaultParams.OffChain, onChainAsset.DefaultParams.OnChain) req with
     | Error e ->
       return!
