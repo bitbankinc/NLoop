@@ -638,7 +638,7 @@ type AutoLoopManagerTests() =
       SwapDTO.LoopInQuoteRequest.Pair = loopInPair }
     let peer1Swap = {
       LoopInRequest.Amount = peer1ExpectedAmount
-      ChannelId = None
+      ChannelId = chanId1 |> Some
       LastHop = peer1 |> Some
       Label = Labels.autoIn |> Some
       PairId = pairId |> Some
@@ -667,7 +667,7 @@ type AutoLoopManagerTests() =
     }
     let peer2Swap = {
       LoopInRequest.Amount = peer2ExpectedAmount
-      ChannelId = None
+      ChannelId = chanId2 |> Some
       LastHop = peer2 |> Some
       Label = Labels.autoIn |> Some
       PairId = pairId |> Some
@@ -786,7 +786,7 @@ type AutoLoopManagerTests() =
     let loopInSwap =
       {
         LoopInRequest.Amount = loopInAmount
-        ChannelId = None
+        ChannelId = chanId2 |> Some
         LastHop = peer2 |> Some
         Label = Labels.autoIn |> Some
         PairId = loopInPair |> Some
@@ -919,7 +919,7 @@ type AutoLoopManagerTests() =
     let loopInSwap =
       {
         LoopInRequest.Amount = loopInAmount
-        ChannelId = None
+        ChannelId = chanId1 |> Some
         LastHop = Some peer1
         Label = Labels.autoIn |> Some
         PairId = loopInPair |> Some

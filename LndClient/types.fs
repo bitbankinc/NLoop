@@ -33,7 +33,6 @@ module private Helpers =
       Error $"Failed to create Uri from {str}"
 
   let parseMacaroon (str: string) =
-    printfn $"parseMacaroon: {str}"
     try
       str
       |> Macaroon.Deserialize

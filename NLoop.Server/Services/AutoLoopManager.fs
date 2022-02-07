@@ -162,10 +162,34 @@ type SwapSuggestions = {
     {
       DisqualifiedChannels =
         // a channel is disqualified iff it is disqualified both a and b
-        a.DisqualifiedChannels |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedChannels)
+        a.DisqualifiedChannels
+        |> Seq.choose(fun aKv ->
+          Map.tryFind aKv.Key b.DisqualifiedChannels
+          |> Option.map(fun br ->
+            match aKv.Value with
+            | SwapDisqualifiedReason.LiquidityOk ->
+              // a and b are loopout/in pair, if one pair has LiquidityOk. than the other pair might have
+              // another reason. We want to prioritize that reason over LiquidityOk.
+              (aKv.Key, br)
+            | _ -> (aKv.Key, aKv.Value)
+          )
+        )
+        |> Map.ofSeq
       DisqualifiedPeers =
         // a peer is disqualified iff it is disqualified both a and b
-        a.DisqualifiedPeers |> Map.filter(fun k _v -> Map.containsKey k b.DisqualifiedPeers)
+        a.DisqualifiedPeers
+        |> Seq.choose(fun aKv ->
+          Map.tryFind aKv.Key b.DisqualifiedPeers
+          |> Option.map(fun br ->
+            match aKv.Value with
+            | SwapDisqualifiedReason.LiquidityOk ->
+              // a and b are loopout/in pair, if one pair has LiquidityOk. than the other pair might have
+              // another reason. We want to prioritize that reason over LiquidityOk.
+              (aKv.Key, br)
+            | _ -> (aKv.Key, aKv.Value)
+          )
+        )
+        |> Map.ofSeq
       OutSwaps = a.OutSwaps @ b.OutSwaps
       InSwaps = a.InSwaps @ b.InSwaps
     }
@@ -213,7 +237,7 @@ type Balances = {
 type SwapSizeRestrictions = ServerRestrictions
 
 [<AutoOpen>]
-module private Extensions =
+module internal AutoLoopManagerExtensions =
 
   /// calculateSwapAmount calculates amount for a swap based on thresholds.
   /// This function can be used for loop out or loop in, but the concept is the
@@ -223,7 +247,7 @@ module private Extensions =
   ///   liquidity. We aim for this liquidity to reach the threshold amount set.
   /// * reserve: this is the side of the channel(s) that we will move liquidity
   ///   away from. This may not drop below a certain reserve threshold
-  let private calculateSwapAmount
+  let calculateSwapAmount
     (targetAmount: Money)
     (reserveAmount: Money)
     (capacity: Money)
@@ -760,7 +784,7 @@ type SwapBuilder = {
       MaySwap = fun _ -> Task.FromResult(Ok())
       BuildSwap =
         fun
-          { Peer = peer; }
+          { Peer = peer; Channels = channelIds }
           amount
           pairId autoloop parameters -> taskResult {
         let! quote =
@@ -778,7 +802,9 @@ type SwapBuilder = {
           MaxSwapFee = quote.SwapFee |> ValueSome
           HtlcConfTarget = parameters.HTLCConfTarget.Value |> int |> ValueSome
           LastHop = peer.Value |> Some
-          ChannelId = None
+          ChannelId =
+            channelIds
+            |> Seq.tryExactlyOne
         }
         return
           SwapSuggestion.In(req)
@@ -971,7 +997,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         lnClient
           .ListChannels(ct)
       ct.ThrowIfCancellationRequested()
-      let peerToChannelBalance: Map<NodeId, Balances> =
+      let peerToBalance: Map<NodeId, Balances> =
         channels
         |> List.map(Balances.FromLndResponse)
         |> List.groupBy(fun b -> b.PubKey)
@@ -982,7 +1008,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
         |> List.map(fun c -> c.Id, c.NodeId |> NodeId)
         |> Map.ofList
       let peersWithRules =
-        peerToChannelBalance
+        peerToBalance
         |> Map.toSeq
         |> Seq.choose(fun (nodeId, balance) ->
           par.Rules.PeerRules

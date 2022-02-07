@@ -68,7 +68,14 @@ module private Constants =
     SwapDTO.LoopOutQuote.SweepMinerFee = Money.Satoshis(1L)
     SwapDTO.LoopOutQuote.SwapPaymentDest = peer1
     SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
-    SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(50L) }
+    SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(50L)
+  }
+
+  let testInQuote = {
+    SwapDTO.LoopInQuote.MinerFee = Money.Satoshis(10L)
+    SwapDTO.LoopInQuote.SwapFee = Money.Satoshis 5L
+  }
+
 
   let dummyAddr = BitcoinAddress.Create("bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m", Network.RegTest)
 
@@ -298,6 +305,7 @@ type LiquidityTest() =
             DummySwapServerClientParameters.Default
               with
               LoopOutQuote = fun _ -> testQuote |> Task.FromResult
+              LoopInQuote = fun _ -> testInQuote |> Task.FromResult
           }
       let dummyLnClientProvider =
         TestHelpers.GetDummyLightningClientProvider
@@ -547,8 +555,8 @@ type LiquidityTest() =
 
   static member TestSuggestSwapsTestData =
     seq[
-      ("no rules", [channel1], Rules.Zero, Error(AutoLoopError.NoRules))
-      let r = {
+      ("no rules", [channel1], Rules.Zero, defaultFeePPM, Error(AutoLoopError.NoRules))
+      let ruleWithChan1Rule = {
         Rules.Zero with
           ChannelRules = Map.ofSeq[(chanId1, chanRule)]
       }
@@ -557,9 +565,12 @@ type LiquidityTest() =
           with
           OutSwaps = [ chan1Rec ]
       }
-      ("loop out", [channel1], r, Ok expected)
-      let r = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId2, { ThresholdRule.MinimumIncoming = 10s<percent>; MinimumOutGoing = 10s<percent> })] }
-      ("no rule for the channel", [channel1], r, Ok (SwapSuggestions.Zero))
+      ("loop out", [channel1], ruleWithChan1Rule, defaultFeePPM, Ok expected)
+      let ruleWithChan2Rule = {
+        Rules.Zero with
+          ChannelRules = Map.ofSeq[(chanId2, { ThresholdRule.MinimumIncoming = 10s<percent>; MinimumOutGoing = 10s<percent> })]
+      }
+      ("no rule for the channel", [channel1], ruleWithChan2Rule, defaultFeePPM, Ok (SwapSuggestions.Zero))
       let channels = [
         { ListChannelResponse.NodeId = peer1
           Cap = 20000L |> Money.Satoshis
@@ -577,7 +588,7 @@ type LiquidityTest() =
           RemoteBalance = (5000L - 2000L) |> Money.Satoshis
           Id = chanId3 }
       ]
-      let r = {
+      let multiplePeerRules = {
         Rules.Zero
           with
           PeerRules = Map.ofSeq[
@@ -608,15 +619,56 @@ type LiquidityTest() =
           ]
           DisqualifiedPeers = Map.ofSeq[(peer2 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
       }
-      ("multiple peer rules", channels, r, Ok expected)
+      ("multiple peer rules", channels, multiplePeerRules, defaultFeePPM, Ok expected)
+
+      let multiplePeerRules = {
+        multiplePeerRules
+          with
+          PeerRules = Map.ofSeq[
+            (peer1 |> NodeId, { MinimumIncoming = 10s<percent>; MinimumOutGoing = 0s<percent> })
+            (peer2 |> NodeId, { MinimumIncoming = 40s<percent>; MinimumOutGoing = 50s<percent> })
+          ]
+      }
+      let channels =
+        channels
+        |> List.map(fun c ->
+          if c.NodeId <> peer2 then c else
+          {
+            c
+              with
+              Cap = 200_000L |> Money.Satoshis
+              LocalBalance = 99_999L |> Money.Satoshis
+              RemoteBalance = (200_000L - 99_999L) |> Money.Satoshis
+          }
+        )
+      let loopInExpected = {
+        SwapSuggestions.Zero
+          with
+          InSwaps = [
+            {
+              LoopInRequest.Amount = (200_000. * 0.05) |> int64 |> Money.Satoshis
+              ChannelId = chanId3 |> Some
+              LastHop = peer2 |> Some
+              Label = None
+              PairId = pairId.Reverse |> Some
+              MaxMinerFee = testInQuote.MinerFee |> ValueSome
+              MaxSwapFee = testInQuote.SwapFee |> ValueSome
+              HtlcConfTarget = pairId.Reverse.DefaultLoopInParameters.HTLCConfTarget.Value |> int |> ValueSome
+            }
+          ]
+          DisqualifiedPeers = Map.ofSeq[(peer1 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
+      }
+      ("multiple peer rules (loop in)", channels, multiplePeerRules, 60000L<ppm>, Ok loopInExpected)
     ]
     |> Seq.map(fun (name: string,
                     channels: ListChannelResponse list,
                     rules: Rules,
+                    feePPM: int64<ppm>,
                     r: Result<SwapSuggestions, AutoLoopError>) -> [|
       name |> box
       channels |> box
       rules |> box
+      feePPM |> box
       r |> box
     |])
 
@@ -625,14 +677,17 @@ type LiquidityTest() =
   member this.TestSuggestSwaps(name: string,
                                channels: ListChannelResponse list,
                                rules: Rules,
+                               feePPM: int64<ppm>,
                                expected: Result<SwapSuggestions, AutoLoopError>) =
-    let setup (services: IServiceCollection) =
+    let setup (_services: IServiceCollection) =
       ()
 
+    if name.Contains("loop in") |> not then Task.FromResult() else
     let parameters = {
       Parameters.Default SupportedCryptoCode.BTC
         with
         Rules = rules
+        FeeLimit = { FeePortion.PartsPerMillion = feePPM }
     }
     this.TestSuggestSwapsCore(name, setup, parameters, channels, expected)
 

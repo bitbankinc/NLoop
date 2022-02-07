@@ -13,6 +13,7 @@
     <Compile Include="Extensions.fs" />
     <Compile Include="ServerAPITest.fs" />
     <Compile Include="LiquidityTest.fs" />
+    <Compile Include="ThresholdRuleTests.fs" />
     <Compile Include="AutoLoopManagerTests.fs" />
     <Compile Include="IntegrationTests.fs" />
     <Compile Include="SwapBuilderTests.fs" />

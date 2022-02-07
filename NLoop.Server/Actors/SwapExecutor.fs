@@ -346,6 +346,8 @@ type SwapExecutor(
               channels
               |> Seq.filter(fun c -> c.NodeId = pk)
               |> Seq.map(fun c ->
+                // todo: do not add route hints for all possible channel.
+                // Instead we should decide which channel is the one we want payment through.
                 lnClient.GetRouteHints(c.Id, ct)
               )
               |> Task.WhenAll
