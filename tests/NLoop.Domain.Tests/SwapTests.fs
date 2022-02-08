@@ -410,9 +410,9 @@ type SwapDomainTests() =
         events |> getLastEvent
       let expected =
         if loopOut.AcceptZeroConf then
-          Swap.Event.ClaimTxPublished({ Txid = null }).Type
+          Swap.claim_tx_published
         else
-          Swap.Event.TheirSwapTxPublished({ TxHex = null }).Type
+          Swap.their_swap_tx_published
       Assert.Equal(expected, lastEvent.Data.Type)
 
     let genesis =
@@ -431,7 +431,7 @@ type SwapDomainTests() =
                       events |> Result.deref |> List.map(fun e -> e.Data))
       if loopOut.AcceptZeroConf then
         let lastEvent = events |> getLastEvent
-        let expected = Swap.Event.ClaimTxPublished({ Txid = null }).Type
+        let expected = Swap.claim_tx_published
         Assert.Equal(expected, lastEvent.Data.Type)
 
     let b2 =
@@ -449,7 +449,7 @@ type SwapDomainTests() =
         |> Result.deref
 
       let expected =
-        Swap.Event.ClaimTxPublished({ Txid = null }).Type
+        Swap.claim_tx_published
       Assert.Contains(expected, events |> List.map(fun e -> e.Data.Type))
 
     let claimTx =
@@ -639,7 +639,7 @@ type SwapDomainTests() =
     Assertion.isOk events
     let swapTx = Assert.Single(txBroadcasted)
     let lastEvent = events |> getLastEvent
-    Assert.Equal(Swap.Event.OurSwapTxPublished({ Fee = Money.Zero; TxHex = swapTx.ToHex(); HtlcOutIndex = 0u }).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.our_swap_tx_published, lastEvent.Data.Type)
 
     // act
     let b1 =
@@ -657,9 +657,9 @@ type SwapDomainTests() =
       |> commandsToEvents
     // assert
     Assert.Contains(e2 |> Result.deref,
-                    fun e -> e.Data.Type = (Swap.Event.OurSwapTxConfirmed { BlockHash = b1.Block.Header.GetHash(); TxId = uint256.Zero; HTlcOutIndex = 0u }).Type)
+                    fun e -> e.Data.Type = Swap.our_swap_tx_confirmed)
     let lastEvent = e2 |> getLastEvent
-    Assert.Equal(Swap.Event.RefundTxPublished({ TxId = uint256.Zero }).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.refund_tx_published, lastEvent.Data.Type)
 
     let b3 =
       let b = b2.CreateNext(pubkey3.WitHash.GetAddress(loopIn.QuoteAssetNetwork))
@@ -677,7 +677,7 @@ type SwapDomainTests() =
       |> commandsToEvents
       |> getLastEvent
     // assert
-    Assert.Equal(Swap.Event.FinishedByRefund({ Id = loopIn.Id }).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.finished_by_refund, lastEvent.Data.Type)
 
   [<Property(MaxTest=10)>]
   member this.TestLoopIn_Success(loopIn: LoopIn, testAltcoin: bool) =
@@ -750,7 +750,7 @@ type SwapDomainTests() =
     Assertion.isOk events
     let swapTx = Assert.Single(txBroadcasted) // swap tx and refund tx
     let lastEvent = events |> getLastEvent
-    Assert.Equal(Swap.Event.OurSwapTxPublished({ Fee = Money.Zero; TxHex = swapTx.ToHex(); HtlcOutIndex = 0u }).Type,
+    Assert.Equal(Swap.our_swap_tx_published,
                  lastEvent.Data.Type)
 
     let b0 =
@@ -783,5 +783,5 @@ type SwapDomainTests() =
       |> getLastEvent
 
     // assert
-    Assert.Equal(Swap.Event.FinishedSuccessfully( { Id = loopIn.Id }).Type, lastEvent.Data.Type)
+    Assert.Equal(Swap.finished_successfully, lastEvent.Data.Type)
 
