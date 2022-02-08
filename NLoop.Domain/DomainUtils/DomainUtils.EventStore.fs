@@ -3,7 +3,9 @@ namespace NLoop.Domain.Utils
 open System
 open System.Runtime.CompilerServices
 open System.Threading
+open System.Threading
 open System.Threading.Tasks
+open EventStore.ClientAPI
 open EventStore.ClientAPI
 open NLoop.Domain
 open FsToolkit.ErrorHandling
@@ -45,9 +47,10 @@ module private EventStoreHelpers =
 [<AbstractClass;Sealed;Extension>]
 type IEventStoreConnectionExtensions =
   [<Extension>]
-  static member ReadStreamEventsAsync(conn: IEventStoreConnection, streamId: StreamId) = taskResult {
+  static member ReadStreamEventsAsync(conn: IEventStoreConnection, streamId: StreamId, ?ct) = taskResult {
       let mutable currentSlice: StreamEventsSlice = null
       let mutable nextSliceStart = StreamPosition.Start |> int64
+      let _ct = defaultArg ct CancellationToken.None
       let arr = ResizeArray<_>()
       try
         // it is unlikely that specific entity has more than 200 events, so looping in this may be overkill.
@@ -68,13 +71,15 @@ type IEventStoreConnectionExtensions =
   }
 
 
+
   // todo: use asyncSeq (or grpc client)
   [<Extension>]
-  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType: string, serializer, ?ct: CancellationToken) = taskResult {
+  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType: string, serializer, eventFilter, ?ct: CancellationToken) = taskResult {
       let ct = defaultArg ct CancellationToken.None
       let mutable currentSlice: AllEventsSlice = null
       let mutable nextSliceStart = Position.Start
       let arr = ResizeArray<_>()
+      let eventFilter = defaultArg eventFilter (fun _ -> true)
       try
         while ((currentSlice |> isNull || currentSlice.IsEndOfStream |> not) && not <| ct.IsCancellationRequested) do
           let! r =
@@ -83,6 +88,7 @@ type IEventStoreConnectionExtensions =
           nextSliceStart <- currentSlice.NextPosition
           let! serializedEvents =
             currentSlice.Events
+            |> Seq.filter eventFilter
             |> Seq.filter(fun re -> re.OriginalStreamId.StartsWith(entityType))
             |> Seq.map SerializedRecordedEvent.FromEventStoreResolvedEvent
             |> Seq.toList
@@ -98,6 +104,14 @@ type IEventStoreConnectionExtensions =
         return! $"Error reading stream for entityType: {entityType}! \n%A{ex}" |> StoreError |> Error
   }
 
+  [<Extension>]
+  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType, serializer, since: DateTime, ?ct) =
+    let ct = defaultArg ct CancellationToken.None
+    conn.ReadAllEventsAsync(entityType, serializer, (Some (fun (re: ResolvedEvent) -> re.Event.Created > since)), ct)
+  [<Extension>]
+  static member ReadAllEventsAsync(conn: IEventStoreConnection, entityType, serializer, ?ct) =
+    let ct = defaultArg ct CancellationToken.None
+    conn.ReadAllEventsAsync(entityType, serializer, None, ct)
 module EventStore =
   open FSharp.Control.Tasks
 

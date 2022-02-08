@@ -166,13 +166,20 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       | Some s -> this.Execute(i, cmd, s)
       | None -> this.Execute(i, cmd)
 
-    member this.GetAllEntities(?ct: CancellationToken) = task {
+    member this.GetAllEntities(since, ?ct: CancellationToken) = task {
       let ct = defaultArg ct CancellationToken.None
-      let! events = getAllSwapEvents(ct)
-      let eventListToStateMap (l: RecordedEvent<_> list) =
+      let! events = getAllSwapEvents since ct
+      let eventListToStateMap (l: RecordedEvent<Swap.Event> list) =
         l
         |> List.groupBy(fun re -> re.StreamId)
-        |> List.map(fun (streamId, reList) -> streamId, reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute)
+        |> List.filter(fun (_streamId, reList) ->
+          reList |> List.isEmpty |> not &&
+            (reList.Head.Data.Type = Swap.new_loop_out_added || reList.Head.Data.Type = Swap.new_loop_in_added)
+        )
+        |> List.map(fun (streamId, reList) ->
+          streamId,
+          reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute
+        )
         |> Map.ofList
       return
         events

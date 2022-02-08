@@ -377,7 +377,7 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
       -> Task
 
   // todo: use asyncSeq
-  abstract member GetAllEntities: ?ct: CancellationToken -> Task<Result<Map<StreamId, 'TState>, StoreError>>
+  abstract member GetAllEntities: since: DateTime option * ?ct: CancellationToken -> Task<Result<Map<StreamId, 'TState>, StoreError>>
 
 [<RequireQualifiedAccess>]
 type Checkpoint =

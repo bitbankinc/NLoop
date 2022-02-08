@@ -96,7 +96,8 @@
             "schema": {
               "type": "string",
               "format": "date"
-            }
+            },
+            "example": "2021-01-30"
           }
         ],
         "responses": {
@@ -127,6 +128,38 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GetOngoingSwapResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cost/summary": {
+      "get": {
+        "tags": [
+          "cost"
+        ],
+        "description": "Get the summary of the cost we paid for swaps.",
+        "operationId": "summary",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "example": "2021-01-30"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetCostSummaryResponse"
                 }
               }
             }
@@ -628,20 +661,34 @@
       "Cost": {
         "type": "object",
         "properties": {
-          "server_onchain": {
+          "onchain_payment": {
             "type": "integer",
+            "description": "An on-chain amount we gained/lost through swap. This might be positive value iff in the case of loop out.",
             "format": "int64"
           },
-          "server_offchain": {
+          "offchain_payment": {
             "type": "integer",
+            "description": "An off-chain amount we gained/lost through swap. This might be positive value iff in the case of loop in.",
             "format": "int64"
           },
-          "onchain": {
+          "onchain_fee": {
             "type": "integer",
+            "description": "An on-chain miner fee we lost through swap. This value is always negative. The absolute value tends to get higher in case of loop-in, since we must create two txs in case of refund. And its swap tx is usually larger than the tx we create in case of loop-out.",
             "format": "int64"
           },
-          "offchain": {
+          "offchain_fee": {
             "type": "integer",
+            "description": "An off-chain routing fee we lost through swap. This value is always negative, and it is only for loop-out.",
+            "format": "int64"
+          },
+          "offchain_prepayment": {
+            "type": "integer",
+            "description": "An off-chain prepayment value for the swap. This value is always negative, and it is only for loop-out.",
+            "format": "int64"
+          },
+          "offchain_prepayment_fee": {
+            "type": "integer",
+            "description": "An off-chain prepayment routing fee for the swap. This value is always negative, and it is only for loop-out.",
             "format": "int64"
           }
         }
@@ -651,6 +698,43 @@
         "description": "list of swap",
         "items": {
           "type": "object"
+        }
+      },
+      "GetCostSummaryResponse": {
+        "type": "array",
+        "description": "list of possible swap server's and assets we have gained/lost so far.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "server_endpoint": {
+              "type": "string",
+              "description": "The endpoint of the server"
+            },
+            "costs": {
+              "type": "array",
+              "description": "Summary of the income/outcome with the swap.",
+              "items": {
+                "type": "object",
+                "description": "Units for each values are sats. negative value represents an amount we have lost. Positive means we have gained. You can just summerize everything to get the net income of the asset.",
+                "properties": {
+                  "crypto_code": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/cryptoCode"
+                      }
+                    ]
+                  },
+                  "cost": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/Cost"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "LoopOutResponse": {

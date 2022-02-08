@@ -124,9 +124,13 @@ type NLoopExtensions() =
           )
 
         )
-        .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp ct ->
+        .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp since ct ->
             let conn = sp.GetRequiredService<IEventStoreConnection>()
-            conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+            match since with
+            | Some date ->
+              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
+            | None ->
+              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
           )
         )
         |> ignore

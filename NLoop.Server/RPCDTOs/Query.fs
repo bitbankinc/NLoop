@@ -44,3 +44,19 @@ type ShortSwapSummary = {
 
 type GetSwapHistoryResponse = Map<string, ShortSwapSummary>
 type GetOngoingSwapResponse = Swap.State list
+
+[<Struct>]
+type CostSummary = {
+  [<JsonPropertyName "crypto_code">]
+  CryptoCode: SupportedCryptoCode
+
+  Cost: SwapCost
+}
+
+type GetCostSummaryResponse = {
+  [<JsonPropertyName "server_endpoint">]
+  ServerEndpoint: string
+
+  [<JsonPropertyName "costs">]
+  Costs: CostSummary[]
+}

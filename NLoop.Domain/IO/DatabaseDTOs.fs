@@ -13,40 +13,52 @@ open NLoop.Domain.Utils
 /// SwapCost is a breakdown of the final swap costs.
 type SwapCost = {
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  [<JsonPropertyName "server_onchain">]
-  ServerOnChain: Money
+  [<JsonPropertyName "onchain_payment">]
+  OnchainPayment: Money
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  [<JsonPropertyName "server_offchain">]
-  ServerOffChain: Money
+  [<JsonPropertyName "offchain_payment">]
+  OffchainPayment: Money
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  [<JsonPropertyName "onchain">]
-  OnChain: Money
+  [<JsonPropertyName "onchain_fee">]
+  OnchainFee: Money
 
   [<JsonConverter(typeof<MoneyJsonConverter>)>]
-  [<JsonPropertyName "offchain">]
-  OffChain: Money
+  [<JsonPropertyName "offchain_fee">]
+  OffchainFee: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "offchain_prepayment">]
+  OffchainPrepayment: Money
+
+  [<JsonConverter(typeof<MoneyJsonConverter>)>]
+  [<JsonPropertyName "offchain_prepayment_fee">]
+  OffchainPrepaymentFee: Money
 }
   with
   member this.OnChainTotal =
-    this.ServerOnChain +  this.OnChain
+    this.OnchainPayment +  this.OnchainFee
 
   member this.OffChainTotal =
-    this.ServerOffChain + this.OffChain
+    this.OffchainPayment + this.OffchainFee + this.OffchainPrepayment + this.OffchainPrepaymentFee
 
   static member (+) (a: SwapCost, b: SwapCost) = {
-    OffChain = a.OffChain + b.OffChain
-    ServerOnChain = a.ServerOnChain + b.ServerOnChain
-    ServerOffChain = a.ServerOffChain + b.ServerOffChain
-    OnChain = a.OnChain + b.OnChain
+    OffchainFee = a.OffchainFee + b.OffchainFee
+    OnchainPayment = a.OnchainPayment + b.OnchainPayment
+    OffchainPayment = a.OffchainPayment + b.OffchainPayment
+    OnchainFee = a.OnchainFee + b.OnchainFee
+    OffchainPrepayment = a.OffchainPrepayment + b.OffchainPrepayment
+    OffchainPrepaymentFee = a.OffchainPrepaymentFee + b.OffchainPrepaymentFee
   }
 
   static member Zero = {
-    ServerOnChain = Money.Zero
-    ServerOffChain = Money.Zero
-    OnChain = Money.Zero
-    OffChain = Money.Zero
+    OnchainPayment = Money.Zero
+    OffchainPayment = Money.Zero
+    OnchainFee = Money.Zero
+    OffchainFee = Money.Zero
+    OffchainPrepayment = Money.Zero
+    OffchainPrepaymentFee = Money.Zero
   }
 type LoopOut = {
   [<JsonConverter(typeof<SwapIdJsonConverter>)>]

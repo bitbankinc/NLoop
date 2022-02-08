@@ -1,6 +1,7 @@
 namespace NLoop.Server
 
 open System
+open System.Threading
 open EventStore.ClientAPI
 open Microsoft.AspNetCore.Http
 open Giraffe
@@ -8,6 +9,7 @@ open FSharp.Control.Tasks.Affine
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.Primitives
 open NLoop.Domain
+open NLoop.Domain.IO
 open NLoop.Domain.Utils
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
@@ -41,11 +43,11 @@ module QueryHandlers =
         return! json s next ctx
     }
 
-  let handleGetSwapHistory =
+  let private handleGetSwapHistoryCore (since: DateTime option) =
     fun(next: HttpFunc) (ctx: HttpContext) -> task {
       let actor = ctx.GetService<ISwapActor>()
       // todo: consider about cancellation
-      match! actor.GetAllEntities() with
+      match! actor.GetAllEntities(since) with
       | Error e ->
         return! error503 $"Failed to read events from DB\n {e}" next ctx
       | Ok entities ->
@@ -58,7 +60,7 @@ module QueryHandlers =
             | Swap.State.Out(_height, { Cost = cost })
             | Swap.State.In(_height, { Cost = cost }) ->
               (streamId.Value, ShortSwapSummary.OnGoing cost) |> Some
-            | Swap.State.Finished(cost, x) ->
+            | Swap.State.Finished(cost, x, _) ->
               (streamId.Value, ShortSwapSummary.FromDomainState cost x) |> Some
             )
             |> Option.map(fun (streamId, s) ->
@@ -70,6 +72,17 @@ module QueryHandlers =
           )
           |> Map.ofSeq
         return! json resp next ctx
+    }
+
+  let handleGetSwapHistory =
+    fun (next: HttpFunc) (ctx: HttpContext) -> task {
+      match ctx.TryGetDate("since") with
+      | Some(Error e) ->
+        return! errorBadRequest [e] next ctx
+      | Some (Ok since) ->
+        return! handleGetSwapHistoryCore (Some since) next ctx
+      | None ->
+        return! handleGetSwapHistoryCore None next ctx
     }
 
   let handleGetOngoingSwap =
@@ -84,3 +97,32 @@ module QueryHandlers =
       return! json resp next ctx
     }
 
+
+  let private handleGetCostSummaryCore (since: DateTime option) =
+    fun (next: HttpFunc) (ctx: HttpContext) -> task {
+      let actor = ctx.GetService<ISwapActor>()
+      match! actor.GetAllEntities since with
+      | Error e ->
+        return! error503 $"Failed to read events from DB\n {e}" next ctx
+      | Ok entities ->
+        let opts = ctx.GetService<IOptions<NLoopOptions>>()
+        let resp: GetCostSummaryResponse =
+          entities
+          |> Map.toSeq
+          |> Seq.map snd
+          |> SwapCost.foldSwapStates
+          |> Map.toArray
+          |> Array.map(fun (cc, cost) -> { CostSummary.Cost = cost; CryptoCode = cc })
+          |> fun a -> { GetCostSummaryResponse.Costs = a; ServerEndpoint = opts.Value.BoltzHost }
+        return! json resp next ctx
+    }
+  let handleGetCostSummary =
+    fun (next: HttpFunc) (ctx: HttpContext) -> task {
+      match ctx.TryGetDate("since") with
+      | Some(Error e) ->
+        return! errorBadRequest [e] next ctx
+      | Some (Ok since) ->
+        return! handleGetCostSummaryCore (Some since) next ctx
+      | None ->
+        return! handleGetCostSummaryCore None next ctx
+    }
