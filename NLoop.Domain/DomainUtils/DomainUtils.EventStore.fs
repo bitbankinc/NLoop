@@ -83,7 +83,8 @@ type IEventStoreConnectionExtensions =
       try
         while ((currentSlice |> isNull || currentSlice.IsEndOfStream |> not) && not <| ct.IsCancellationRequested) do
           let! r =
-            conn.ReadAllEventsForwardAsync(nextSliceStart, 200, false)
+            let filter = Filter.EventType.Prefix entityType
+            conn.FilteredReadAllEventsForwardAsync(position=nextSliceStart, maxCount=200, resolveLinkTos=false, filter=filter)
           currentSlice <- r
           nextSliceStart <- currentSlice.NextPosition
           let! serializedEvents =
