@@ -144,6 +144,7 @@ module Transactions =
         txb
           .SendEstimatedFees(fee)
           .SendAll(refundAddress)
+          .SetOptInRBF(true)
           .SetLockTime(timeout.Value |> LockTime)
           .AddKeys(refundKey)
           .BuildTransaction(false)

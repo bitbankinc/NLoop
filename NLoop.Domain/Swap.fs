@@ -570,7 +570,7 @@ module Swap =
             [NewTipReceived { BlockHash = newBlockHash; Height= height}] |> enhance |> Ok
           elif oldHeight + one < height then
             assert false
-            $"Bogus block height. The block has been skipped. This should never happen."
+            $"Bogus block height. The block has been skipped. This should never happen. (oldHeight {oldHeight}) (newHeight {height}) "
             |> APIMisuseError |> Error
           else
             failwith "unreachable"
