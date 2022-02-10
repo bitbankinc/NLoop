@@ -22,7 +22,7 @@ type RPCLongPollingBlockchainListener(
   inherit BlockchainListener(loggerFactory, getBlockchainClient, cc, getNetwork, actor)
   let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
-  let mutable _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource()
+  let mutable _stoppingCts = new CancellationTokenSource()
   let mutable client: IBlockChainClient option = None
 
   member private this.ExecuteAsync(ct) = unitTask {
