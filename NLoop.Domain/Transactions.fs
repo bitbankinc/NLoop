@@ -51,6 +51,14 @@ module Transactions =
             .SendAllRemaining(output)
             .SetOptInRBF(true)
             .BuildTransaction(false)
+        // TransactionBuilder does not support non-standard script as we use here.
+        // Thus we should not sign by passing true to the BuildTransaction.
+        // Instead, we have to sign manually by Tx.SignInput(key, coins),
+        if sc.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey then
+          // Building Transaction without signature will result to empty ScriptSig in case of p2sh-p2wsh.
+          // Thus creating manually here.
+          let script = Script([| Op.op_Implicit OpcodeType.OP_0; Op.GetPushOp(redeemScript.WitHash.ToBytes())|])
+          tx.Inputs.[0].ScriptSig <- Script([|Op.GetPushOp(script.ToBytes())|])
         let signature = tx.SignInput(key, sc)
         let witnessItems =
           WitScript(Op.GetPushOp(signature.ToBytes())) +
@@ -148,6 +156,14 @@ module Transactions =
           .SetLockTime(timeout.Value |> LockTime)
           .AddKeys(refundKey)
           .BuildTransaction(false)
+      // TransactionBuilder does not support non-standard script as we use here.
+      // Thus we should not sign by passing true to the BuildTransaction.
+      // Instead, we have to sign manually by Tx.SignInput(key, coins),
+      if sc.TxOut.ScriptPubKey = redeemScript.WitHash.ScriptPubKey.Hash.ScriptPubKey then
+        // Building Transaction without signature will result to empty ScriptSig in case of p2sh-p2wsh.
+        // Thus creating manually here.
+        let script = Script([| Op.op_Implicit OpcodeType.OP_0; Op.GetPushOp(redeemScript.WitHash.ToBytes())|])
+        tx.Inputs.[0].ScriptSig <- Script([|Op.GetPushOp(script.ToBytes())|])
       let signature = tx.SignInput(refundKey, sc)
       let witnessItems =
         WitScript(Op.GetPushOp(signature.ToBytes())) +
