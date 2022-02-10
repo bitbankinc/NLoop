@@ -68,6 +68,10 @@ module App =
             route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
             routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
         ])
+        subRoute "/cost" (choose [
+          GET >=>
+            route "/summary" >=> QueryHandlers.handleGetCostSummary
+        ])
         subRoute "/auto" (choose [
           GET >=>
             route "/suggest" >=> (AutoLoopHandlers.suggestSwaps None)

@@ -71,7 +71,7 @@ module Swap =
     | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
     | In of blockHeight: BlockHeight * LoopIn
-    | Finished of finalCost: SwapCost * FinishedState
+    | Finished of finalCost: SwapCost * FinishedState * group: Group
     with
     static member Zero = HasNotStarted
 
@@ -80,7 +80,7 @@ module Swap =
       | HasNotStarted _ -> SwapCost.Zero
       | Out(_, { Cost = cost })
       | In(_, { Cost = cost })
-      | Finished(cost, _) -> cost
+      | Finished(cost, _, _) -> cost
 
   // ------ command -----
 
@@ -256,6 +256,32 @@ module Swap =
     Data: byte[]
   }
 
+  let [<Literal>] new_loop_out_added = "new_loop_out_added"
+  let [<Literal>] claim_tx_published = "claim_tx_published"
+  let [<Literal>] offchain_offer_started = "offchain_offer_started"
+  let [<Literal>] offchain_offer_resolved = "offchain_offer_resolved"
+  let [<Literal>] claim_tx_confirmed =  "claim_tx_confirmed"
+  let [<Literal>] prepay_finished =  "prepay_finished"
+  let [<Literal>] their_swap_tx_published = "their_swap_tx_published"
+  let [<Literal>] offchain_payment_received = "offchain_payment_received"
+  let [<Literal>] their_swap_tx_confirmed_first_time = "their_swap_tx_confirmed_first_time"
+
+  let [<Literal>] new_loop_in_added =  "new_loop_in_added"
+  let [<Literal>] our_swap_tx_published =    "our_swap_tx_published"
+  let [<Literal>] our_swap_tx_confirmed  =  "our_swap_tx_confirmed"
+  let [<Literal>] refund_tx_published    =  "refund_tx_published"
+  let [<Literal>] refund_tx_confirmed   =   "refund_tx_confirmed"
+  let [<Literal>] success_tx_confirmed  =   "success_tx_confirmed"
+
+  let [<Literal>] new_tip_received      =   "new_tip_received"
+  let [<Literal>] block_unconfirmed     =   "block_unconfirmed"
+
+  let [<Literal>] finished_successfully =   "finished_successfully"
+  let [<Literal>] finished_by_refund    =   "finished_by_refund"
+  let [<Literal>] finished_by_error     =   "finished_by_error"
+  let [<Literal>] finished_by_timeout   =   "finished_by_timeout"
+  let [<Literal>] unknown_tag_event =    "unknown_tag_event"
+
   /// in Event-Sourcing system, there is no DB migration.
   /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
   /// We use json serializer and record types to achieve this goal. json serializer
@@ -364,32 +390,32 @@ module Swap =
 
     member this.Type =
       match this with
-      | NewLoopOutAdded _ -> "new_loop_out_added"
-      | ClaimTxPublished _ -> "claim_tx_published"
-      | OffChainOfferStarted _ -> "offchain_offer_started"
-      | OffchainOfferResolved _ -> "offchain_offer_resolved"
-      | ClaimTxConfirmed _ -> "claim_tx_confirmed"
-      | PrePayFinished _ -> "prepay_finished"
-      | TheirSwapTxPublished _ -> "their_swap_tx_published"
-      | OffChainPaymentReceived _ -> "offchain_payment_received"
-      | TheirSwapTxConfirmedFirstTime _ -> "their_swap_tx_confirmed_first_time"
+      | NewLoopOutAdded _ -> new_loop_out_added
+      | ClaimTxPublished _ -> claim_tx_published
+      | OffChainOfferStarted _ -> offchain_offer_started
+      | OffchainOfferResolved _ -> offchain_offer_resolved
+      | ClaimTxConfirmed _ -> claim_tx_confirmed
+      | PrePayFinished _ -> prepay_finished
+      | TheirSwapTxPublished _ -> their_swap_tx_published
+      | OffChainPaymentReceived _ -> offchain_payment_received
+      | TheirSwapTxConfirmedFirstTime _ -> their_swap_tx_confirmed_first_time
 
-      | NewLoopInAdded _ -> "new_loop_in_added"
-      | OurSwapTxPublished _ -> "our_swap_tx_published"
-      | OurSwapTxConfirmed _ -> "our_swap_tx_confirmed"
-      | RefundTxPublished _ -> "refund_tx_published"
-      | RefundTxConfirmed _ -> "refund_tx_confirmed"
-      | SuccessTxConfirmed _ -> "success_tx_confirmed"
+      | NewLoopInAdded _ -> new_loop_in_added
+      | OurSwapTxPublished _ -> our_swap_tx_published
+      | OurSwapTxConfirmed _ -> our_swap_tx_confirmed
+      | RefundTxPublished _ -> refund_tx_published
+      | RefundTxConfirmed _ -> refund_tx_confirmed
+      | SuccessTxConfirmed _ -> success_tx_confirmed
 
-      | NewTipReceived _ -> "new_tip_received"
-      | BlockUnConfirmed _ -> "block_unconfirmed"
+      | NewTipReceived _ -> new_tip_received
+      | BlockUnConfirmed _ -> block_unconfirmed
 
-      | FinishedSuccessfully _ -> "finished_successfully"
-      | FinishedByRefund _ -> "finished_by_refund"
-      | FinishedByError _ -> "finished_by_error"
-      | FinishedByTimeout _ -> "finished_by_timeout"
+      | FinishedSuccessfully _ -> finished_successfully
+      | FinishedByRefund _ -> finished_by_refund
+      | FinishedByError _ -> finished_by_error
+      | FinishedByTimeout _ -> finished_by_timeout
 
-      | UnknownTagEvent _ -> "unknown_version_event"
+      | UnknownTagEvent _ -> unknown_tag_event
     member this.ToEventSourcingEvent effectiveDate source : ESEvent<Event> =
       {
         ESEvent.Meta = { EventMeta.SourceName = source; EffectiveDate = effectiveDate }
@@ -544,7 +570,7 @@ module Swap =
             [NewTipReceived { BlockHash = newBlockHash; Height= height}] |> enhance |> Ok
           elif oldHeight + one < height then
             assert false
-            $"Bogus block height. The block has been skipped. This should never happen."
+            $"Bogus block height. The block has been skipped. This should never happen. (oldHeight {oldHeight}) (newHeight {height}) "
             |> APIMisuseError |> Error
           else
             failwith "unreachable"
@@ -871,39 +897,43 @@ module Swap =
         return! UnExpectedError ex |> Error
     }
 
-  let private updateCost (state: State) (event: Event) (cost: SwapCost) =
+  let updateCost (state: State) (event: Event) (cost: SwapCost) =
     match event, state with
     // loop out
-    | PrePayFinished { Result = { RoutingFee = fee; AmountPayed = amount } }, Out(_, x) ->
+    | PrePayFinished { Result = { RoutingFee = fee; AmountPayed = amount } }, Out _ ->
+      { cost
+          with
+          OffchainPrepayment = - amount.ToMoney()
+          OffchainPrepaymentFee = - fee.ToMoney()
+         }
+    | OffchainOfferResolved { Result = { RoutingFee = fee; AmountPayed = amount } }, Out _ ->
       { cost with
-          OffChain = x.Cost.OffChain + fee.ToMoney()
-          ServerOffChain = x.Cost.ServerOffChain + amount.ToMoney() }
-    | OffchainOfferResolved { Result = { RoutingFee = fee; AmountPayed = amount } }, Out(_, x) ->
-      { cost with
-          OffChain = x.Cost.OffChain + fee.ToMoney()
-          ServerOffChain = x.Cost.ServerOffChain + amount.ToMoney() }
+          OffchainFee = - fee.ToMoney()
+          OffchainPayment = - amount.ToMoney() }
     | ClaimTxConfirmed { SweepAmount = sweepTxAmount }, Out(_, x) ->
       let swapTxAmount = x.OnChainAmount
       { cost
           with
-          ServerOnChain = x.Cost.ServerOnChain - sweepTxAmount
-          OnChain = sweepTxAmount - swapTxAmount
+          OnchainPayment = sweepTxAmount
+          OnchainFee = - (swapTxAmount - sweepTxAmount)
           }
-
     // loop in
     | OurSwapTxPublished { Fee = fee }, In(_, x) ->
-      { x.Cost with OnChain = fee }
-    | SuccessTxConfirmed { HTLCValue = htlcAmount }, In(_, x) ->
-      { x.Cost with ServerOnChain = x.Cost.ServerOnChain + htlcAmount }
+      let swapTx, htlcOutIndex = x.SwapTxInfo.Value
+      { cost with
+          OnchainFee = - fee
+          OnchainPayment = - swapTx.Outputs.[htlcOutIndex].Value  }
     | RefundTxConfirmed { Fee =  fee }, In(_, x) ->
-      { x.Cost with OnChain = x.Cost.OnChain + fee }
-    | OffChainPaymentReceived { Amount = amt }, In(_, x) ->
-      { x.Cost with ServerOffChain = x.Cost.ServerOffChain - amt; }
+      let refundValue = - x.Cost.OnchainPayment - fee
+      { cost with
+          OnchainFee = x.Cost.OnchainFee - fee
+          OnchainPayment = refundValue  }
+    | OffChainPaymentReceived { Amount = amt }, In _ ->
+      { cost with OffchainPayment = amt; }
     | x -> failwith $"Unreachable! %A{x}"
 
   let applyChanges
     (state: State) (event: Event) =
-    let updateCost = updateCost state event
     match event, state with
     | NewLoopOutAdded { Height = h; LoopOut = x }, HasNotStarted ->
       Out (h, x)
@@ -919,39 +949,50 @@ module Swap =
       Out(h, { x with SwapTxHeight = Some item.Height; SwapTxHex = swapTxHex })
     | PrePayFinished _, Out(h, x) ->
       Out(h, { x with
-                 Cost = updateCost x.Cost })
+                 Cost = updateCost state event x.Cost })
     | OffchainOfferResolved _, Out(h, x) ->
       Out(h, { x with
                  IsOffchainOfferResolved = true
-                 Cost = updateCost x.Cost })
+                 Cost = updateCost state event x.Cost })
     | ClaimTxConfirmed { TxId = txid }, Out(h, x) ->
-      let cost = updateCost x.Cost
+      let cost = updateCost state event x.Cost
       Out(h, { x with IsClaimTxConfirmed = true; ClaimTransactionId = Some txid; Cost = cost })
     | NewLoopInAdded { Height = h; LoopIn = x }, HasNotStarted ->
       In (h, x)
-    | OurSwapTxPublished { Fee = fee; TxHex = txHex; HtlcOutIndex = vOut}, In(h, x) ->
-      let cost = { x.Cost with OnChain = fee }
-      In (h, { x with SwapTxInfoHex = Some { TxHex = txHex; N = vOut }; Cost = cost })
+    | OurSwapTxPublished { TxHex = txHex; HtlcOutIndex = vOut}, In(h, x) ->
+      let nextState = { x with SwapTxInfoHex = Some { TxHex = txHex; N = vOut }; }
+      let cost = updateCost (In(h, nextState)) event nextState.Cost
+      In (h, { nextState with Cost = cost  })
     | RefundTxPublished { TxId = txid }, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
     | SuccessTxConfirmed _, In(h, x) ->
-      In(h, { x with Cost = updateCost x.Cost; IsOurSuccessTxConfirmed = true })
+      In(h, { x with IsOurSuccessTxConfirmed = true })
     | RefundTxConfirmed _, In(h, x) ->
-      In(h, { x with Cost = updateCost x.Cost })
+      In(h, { x with Cost = updateCost state event x.Cost })
     | OffChainPaymentReceived _, In(h, x) ->
-      In(h, { x with Cost = updateCost x.Cost; IsOffChainPaymentReceived = true })
+      In(h, { x with Cost = updateCost state event x.Cost; IsOffChainPaymentReceived = true })
 
-    | FinishedByError { Error = err }, In(_, { Cost = cost })
-    | FinishedByError { Error = err }, Out(_, { Cost = cost }) ->
-      Finished(cost, FinishedState.Errored(err))
-    | FinishedSuccessfully _, Out (_ ,{ Cost = cost })
-    | FinishedSuccessfully _, In(_, { Cost = cost }) ->
-      Finished(cost, FinishedState.Success)
-    | FinishedByRefund _, In (_h, { Cost = cost; RefundTransactionId = Some txid }) ->
-      Finished(cost, FinishedState.Refunded(txid))
-    | FinishedByTimeout { Reason = reason }, Out(_, { Cost = cost })
-    | FinishedByTimeout { Reason = reason }, In(_, { Cost = cost }) ->
-      Finished(cost, FinishedState.Timeout(reason))
+    | FinishedByError { Error = err }, In(_, { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.In; PairId = pairId }
+      Finished(cost, FinishedState.Errored(err), group)
+    | FinishedByError { Error = err }, Out(_, { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.Out; PairId = pairId }
+      Finished(cost, FinishedState.Errored(err), group)
+    | FinishedSuccessfully _, Out (_ , { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.Out; PairId = pairId }
+      Finished(cost, FinishedState.Success, group)
+    | FinishedSuccessfully _, In(_, { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.In; PairId = pairId }
+      Finished(cost, FinishedState.Success, group)
+    | FinishedByRefund _, In (_h, { Cost = cost; RefundTransactionId = Some txid; PairId = pairId }) ->
+      let group = { Category = Category.In; PairId = pairId }
+      Finished(cost, FinishedState.Refunded(txid), group)
+    | FinishedByTimeout { Reason = reason }, Out(_, { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.Out; PairId = pairId }
+      Finished(cost, FinishedState.Timeout(reason), group)
+    | FinishedByTimeout { Reason = reason }, In(_, { Cost = cost; PairId = pairId }) ->
+      let group = { Category = Category.In; PairId = pairId }
+      Finished(cost, FinishedState.Timeout(reason), group)
     | NewTipReceived { Height = h }, Out(_, x) ->
       Out(h, x)
     | NewTipReceived { Height = h }, In(_, x) ->
@@ -1005,3 +1046,50 @@ module Swap =
     getRepository store
     |> Handler.Create aggr
 
+[<RequireQualifiedAccess>]
+module SwapCost =
+  let split (group: Swap.Group) (cost: SwapCost) =
+    let onchainCost =
+      {
+        SwapCost.Zero
+          with
+            OnchainPayment = cost.OnchainPayment
+            OnchainFee = cost.OnchainFee
+      }
+    let offChainCost =
+      {
+        SwapCost.Zero
+          with
+            OffchainPayment = cost.OffchainPayment
+            OffchainFee = cost.OffchainFee
+            OffchainPrepayment = cost.OffchainPrepayment
+            OffchainPrepaymentFee = cost.OffchainPrepaymentFee
+      }
+    ((group.OnChainAsset, onchainCost), (group.OffChainAsset, offChainCost))
+
+  let foldSwapStates (states: Swap.State seq) =
+      states
+      |> Seq.choose(fun state ->
+        (match state with
+        | Swap.State.HasNotStarted -> None
+        | Swap.State.Out(_height, { Cost = cost; PairId = pairId }) ->
+          let group = { Swap.Group.Category = Swap.Category.Out; Swap.Group.PairId = pairId }
+          cost
+          |> split group
+          |> Some
+        | Swap.State.In(_height, { Cost = cost; PairId = pairId }) ->
+          let group = { Swap.Group.Category = Swap.Category.In; Swap.Group.PairId = pairId }
+          cost
+          |> split group
+          |> Some
+        | Swap.State.Finished(cost, _x, group) ->
+          cost
+          |> split group
+          |> Some
+        )
+      )
+      |> Seq.fold(fun acc ((onchainAsset, onchainCost), (offChainAsset, offChainCost)) ->
+          acc
+          |> Map.change onchainAsset (function | Some c -> Some (onchainCost + c) | None -> Some onchainCost)
+          |> Map.change offChainAsset (function | Some c -> Some (offChainCost + c) | None -> Some offChainCost)
+        ) Map.empty<SupportedCryptoCode, SwapCost>

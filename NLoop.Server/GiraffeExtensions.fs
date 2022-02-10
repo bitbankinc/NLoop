@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open System
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
 open DotNetLightning.Utils
@@ -29,6 +30,14 @@ module CustomHandlers =
       match this.Items.TryGetValue($"{cc}-BlockHeight") with
       | false, _ -> failwithf "Unreachable! could not get block height for %A" cc
       | true, v -> v :?> BlockHeight
+
+    member this.TryGetDate(arg: string) =
+      this.TryGetQueryStringValue arg
+      |> Option.map(fun s ->
+        match DateTime.TryParse s with
+        | true, r -> (Ok r)
+        | _ -> Error $"Invalid datetime format ({s}) for parameter {arg}"
+      )
 
   let inline internal error503 e =
     setStatusCode StatusCodes.Status503ServiceUnavailable

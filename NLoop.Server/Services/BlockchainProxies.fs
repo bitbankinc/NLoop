@@ -21,9 +21,20 @@ type BitcoinRPCBroadcaster(getClient: GetBlockchainClient, logger: ILogger<Bitco
   interface IBroadcaster with
     member this.BroadcastTx(tx, cryptoCode) = unitTask {
       let cli = getClient(cryptoCode)
-      logger.LogInformation($"Broadcasting Transaction: {tx.GetWitHash()}")
-      let! _ = cli.SendRawTransaction(tx)
-      ()
+      logger.LogInformation("Broadcasting Transaction. Id: {TxHash}", tx.GetHash())
+      logger.LogDebug("Broadcasting Transaction. {Tx}", tx.ToHex())
+      try
+        let! _ = cli.SendRawTransaction(tx)
+        ()
+      with
+      | :? RPCException as ex when ex.Message.Contains "insufficient fee, rejecting replacement" ->
+        // failed to bump in RBF, do nothing.
+        logger.LogWarning("Failed to bump {Tx}, insufficient fee,", tx.ToHex())
+        ()
+      | :? RPCException as ex when ex.Message.Contains "txn-mempool-conflict" ->
+        // same tx already in mempool, when RBF disabled, do nothing.
+        logger.LogWarning("Failed to broadcast {Tx}, tx already in mempool", tx.ToHex())
+        ()
     }
 
 type RPCFeeEstimator(getClient: GetBlockchainClient, logger: ILogger<RPCFeeEstimator>) =

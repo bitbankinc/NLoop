@@ -336,7 +336,7 @@ type TestHelpers =
           failwith "todo"
         member this.Execute(swapId, msg, source) =
           p.Execute(swapId, msg, source); Task.CompletedTask
-        member this.GetAllEntities ct =
+        member this.GetAllEntities(_since, _ct) =
           failwith "todo"
     }
 
@@ -409,7 +409,7 @@ type TestHelpers =
       .AddSingleton<BindingContext>(BindingContext(p.Parse(""))) // dummy for NLoop to not throw exception in `BindCommandLine`
       .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider())
       .AddSingleton<IFeeEstimator>(TestHelpers.GetDummyFeeEstimator())
-      .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ct -> TaskResult.retn([])))
+      .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun _ _ _ct -> TaskResult.retn([])))
       .AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance)
       .AddSingleton<IWalletClient>(TestHelpers.GetDummyWalletClient())
       .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
