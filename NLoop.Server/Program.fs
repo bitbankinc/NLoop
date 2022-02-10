@@ -149,7 +149,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(test) |> ignore
+      services.AddNLoopServices(test)
 
       if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -190,7 +190,11 @@ module Main =
       let opts =
         let sp = builder.Services.BuildServiceProvider()
         sp.GetRequiredService<IOptions<NLoopOptions>>()
-      let filePath = Path.Combine(opts.Value.DataDirNetwork, "nloop.log")
+
+      let filePath =
+        let date = DateTimeOffset.Now.ToString("yyyy-MM-dd")
+        let logFile = $"{date}-nloop.log"
+        Path.Combine(opts.Value.DataDirNetwork, logFile)
       builder
         .AddFile(filePath, configureFileLogging)
         .AddConfiguration(ctx.Configuration.GetSection("Logging"))
@@ -198,6 +202,7 @@ module Main =
         |> ignore
 
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
+    builder.AddInMemoryCollection(Constants.DefaultLoggingSettings) |> ignore
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
     Directory.CreateDirectory(Constants.HomeDirectoryPath) |> ignore
     let iniFile = Path.Join(Constants.HomeDirectoryPath, "nloop.conf")
@@ -210,7 +215,7 @@ module Main =
       .AddEnvironmentVariables(prefix="NLOOP_") |> ignore
     ()
 
-  let configureHostBuilder (hostBuilder: IHostBuilder) =
+  let configureHostBuilder  (hostBuilder: IHostBuilder) =
     hostBuilder.ConfigureAppConfiguration(configureConfig)
       .ConfigureWebHostDefaults(
         fun webHostBuilder ->
