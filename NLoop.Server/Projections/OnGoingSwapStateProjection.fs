@@ -20,6 +20,13 @@ type IOnGoingSwapStateProjection =
   abstract member State: Map<StreamId, StartHeight * Swap.State>
   abstract member FinishCatchup: Task
 
+[<AutoOpen>]
+module private OnGoingSwapStateProjectionHelpers =
+  let mustBePublishedOnStartup(event: Swap.Event): bool =
+    match event with
+    | Swap.Event.NewTipReceived _ -> false
+    | _ -> true
+
 /// Create Swap Projection with Catch-up subscription.
 /// It will emit RecordedEvent<Swap.Event> through EventAggregator.
 /// But in catch-up process, it will hold emitting and emits only for those which has not yet completed
@@ -79,7 +86,8 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
             log.LogTrace($"Publishing RecordedEvent {r}")
             eventAggregator.Publish<RecordedEvent<Swap.Event>> r
           else
-            ongoingEvents.Add r
+            if r.Data |> mustBePublishedOnStartup then
+              ongoingEvents.Add r
         with
         | ex -> log.LogCritical $"{ex}"
     }
