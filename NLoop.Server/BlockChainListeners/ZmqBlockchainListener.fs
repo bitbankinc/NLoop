@@ -55,17 +55,26 @@ type ZmqClient(logger: ILogger<ZmqClient>, address) =
       sock.Subscribe bTypes.Topic
     sock.Connect <| address
 
-  member this.StartListening onBlock =
-    _executingTask <- Task.Factory.StartNew(this.WorkerThread onBlock, TaskCreationOptions.LongRunning)
+  member this.StartListening(onBlock: OnBlock, ct: CancellationToken) =
+    _executingTask <-
+      Task.Factory.StartNew(this.WorkerThread (onBlock, ct), ct, TaskCreationOptions.LongRunning, TaskScheduler.Default)
     Task.CompletedTask
 
   member private this.WorkerThread (onBlock: OnBlock, ct: CancellationToken) () =
-    while not <| ct.IsCancellationRequested do
-      let m = sock.ReceiveMultipartMessage(3)
-      let topic, body, _sequence = (m.Item 0), (m.Item 1), (m.Item 2)
-      if topic.Buffer = rawblockB then
-        let b = Block.Parse(body.Buffer |> hex.EncodeData, Network.RegTest)
-        onBlock b
+    try
+      while not <| ct.IsCancellationRequested do
+        let m = sock.ReceiveMultipartMessage(3)
+        let topic, body, _sequence = (m.Item 0), (m.Item 1), (m.Item 2)
+        if topic.Buffer = rawblockB then
+          let b = Block.Parse(body.Buffer |> hex.EncodeData, Network.RegTest)
+          onBlock b
+    with
+    | :? OperationCanceledException ->
+      ()
+    | ex ->
+      logger.LogError(ex, "Error in zmq worker thread")
+      raise <| ex
+
 
   member this.IsConnected(t: TimeSpan) =
     let mutable m = null

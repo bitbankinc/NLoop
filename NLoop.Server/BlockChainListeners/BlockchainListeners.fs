@@ -89,6 +89,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
       swapIdToRegisterOnStartup.Clear()
 
       startupCompletion.SetResult()
+      logger.LogDebug "Finished starting blockchain listeners"
     }
 
     member this.StopAsync(cancellationToken) = unitTask {

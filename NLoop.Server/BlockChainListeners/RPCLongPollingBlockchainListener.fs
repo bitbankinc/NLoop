@@ -22,19 +22,25 @@ type RPCLongPollingBlockchainListener(
   inherit BlockchainListener(loggerFactory, getBlockchainClient, cc, getNetwork, actor)
   let logger = loggerFactory.CreateLogger<RPCLongPollingBlockchainListener>()
   let mutable _executingTask = null
-  let mutable _stoppingCts = null
+  let mutable _stoppingCts = CancellationTokenSource.CreateLinkedTokenSource()
   let mutable client: IBlockChainClient option = None
 
   member private this.ExecuteAsync(ct) = unitTask {
     while true do
-      let! tip = client.Value.GetBestBlock(ct)
-      do! this.OnBlock(tip.Block, getRewindLimit, ct)
-      do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
+      try
+        let! tip = client.Value.GetBestBlock(ct)
+        do! this.OnBlock(tip.Block, getRewindLimit, ct)
+        do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
+      with
+      | :? OperationCanceledException ->
+        ()
+      | ex ->
+        logger.LogError(ex, "Error when getting the best block from the Blockchain ({CryptoCode})", cc)
+        do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
   }
 
   interface IHostedService with
     member this.StartAsync(_cancellationToken) = unitTask {
-      _stoppingCts <- CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken)
       try
         client <- getBlockchainClient(cc) |> Some
         let! _ = client.Value.GetBlockChainInfo()
@@ -60,6 +66,7 @@ type RPCLongPollingBlockchainListener(
       return ()
     }
     member this.StopAsync(_cancellationToken) = unitTask {
+      logger.LogInformation $"Stopping {nameof(RPCLongPollingBlockchainListener)} ..."
       if _executingTask = null then () else
       try
         _stoppingCts.Cancel()
