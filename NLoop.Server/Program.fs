@@ -196,8 +196,8 @@ module Main =
         let logFile = $"{date}-nloop.log"
         Path.Combine(opts.Value.DataDirNetwork, logFile)
       builder
-        .AddFile(filePath, configureFileLogging)
         .AddConfiguration(ctx.Configuration.GetSection("Logging"))
+        .AddFile(filePath, configureFileLogging)
         .SetMinimumLevel(LogLevel.Debug)
         |> ignore
 

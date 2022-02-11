@@ -33,6 +33,7 @@ module Constants =
       ("System.Net.Http", "Warning")
       ("Microsoft", "Information")
       ("Grpc", "Debug")
+      ("Giraffe.Middleware.GiraffeMiddleware", "Information")
     ]
 #else
     [
@@ -40,6 +41,7 @@ module Constants =
       ("System.Net.Http", "Warning")
       ("Microsoft", "Warning")
       ("Grpc", "Debug")
+      ("Giraffe.Middleware.GiraffeMiddleware", "Information")
     ]
 #endif
     |> Seq.map(fun (a, b) -> $"Logging:LogLevel:{a}", b) |> dict :> _
