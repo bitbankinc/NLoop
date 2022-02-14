@@ -16,6 +16,10 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 * Minimize the direct interaction against the server and instead get the information from the blockchain as much as possible.
 * As an real-world example of F#/ASP.NET/DDD/EventSourcing
 
+### Caution:
+
+*NLoop is an open beta: Please use at your own risk. we may introduce backward incompatible changes.*
+
 ## How to
 
 ### Quick start

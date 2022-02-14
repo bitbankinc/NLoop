@@ -25,8 +25,8 @@ type RPCLongPollingBlockchainListener(
   let mutable _stoppingCts = new CancellationTokenSource()
   let mutable client: IBlockChainClient option = None
 
-  member private this.ExecuteAsync(ct) = unitTask {
-    while true do
+  member private this.ExecuteAsync(ct: CancellationToken) = unitTask {
+    while not <| ct.IsCancellationRequested do
       try
         let! tip = client.Value.GetBestBlock(ct)
         do! this.OnBlock(tip.Block, getRewindLimit, ct)
