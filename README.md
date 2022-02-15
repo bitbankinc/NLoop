@@ -1,5 +1,7 @@
 # NLoop: Generic Lightning Loop
 
+![nloop-logo](./images/logo.png)
+
 ## What is NLoop?
 
 It is a submarine swap client against the [boltz-backend](https://github.com/BoltzExchange/boltz-backend)
@@ -42,20 +44,9 @@ and run with `--help` to see the possible configuration option.
 Probably the best way to check its behaviour is to run it in the regtest.
 Check the following guide for how-to.
 
-### How to build in master
-
-We recommend to use a docker for testing the master version. (To avoid issues of dotnet sdk version incompatibility etc.)
-e.g.
-
-```sh
-docker build -f NLoop.Server/Dockerfile . -t nloopd_master
-docker run nloopd_master --help
-```
-
-### How to try `nloopd` with local docker-compose environment
+### How to try `nloopd` with local docker-compose environment in regtest.
 
 Check [README.md in test project](./tests/NLoop.Server.Tests/README.md)
-
 
 ## REST API
 
