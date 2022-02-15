@@ -1,4 +1,3 @@
-# NLoop: Generic Lightning Loop
 
 ![nloop-logo](./images/logo.png)
 
