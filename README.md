@@ -4,8 +4,9 @@
 ## What is NLoop?
 
 It is a submarine swap client against the [boltz-backend](https://github.com/BoltzExchange/boltz-backend)
-
 Currently it imitates the api of the [lightning loop](https://github.com/lightninglabs/loop).
+
+Read the [anouncement blogpost](https://tech.bitbank.cc/nloop-announcement-en/) for more detail.
 
 ## Why use NLoop?
 
