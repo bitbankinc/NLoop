@@ -722,9 +722,9 @@ module Swap =
               maybePrevClaimTxId
               |> Option.bind(fun txid -> block.Transactions |> Seq.tryFind(fun t -> t.GetHash() = txid))
             match maybeClaimTx with
-            | Some sweepTx ->
-              let sweepTxAmount =
-                sweepTx.Outputs
+            | Some claimTx ->
+              let claimTxAmount =
+                claimTx.Outputs
                 |> Seq.pick(fun o ->
                   if o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork).ToString() = loopOut.ClaimAddress then
                     Some(o.Value)
@@ -735,8 +735,8 @@ module Swap =
               let additionalEvents = [
                 ClaimTxConfirmed {
                   BlockHash = block.Header.GetHash()
-                  TxId =  sweepTx.GetHash()
-                  SweepAmount = sweepTxAmount
+                  TxId =  claimTx.GetHash()
+                  SweepAmount = claimTxAmount
                 }
                 // We do not mark it as finished until the counterparty receives their share.
                 // This is because we don't know how much we have payed as off-chain routing fee until counterparty
