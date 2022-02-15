@@ -9,7 +9,7 @@ Currently it imitates the api of the [lightning loop](https://github.com/lightni
 
 ## Why use NLoop?
 
-* Supports liquidity management with autoloop
+* Supports liquidity management with autoloop (experimental)
 * Supports multi-asset swap.
 * The server side is [boltz](https://github.com/BoltzExchange/boltz-backend), which is OSS. (Which is not the case for lightning loop.)
 * Complete immutable audit log with event-sourcing. Which enables you to easily audit how much you have paied as fee during swaps.
