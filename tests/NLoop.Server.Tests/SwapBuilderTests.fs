@@ -52,8 +52,7 @@ type SwapBuilderTests() =
   let testConfig =
     {
       LoopInSwapBuilderDeps.GetLoopInQuote = fun req -> task {
-        let! res = TestHelpers.GetDummySwapServerClient().GetLoopInQuote(req)
-        return res |> Ok
+        return! TestHelpers.GetDummySwapServerClient().GetLoopInQuote(req)
       }
     }
 
@@ -94,6 +93,7 @@ type SwapBuilderTests() =
     let quoteRequest = {
       SwapDTO.LoopInQuoteRequest.Amount = swapAmount
       SwapDTO.LoopInQuoteRequest.Pair = pairId
+      SwapDTO.LoopInQuoteRequest.HtlcConfTarget = htlcConfTarget
     }
     let quote = {
       SwapDTO.LoopInQuote.SwapFee = Money.Satoshis(1L)
@@ -133,7 +133,7 @@ type SwapBuilderTests() =
         with
         GetLoopInQuote = fun req ->
           Assert.Equal(expectedQuoteRequest, req)
-          quote |> Result.mapError Exception |> Task.FromResult
+          quote |> Task.FromResult
     }
     let builder = SwapBuilder.NewLoopIn(config, NullLogger.Instance)
     let parameters = {

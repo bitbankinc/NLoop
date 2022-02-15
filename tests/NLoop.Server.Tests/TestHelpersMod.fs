@@ -137,8 +137,8 @@ type DummyLnClientParameters = {
   }
 
 type DummySwapServerClientParameters = {
-  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<SwapDTO.LoopOutQuote>
-  LoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<SwapDTO.LoopInQuote>
+  LoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, string>>
+  LoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<Result<SwapDTO.LoopInQuote, string>>
   LoopOutTerms: SwapDTO.OutTermsRequest -> Task<SwapDTO.OutTermsResponse>
   LoopInTerms: SwapDTO.InTermsRequest -> Task<SwapDTO.InTermsResponse>
   GetNodes: unit -> SwapDTO.GetNodesResponse
@@ -154,7 +154,7 @@ type DummySwapServerClientParameters = {
         SwapDTO.LoopOutQuote.SwapPaymentDest = PubKey("02eec7245d6b7d2ccb30380bfbe2a3648cd7a942653f5aa340edcea1f283686619")
         SwapDTO.LoopOutQuote.CltvDelta = BlockHeightOffset32(20u)
         SwapDTO.LoopOutQuote.PrepayAmount = Money.Satoshis(10L)
-      } |> Task.FromResult
+      } |> Ok |> Task.FromResult
     LoopInQuote = fun _ -> failwith "todo"
     LoopOutTerms = fun _ ->
       {
@@ -310,10 +310,10 @@ type TestHelpers =
           parameters.GetNodes()
           |> Task.FromResult
 
-        member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopOutQuote> =
+        member this.GetLoopOutQuote(request: SwapDTO.LoopOutQuoteRequest, ?ct: CancellationToken): Task<Result<SwapDTO.LoopOutQuote, string>> =
           parameters.LoopOutQuote request
 
-        member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<SwapDTO.LoopInQuote> =
+        member this.GetLoopInQuote(request: SwapDTO.LoopInQuoteRequest, ?ct: CancellationToken): Task<Result<SwapDTO.LoopInQuote, string>> =
           parameters.LoopInQuote request
 
         member this.GetLoopOutTerms(req, ?ct : CancellationToken): Task<SwapDTO.OutTermsResponse> =
@@ -349,6 +349,9 @@ type TestHelpers =
 
         member this.GetDepositAddress(_network, _ct) =
           p.GetDepositAddress() |> Task.FromResult
+
+        member this.GetSendingTxFee(destinations, target, ct) =
+          failwith "todo"
     }
 
   static member GetDummySwapExecutor(?_parameters) =

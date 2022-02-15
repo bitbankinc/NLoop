@@ -7,8 +7,12 @@ open FSharp.Control.Tasks
 open System.Threading.Tasks
 open System.Runtime.CompilerServices
 open DotNetLightning.Utils.Primitives
+open LndClient
+open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
+open NLoop.Domain.IO
+open NLoop.Server
 open NLoop.Server.DTOs
 open FSharp.Control
 
@@ -59,7 +63,8 @@ type BoltzClientExtensions =
     let ps = PairId.toString(&req.Pair)
     let p = r.Pairs.[ps]
     return {
-      SwapDTO.LoopInQuote.MinerFee = p.Fees.MinerFees.QuoteAsset.Normal |> Money.Satoshis
+      SwapDTO.LoopInQuote.MinerFee =
+        p.Fees.MinerFees.QuoteAsset.Normal |> Money.Satoshis
       SwapFee =
         percentToSat(req.Amount, p.Fees.Percentage)
     }
@@ -94,7 +99,7 @@ type BoltzClientExtensions =
     }
   }
 
-type BoltzSwapServerClient(b: BoltzClient) =
+type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOptions<NLoopOptions>, feeEst: IFeeEstimator) =
   interface ISwapServerClient with
     member this.LoopOut(request, ct) =
       let ct = defaultArg ct CancellationToken.None
@@ -135,11 +140,60 @@ type BoltzSwapServerClient(b: BoltzClient) =
       })
 
     member this.GetLoopInQuote(request, ct) =
-      let ct = defaultArg ct CancellationToken.None
-      b.GetLoopInQuote(request, ct)
+      task {
+        let ct = defaultArg ct CancellationToken.None
+        let! terms = b.GetLoopInTerms(request.Pair, false, ct)
+        if request.Amount < terms.MinSwapAmount then
+          let msg =
+            "The loopin amount was too small that server does not accept our swap. " +
+            $"(amount: {request.Amount.Satoshi} sats. Server minimum: {terms.MinSwapAmount.Satoshi} sats)"
+          return Error msg
+        else if terms.MaxSwapAmount < request.Amount then
+          let msg =
+            "The loopin amount was too large that server does not accept our swap. " +
+            $"(amount: {request.Amount.Satoshi} sats. Server maximum: {terms.MaxSwapAmount.Satoshi} sats)"
+          return Error msg
+        else
+          let! fee =
+            let onChainAsset = request.Pair.Quote
+            let dummyP2SHAddr =
+              let n = opts.Value.GetNetwork(onChainAsset)
+              Scripts.dummySwapScriptV1.WitHash.GetAddress(n)
+            let wallet = getWallet(onChainAsset)
+            let dest = seq [(dummyP2SHAddr, request.Amount)] |> dict
+            wallet.GetSendingTxFee(dest, request.HtlcConfTarget, ct)
+          match fee with
+          | Error e -> return Error <| e.ToString()
+          | Ok f ->
+            let! q = b.GetLoopInQuote(request, ct)
+            // we want to use miner fee estimated by ourselves, since 1. it is target-blocknum aware and 2. we have no
+            // reason to trust the conuterparty.
+            return Ok { q with MinerFee = f }
+      }
     member this.GetLoopOutQuote(request, ct) =
-      let ct = defaultArg ct CancellationToken.None
-      b.GetLoopOutQuote(request, ct)
+      task {
+        let ct = defaultArg ct CancellationToken.None
+        let! terms = b.GetLoopOutTerms(request.Pair, false, ct)
+        if request.Amount < terms.MinSwapAmount then
+          let msg =
+            "The loopout amount was too small that server does not accept our swap. " +
+            $"(amount: {request.Amount.Satoshi} sats. Server minimum: {terms.MinSwapAmount.Satoshi} sats)"
+          return Error msg
+        else if terms.MaxSwapAmount < request.Amount then
+          let msg =
+            "The loopout amount was too large that server does not accept our swap. " +
+            $"(amount: {request.Amount.Satoshi} sats. Server maximum: {terms.MaxSwapAmount.Satoshi} sats)"
+          return Error msg
+        else
+          let onChainAsset = request.Pair.Base
+          let! feeRate = feeEst.Estimate(request.SweepConfTarget) (onChainAsset)
+          let minerFee =
+            Transactions.dummyClaimTxFee feeRate
+          let! quote = b.GetLoopOutQuote(request, ct)
+          // we want to use miner fee estimated by ourselves, since 1. it is target-blocknum aware and 2. we have no
+          // reason to trust the conuterparty.
+          return Ok { quote with SweepMinerFee = minerFee }
+      }
 
     member this.GetNodes(ct) =
       let ct = defaultArg ct CancellationToken.None

@@ -116,6 +116,8 @@ module QueryHandlers =
           |> fun a -> { GetCostSummaryResponse.Costs = a; ServerEndpoint = opts.Value.BoltzHost }
         return! json resp next ctx
     }
+
+  // todo: cache with projection?
   let handleGetCostSummary =
     fun (next: HttpFunc) (ctx: HttpContext) -> task {
       match ctx.TryGetDate("since") with

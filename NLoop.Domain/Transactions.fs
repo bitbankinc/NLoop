@@ -26,6 +26,7 @@ module Transactions =
     override this.ToString() = this.Message
 
   /// We might bump the claim tx, so this returns an RBF enabled tx.
+  // todo: cache first tx for performance.
   let createClaimTx
     (output: BitcoinAddress)
     (key: Key)
@@ -120,10 +121,12 @@ module Transactions =
       )
     |> Result.valueOr failwith
 
+
   let dummySwapTxFee feeRate =
     let swapTx = dummySwapTx feeRate
     swapTx.GetFee(dummyCoin |> Seq.toArray)
 
+  // todo: use correct feerate as in createClaimtx
   let createRefundTx
     (lockupTxHex: string)
     (redeemScript: Script)
@@ -195,4 +198,32 @@ module Transactions =
     dummyRefundTx feeRate
     |> fun t ->
       let swapOutput = prev.Outputs.AsCoins() |> Seq.find(fun o -> o.ScriptPubKey = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey)
+      swapOutput.Amount - t.TotalOut
+
+  let private dummyClaimKey =
+    "4141414141414141414141414141414141414141414141414141414141414141"
+    |> hex.DecodeData
+    |> fun h -> new Key(h)
+  let private dummyClaimAddr = dummyClaimKey.PubKey.WitHash.GetAddress(Network.RegTest)
+  let dummyClaimTx feeRate =
+    let prev = dummySwapTx feeRate
+    let dummyPreimage = PaymentPreimage.Create(Array.zeroCreate 32)
+    createClaimTx
+      dummyClaimAddr
+      dummyClaimKey
+      dummyPreimage
+      Scripts.dummySwapScriptV1
+      feeRate
+      prev
+      Network.RegTest
+    |> Result.valueOr(fun e -> failwith $"Failed create dummy claim tx: {e.Message}")
+
+
+  let dummyClaimTxFee feeRate =
+    let prev = dummySwapTx feeRate
+    dummyClaimTx feeRate
+    |> fun t ->
+      let swapOutput =
+        prev.Outputs.AsCoins()
+        |> Seq.find(fun o -> o.ScriptPubKey = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey)
       swapOutput.Amount - t.TotalOut

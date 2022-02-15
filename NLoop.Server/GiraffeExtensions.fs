@@ -138,6 +138,10 @@ module CustomHandlers =
                     |> ValueOption.defaultValue req.PairIdValue.DefaultLoopOutParameters.SweepConfTarget
                   SwapDTO.Pair = req.PairIdValue }
         swapServerClient.GetLoopOutQuote(r)
+
+      match quote with
+      | Error s -> return! error503 s next ctx
+      | Ok quote ->
       let r =
         quote.Validate(req.Limits)
         |> Result.mapError(fun e -> e.Message)
@@ -156,8 +160,15 @@ module CustomHandlers =
         let r = {
           SwapDTO.LoopInQuoteRequest.Amount = req.Amount
           SwapDTO.LoopInQuoteRequest.Pair = pairId
+          SwapDTO.LoopInQuoteRequest.HtlcConfTarget =
+            req.HtlcConfTarget
+            |> ValueOption.map(uint32 >> BlockHeightOffset32)
+            |> ValueOption.defaultValue(pairId.DefaultLoopInParameters.HTLCConfTarget)
         }
         swapServerClient.GetLoopInQuote(r)
+      match quote with
+      | Error s -> return! error503 s next ctx
+      | Ok quote ->
       let r = quote.Validate(req.Limits) |> Result.mapError(fun e -> e.Message)
       match r with
       | Error e -> return! errorBadRequest [e] next ctx

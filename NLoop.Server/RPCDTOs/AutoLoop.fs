@@ -31,7 +31,7 @@ type SwapDisqualifiedReason =
   member this.Message =
     match this with
     | SweepFeesTooHigh v ->
-      $"Current estimated FeeRate is {v.Estimation.SatoshiPerByte |> int64} sat/vbyte. But our limit is {v.OurLimit.SatoshiPerByte |> int64} sats/vbyte"
+      $"Current estimated FeeRate is {v.Estimation.SatoshiPerByte} sat/vbyte. But our limit for sweep_fee_rate is {v.OurLimit.SatoshiPerByte} sats/vbyte. You may want to set higher value for \"sweep_fee_rate_sat_per_kvbyte\""
     | MinerFeeTooHigh v  ->
       $"miner fee: ({v.ServerRequirement.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | SwapFeeTooHigh v ->
