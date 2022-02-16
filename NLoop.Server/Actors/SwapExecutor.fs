@@ -147,10 +147,11 @@ type SwapActor(opts: IOptions<NLoopOptions>,
               { ESCommand.Data = Swap.Command.MarkAsErrored (e.Msg)
                 Meta = { CommandMeta.Source = $"{nameof(SwapActor)}-errorhandler"
                          EffectiveDate = UnixDateTime.UtcNow } }
-            let! channelOpened = workQueue.Writer.WaitToWriteAsync()
-            finished <- not <| channelOpened
-            if not finished then
+            try
               do! workQueue.Writer.WriteAsync((swapId, cmd, false))
+            with
+            | _ex ->
+              ()
   }
 
   member val Handler = handler with get
