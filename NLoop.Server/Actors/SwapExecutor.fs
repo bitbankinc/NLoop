@@ -117,7 +117,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
   /// not ideal in terms of performance, ideally we should allow a concurrent update
   /// and handle the StoreError (e.g. retry or abort)
   /// :todo:
-  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command>> 10
+  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command> * bool> 10
 
   let _worker = task {
     let mutable finished = false
@@ -125,7 +125,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       let! channelOpened = workQueue.Reader.WaitToReadAsync()
       finished <- not <| channelOpened
       if not finished then
-        let! swapId, cmd = workQueue.Reader.ReadAsync()
+        let! swapId, cmd, commitError = workQueue.Reader.ReadAsync()
         match! handler.Execute swapId cmd with
         | Ok events ->
           events
@@ -139,14 +139,24 @@ type SwapActor(opts: IOptions<NLoopOptions>,
           eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
           // todo: retry
           ()
-        | Error s ->
-          logger.LogError($"Error when executing swap handler %A{s}")
+        | Error (EventSourcingError.DomainError e as s) ->
+          logger.LogError($"Error when executing swap handler %A{e}")
           eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
+          if commitError then
+            let cmd =
+              { ESCommand.Data = Swap.Command.MarkAsErrored (e.Msg)
+                Meta = { CommandMeta.Source = $"{nameof(SwapActor)}-errorhandler"
+                         EffectiveDate = UnixDateTime.UtcNow } }
+            let! channelOpened = workQueue.Writer.WaitToWriteAsync()
+            finished <- not <| channelOpened
+            if not finished then
+              do! workQueue.Writer.WriteAsync((swapId, cmd, false))
   }
 
   member val Handler = handler with get
   member val Aggregate = aggr with get
-  member this.Execute(swapId, msg: Swap.Command, ?source) = unitTask {
+  member this.Execute(swapId, msg: Swap.Command, source, commitErrorOnFailure: bool option) = unitTask {
+    let commitErrorOnFailure = defaultArg commitErrorOnFailure false
     let source = defaultArg source (nameof(SwapActor))
     logger.LogDebug($"New Command {msg} for swap {swapId}: (source {source})")
     let cmd =
@@ -156,15 +166,13 @@ type SwapActor(opts: IOptions<NLoopOptions>,
 
     let! channelOpened = workQueue.Writer.WaitToWriteAsync()
     if channelOpened then
-      do! workQueue.Writer.WriteAsync((swapId, cmd))
+      do! workQueue.Writer.WriteAsync((swapId, cmd, commitErrorOnFailure))
   }
 
   interface ISwapActor with
     member this.Aggregate = this.Aggregate
-    member this.Execute(i, cmd, s) =
-      match s with
-      | Some s -> this.Execute(i, cmd, s)
-      | None -> this.Execute(i, cmd)
+    member this.Execute(i, cmd, s, commitError) =
+      this.Execute(i, cmd, s, commitError)
 
     member this.GetAllEntities(since, ?ct: CancellationToken) = task {
       let ct = defaultArg ct CancellationToken.None
@@ -406,7 +414,6 @@ type SwapExecutor(
                                     onChainNetwork,
                                     exchangeRate) with
           | Error e ->
-            do! swapActor.Execute(swapId, Swap.Command.MarkAsErrored(e), source)
             return! Error(e)
           | Ok addressType ->
             let group = {

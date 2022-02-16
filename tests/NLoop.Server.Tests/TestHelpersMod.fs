@@ -334,7 +334,7 @@ type TestHelpers =
             failwith "todo"
         member this.Aggregate =
           failwith "todo"
-        member this.Execute(swapId, msg, source) =
+        member this.Execute(swapId, msg, source, commitError) =
           p.Execute(swapId, msg, source); Task.CompletedTask
         member this.GetAllEntities(_since, _ct) =
           failwith "todo"

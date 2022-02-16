@@ -373,7 +373,8 @@ type IActor<'TState, 'TCommand, 'TEvent, 'TError, 'TEntityId, 'T when 'T : compa
   abstract member Execute:
     swapId: 'TEntityId *
     msg: 'TCommand *
-    ?source: string
+    ?source: string *
+    ?commitErrorOnFailure: bool
       -> Task
 
   // todo: use asyncSeq

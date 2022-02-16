@@ -85,7 +85,7 @@ type BlockchainListener(
         |> Swap.Command.NewBlock
       do!
         swaps.Keys
-        |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener)))
+        |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener), true))
         |> Task.WhenAll
       this.CurrentTip <- newB
   }
@@ -94,7 +94,7 @@ type BlockchainListener(
     let cmd = (Swap.Command.UnConfirmBlock(blockHash))
     do!
       swaps.Keys
-      |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener)))
+      |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener), true))
       |> Task.WhenAll
   }
 

@@ -47,7 +47,7 @@ type SwapProcessManager(eventAggregator: IEventAggregator,
               }
               |> Swap.Command.OffChainOfferResolve
             do!
-              actor.Execute(swapId, cmd, $"{nameof(SwapProcessManager)}-{nameof(waitToOfferGetsResolved)}")
+              actor.Execute(swapId, cmd, $"{nameof(SwapProcessManager)}-{nameof(waitToOfferGetsResolved)}", true)
               |> Async.AwaitTask
           | OutgoingInvoiceStateUnion.Failed ->
             let msg = "Offchain payment failed"
