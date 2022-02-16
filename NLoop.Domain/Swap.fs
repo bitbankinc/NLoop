@@ -718,19 +718,35 @@ module Swap =
 
             let events = events @  maybeSwapTxConfirmedEvent
 
+            // first we check claim tx by id.
             let maybeClaimTx =
               maybePrevClaimTxId
               |> Option.bind(fun txid -> block.Transactions |> Seq.tryFind(fun t -> t.GetHash() = txid))
+
+            // for rare case that after we bumped the claim tx, and old one gets confirmed, we must also check
+            // tx inputs/outputs.
+            let maybeClaimTx =
+              match maybeClaimTx, loopOut.SwapTx with
+              | Some x, _ -> Some x
+              | None, Some swapTx ->
+                let isFromSwapTx (tx: Transaction) =
+                  tx.Inputs |> Seq.exists(fun txIn -> txIn.PrevOut.Hash = swapTx.GetHash())
+                let isToClaimAddr (tx: Transaction) =
+                  tx.Outputs |> Seq.exists(fun txOut -> txOut.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork).ToString() = loopOut.ClaimAddress)
+                block.Transactions
+                |> Seq.tryFind(fun tx -> isFromSwapTx tx && isToClaimAddr tx)
+              | _ -> None
             match maybeClaimTx with
             | Some claimTx ->
               let claimTxAmount =
+                let claimAddrPicker =
+                  fun (o: TxOut) ->
+                    if o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork).ToString() = loopOut.ClaimAddress then
+                      Some(o.Value)
+                    else
+                      None
                 claimTx.Outputs
-                |> Seq.pick(fun o ->
-                  if o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork).ToString() = loopOut.ClaimAddress then
-                    Some(o.Value)
-                  else
-                    None
-                  )
+                |> Seq.pick(claimAddrPicker)
               // Our sweep tx is confirmed, this swap is finished!
               let additionalEvents = [
                 ClaimTxConfirmed {
