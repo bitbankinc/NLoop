@@ -38,6 +38,8 @@ type BitcoinRPCBroadcaster(getClient: GetBlockchainClient, logger: ILogger<Bitco
       | :? RPCException as ex when ex.Message.Contains "Transaction already in block" ->
         // same tx already in the chain, do nothing.
         logger.LogInformation("Failed to broadcast {Tx}, tx already in mempool", tx.ToHex())
+      | :? RPCException as ex when ex.Message.Contains "bad-txns-inputs-missingorspent" ->
+        logger.LogInformation("Failed to broadcast {Tx}, inputs has been spent", tx.ToHex())
         ()
     }
 
