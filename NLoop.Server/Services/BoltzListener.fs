@@ -43,7 +43,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
           if not <| finished then
             let! swapId, tx = updateQueue.Reader.ReadAsync(ct)
             logger.LogInformation $"boltz notified about their swap tx ({tx.ToHex()}) for swap {swapId}"
-            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener))
+            do! actor.Execute(swapId, Swap.Command.CommitSwapTxInfoFromCounterParty(tx.ToHex()), nameof(BoltzListener), true)
             statuses.TryRemove(swapId) |> ignore
       with
       | :? OperationCanceledException ->
