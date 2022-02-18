@@ -16,6 +16,7 @@ open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.Extensions.DependencyInjection
 open NBitcoin
+open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
@@ -643,13 +644,14 @@ type SwapTraffic = {
   FailedLoopIn: Map<NodeId, DateTimeOffset>
 }
 
+
 type LoopOutSwapBuilderDeps = {
   FeeEstimator: IFeeEstimator
-  GetLoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, exn>>
+  GetLoopOutQuote: SwapDTO.LoopOutQuoteRequest -> Task<Result<SwapDTO.LoopOutQuote, string>>
   GetDepositAddress: GetAddress
 }
 type LoopInSwapBuilderDeps = {
-  GetLoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<Result<SwapDTO.LoopInQuote, exn>>
+  GetLoopInQuote: SwapDTO.LoopInQuoteRequest -> Task<Result<SwapDTO.LoopInQuote, string>>
 }
 
 type Config = {
@@ -665,11 +667,10 @@ type Config = {
         LoopOutSwapBuilderDeps.FeeEstimator = this.EstimateFee
         GetLoopOutQuote = fun req -> task {
           try
-            let! resp =
+            return!
               this.SwapServerClient.GetLoopOutQuote req
-            return resp |> Ok
           with
-          | :? Grpc.Core.RpcException as ex -> return Error (ex :> exn)
+          | :? Grpc.Core.RpcException as ex -> return Error (ex.ToString())
         }
         GetDepositAddress = this.GetDepositAddress
       }
@@ -677,10 +678,9 @@ type Config = {
       LoopInSwapBuilderDeps.GetLoopInQuote =
         fun req -> task {
           try
-            let! resp = this.SwapServerClient.GetLoopInQuote req
-            return resp |> Ok
+            return! this.SwapServerClient.GetLoopInQuote req
           with
-          | :? Grpc.Core.RpcException as ex -> return Error (ex :> exn)
+          | :? Grpc.Core.RpcException as ex -> return Error (ex.ToString())
         }
     }
 
@@ -727,7 +727,7 @@ type SwapBuilder = {
               SwapDTO.Amount = amount
               SwapDTO.SweepConfTarget = parameters.SweepConfTarget }
           cfg.GetLoopOutQuote(req)
-          |> TaskResult.mapError(fun ex -> SwapDisqualifiedReason.LoopOutUnreachable(ex.Message))
+          |> TaskResult.mapError(SwapDisqualifiedReason.LoopOutUnreachable)
         do! parameters.FeeLimit.CheckLoopOutLimits(amount, quote)
         let prepayMaxFee, routeMaxFee, minerMaxFee = parameters.FeeLimit.LoopOutFees(amount, quote)
         let! addr =
@@ -791,8 +791,9 @@ type SwapBuilder = {
           cfg.GetLoopInQuote({
             Amount = amount
             Pair = pairId
+            HtlcConfTarget = parameters.HTLCConfTarget
           })
-          |> TaskResult.mapError(fun ex -> SwapDisqualifiedReason.LoopInUnReachable(ex.Message))
+          |> TaskResult.mapError(SwapDisqualifiedReason.LoopInUnReachable)
         do! parameters.FeeLimit.CheckLoopInLimits(amount, quote)
         let req = {
           LoopInRequest.Amount = amount

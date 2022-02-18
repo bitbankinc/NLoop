@@ -216,8 +216,7 @@ module SwapDTO =
 
   type LoopInQuoteRequest = {
     Amount: Money
-    /// We don't need this since boltz does not require us to specify it.
-    // HtlcConfTarget: BlockHeightOffset32
+    HtlcConfTarget: BlockHeightOffset32
     Pair: PairId
   }
 
@@ -257,13 +256,27 @@ module SwapDTO =
     MaxSwapAmount: Money
   }
 
+
+/// Client performs the client side part of swaps.
+/// It works against boltz server (or possibly lightning-loop server or others.)
 type ISwapServerClient =
   abstract member LoopOut: request: SwapDTO.LoopOutRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopOutResponse>
   abstract member LoopIn: request: SwapDTO.LoopInRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopInResponse>
   abstract member GetNodes: ?ct: CancellationToken -> Task<SwapDTO.GetNodesResponse>
 
-  abstract member GetLoopOutQuote: request: SwapDTO.LoopOutQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopOutQuote>
-  abstract member GetLoopInQuote: request: SwapDTO.LoopInQuoteRequest * ?ct: CancellationToken -> Task<SwapDTO.LoopInQuote>
+  /// Returns estimated costs for the client. for an on-chain fees, it must query with fee estimator instead of
+  /// relying to other sources so that it wont result to inconsistent estimation
+  /// It is mostly equivalent to [Client.LoopOutQuote](https://github.com/lightninglabs/loop/blob/f650071bca5895a1421574d6eddd70003439b363/client.go#L435)
+  /// in lightning loop
+  abstract member GetLoopOutQuote: request: SwapDTO.LoopOutQuoteRequest * ?ct: CancellationToken ->
+    Task<Result<SwapDTO.LoopOutQuote, string>>
+
+  /// Returns estimated costs for the client. for an on-chain fees, it must query with fee estimator instead of
+  /// relying to other sources so that it wont result to inconsistent estimation
+  /// It is mostly equivalent to [Client.LoopOutQuote](https://github.com/lightninglabs/loop/blob/f650071bca5895a1421574d6eddd70003439b363/client.go#L560)
+  /// in lightning loop
+  abstract member GetLoopInQuote: request: SwapDTO.LoopInQuoteRequest * ?ct: CancellationToken ->
+    Task<Result<SwapDTO.LoopInQuote, string>>
 
   abstract member GetLoopOutTerms: req: SwapDTO.OutTermsRequest * ?ct : CancellationToken -> Task<SwapDTO.OutTermsResponse>
   abstract member GetLoopInTerms: req: SwapDTO.InTermsRequest * ?ct : CancellationToken -> Task<SwapDTO.InTermsResponse>

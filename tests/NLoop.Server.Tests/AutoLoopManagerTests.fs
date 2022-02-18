@@ -87,14 +87,14 @@ type private AutoLoopManagerTestContext() =
                 cts.CancelAfter(10)
                 let! expectedRequest, resp = this.QuotesOutChannel.Reader.ReadAsync(cts.Token)
                 Assert.Equal(expectedRequest, req)
-                return resp
+                return Ok resp
               }
               LoopInQuote = fun req -> task {
                 use cts = new CancellationTokenSource()
                 cts.CancelAfter(10)
                 let! expectedRequest, resp = this.QuotesInChannel.Reader.ReadAsync(cts.Token)
                 Assert.Equal(expectedRequest, req)
-                return resp
+                return Ok resp
               }
               LoopOutTerms = fun _ -> task {
                 return
@@ -632,10 +632,14 @@ type AutoLoopManagerTests() =
     }
     let quoteRequest1 = {
       SwapDTO.LoopInQuoteRequest.Amount = peer1ExpectedAmount
-      SwapDTO.LoopInQuoteRequest.Pair = loopInPair }
+      SwapDTO.LoopInQuoteRequest.Pair = loopInPair
+      SwapDTO.LoopInQuoteRequest.HtlcConfTarget = htlcConfTarget
+    }
     let quoteRequest2 = {
       SwapDTO.LoopInQuoteRequest.Amount = peer2ExpectedAmount
-      SwapDTO.LoopInQuoteRequest.Pair = loopInPair }
+      SwapDTO.LoopInQuoteRequest.Pair = loopInPair
+      SwapDTO.LoopInQuoteRequest.HtlcConfTarget = htlcConfTarget
+    }
     let peer1Swap = {
       LoopInRequest.Amount = peer1ExpectedAmount
       ChannelId = chanId1 |> Some
@@ -782,6 +786,7 @@ type AutoLoopManagerTests() =
     let loopInQuoteReq = {
       SwapDTO.LoopInQuoteRequest.Amount = loopInAmount
       SwapDTO.LoopInQuoteRequest.Pair = loopInPair
+      SwapDTO.LoopInQuoteRequest.HtlcConfTarget = htlcConfTarget
     }
     let loopInSwap =
       {
@@ -915,6 +920,7 @@ type AutoLoopManagerTests() =
     let loopInQuoteReq = {
       SwapDTO.LoopInQuoteRequest.Amount = loopInAmount
       SwapDTO.LoopInQuoteRequest.Pair = loopInPair
+      SwapDTO.LoopInQuoteRequest.HtlcConfTarget = htlcConfTarget
     }
     let loopInSwap =
       {

@@ -245,10 +245,20 @@ type WalletUtxo = {
     }
 
 
+type WalletClientError =
+  | InSufficientFunds of string
+  | RPCError of string
+
 type IWalletClient =
   abstract member FundToAddress: dest: BitcoinAddress * amount: Money * confTarget: BlockHeightOffset32 * ?ct: CancellationToken ->
     Task<uint256>
   abstract member GetDepositAddress: network: Network * ?ct: CancellationToken -> Task<BitcoinAddress>
+
+  abstract member GetSendingTxFee:
+    destinations: IDictionary<BitcoinAddress, Money> *
+      target: BlockHeightOffset32 *
+      ?ct: CancellationToken ->
+    Task<Result<Money, WalletClientError>>
 
 [<AbstractClass;Sealed;Extension>]
 type LightningClientExtensions =

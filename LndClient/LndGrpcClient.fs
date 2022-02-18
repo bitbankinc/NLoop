@@ -14,6 +14,7 @@ open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
 open FSharp.Control
 open Google.Protobuf
+open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
 open Invoicesrpc
@@ -614,6 +615,22 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     member this.FundToAddress(dest: BitcoinAddress, amt: Money, targetConf, ?ct) =
       let ct = defaultArg ct CancellationToken.None
       this.SendCoins(dest, amt, targetConf, ct)
+
+    member this.GetSendingTxFee(destinations, target, ct) =
+      task {
+        let ct = defaultArg ct CancellationToken.None
+        try
+          let! resp =
+            let r = EstimateFeeRequest()
+            r.TargetConf <- target.Value |> int
+            let d = destinations.ToDictionary((fun kv -> kv.Key.ToString()), (fun kv -> kv.Value.Satoshi))
+            r.AddrToAmount.Add(d)
+            client.EstimateFeeAsync(r, this.DefaultHeaders, this.Deadline, ct)
+          return resp.FeeSat |> Money.Satoshis |> Ok
+        with
+        | ex when ex.Message.Contains("insufficient funds", StringComparison.OrdinalIgnoreCase) ->
+          return Error(WalletClientError.InSufficientFunds(ex.ToString()))
+      }
 
   interface INLoopLightningClient with
     member this.ConnectPeer(nodeId, host, ct) = this.ConnectPeer(nodeId, host, ct)

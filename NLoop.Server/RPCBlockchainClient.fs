@@ -5,6 +5,7 @@ open System.Collections.Generic
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
+open System.Linq
 open LndClient
 open NBitcoin
 open NBitcoin.RPC
@@ -63,6 +64,24 @@ type BitcoindWalletClient(rpc: RPCClient) =
         p.Add("conf_target", confTarget.Value |> int)
         let! resp = rpc.SendCommandWithNamedArgsAsync(RPCOperations.sendtoaddress.ToString(), p).ConfigureAwait false
         return uint256.Parse(resp.Result.ToString())
+      }
+
+    member this.GetSendingTxFee(destinations, target, _ct) =
+      task {
+        let! fee = rpc.EstimateSmartFeeAsync(target.Value |> int)
+        try
+          let! psbt =
+            let inputs = [||]
+            let opts =
+                let o = FundRawTransactionOptions()
+                o.FeeRate <- fee.FeeRate
+                o
+            let d = destinations.ToDictionary((fun kv -> kv.Key), (fun kv -> kv.Value))
+            rpc.WalletCreateFundedPSBTAsync(inputs, (d, Dictionary<_,_>()), LockTime.Zero, opts)
+          return psbt.Fee |> Ok
+        with
+        | ex when ex.Message.Contains("insufficient funds", StringComparison.OrdinalIgnoreCase) ->
+          return Error(WalletClientError.InSufficientFunds(ex.ToString()))
       }
 
 
