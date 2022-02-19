@@ -5,7 +5,7 @@
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
     <RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
     <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
-    <Version>0.1.9.0-beta</Version>
+    <Version>0.1.9.1-beta</Version>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
