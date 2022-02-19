@@ -1,6 +1,6 @@
 #!/bin/bash
 
-docker-compose exec -T lnd_server_ltc lncli \
+docker-compose exec -T lnd_server_boltz_ltc lncli \
   --network=regtest \
   --chain=litecoin \
   --tlscertpath=/data/tls.cert \
