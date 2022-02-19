@@ -76,5 +76,5 @@ jobs:
           files: |
             nloopd.${{ matrix.RID }}.gz
             nloop-cli.${{ matrix.RID }}.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
