@@ -43,6 +43,7 @@
     <Compile Include="NLoopOptions.fs" />
     <Compile Include="SwapServerClient\interfaces.fs" />
     <Compile Include="SwapServerClient\BoltzSwapServerClient.fs" />
+    <Compile Include="SwapServerClient\LoopSwapServerClient.fs" />
     <Compile Include="EventAggregator.fs" />
     <Compile Include="Projections\OnGoingSwapStateProjection.fs" />
     <Compile Include="Projections\RecentSwapFailureProjection.fs" />
