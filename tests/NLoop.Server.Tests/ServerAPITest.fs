@@ -414,7 +414,7 @@ type ServerAPITest() =
           MaxSwapFee = Money.Satoshis 999L |> ValueSome
       }
       ("swap fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Swap fee specified by the server is too high")
-      ()
+      ("miner fee too high", { loopInReq with MaxMinerFee = ValueSome(Money.Satoshis 10L) }, testLoopInQuote, loopInResp1, testBlockchainInfo, HttpStatusCode.ServiceUnavailable, Some $"OnChain FeeRate is too high")
     ]
     |> Seq.map(fun (name,
                     req,
@@ -460,9 +460,17 @@ type ServerAPITest() =
                 }
               }
           }
+        let walletClientParams = {
+          DummyWalletClientParameters.Default
+            with
+            GetSendingTxFee = fun _destinations _conf -> Ok(Money.Satoshis 20L)
+        }
         sp
           .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
           .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
+          .AddSingleton<GetWalletClient>(Func<IServiceProvider, _>(fun _sp _ ->
+            TestHelpers.GetDummyWalletClient(walletClientParams)
+          ))
           .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
             .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
             .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp _cc ->
@@ -470,15 +478,15 @@ type ServerAPITest() =
                 DummyBlockChainClientParameters.Default with GetBlockchainInfo = fun () -> blockchainInfo
               })
             ))
-            .AddSingleton<GetSwapKey>(Func<IServiceProvider, _> (fun _ () -> refundKey |> Task.FromResult))
-            .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, _> (fun _ () -> preimage |> Task.FromResult))
-            .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
-              DummySwapServerClientParameters.Default
-                with
-                  LoopInQuote =  fun _req -> quote |> Ok |> Task.FromResult
-                  LoopIn = fun _req -> responseFromServer |> Task.FromResult
-            }))
-            |> ignore
+          .AddSingleton<GetSwapKey>(Func<IServiceProvider, _> (fun _ () -> refundKey |> Task.FromResult))
+          .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, _> (fun _ () -> preimage |> Task.FromResult))
+          .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
+            DummySwapServerClientParameters.Default
+              with
+                LoopInQuote =  fun _req -> quote |> Ok |> Task.FromResult
+                LoopIn = fun _req -> responseFromServer |> Task.FromResult
+          }))
+          |> ignore
         ))
 
       let opts =

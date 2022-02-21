@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.Collections.Generic
 open System.CommandLine.Parsing
 open System.Net
 open System.Net.Http
@@ -200,12 +201,17 @@ type DummyBlockChainClientParameters = {
 type DummyWalletClientParameters = {
   FundToAddress: BitcoinAddress * Money * BlockHeightOffset32 -> Task<uint256>
   GetDepositAddress: unit -> BitcoinAddress
+  GetSendingTxFee:
+    IDictionary<BitcoinAddress, Money> ->
+      BlockHeightOffset32 ->
+      Result<Money, WalletClientError>
 }
   with
   static member Default =
     {
       FundToAddress = fun (_,_,_) -> failwith "todo"
       GetDepositAddress = fun () -> TestHelpersMod.walletAddress
+      GetSendingTxFee = fun _ _ -> failwith "todo"
     }
 
 type TestHelpers =
@@ -351,7 +357,8 @@ type TestHelpers =
           p.GetDepositAddress() |> Task.FromResult
 
         member this.GetSendingTxFee(destinations, target, ct) =
-          failwith "todo"
+          p.GetSendingTxFee destinations target
+          |> Task.FromResult
     }
 
   static member GetDummySwapExecutor(?_parameters) =

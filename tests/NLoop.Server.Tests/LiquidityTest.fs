@@ -583,9 +583,9 @@ type LiquidityTest() =
           RemoteBalance = (10000L - 9000L) |> Money.Satoshis
           Id = chanId2 }
         { ListChannelResponse.NodeId = peer2
-          Cap = 5000L |> Money.Satoshis
-          LocalBalance = 2000L |> Money.Satoshis
-          RemoteBalance = (5000L - 2000L) |> Money.Satoshis
+          Cap = 50000L |> Money.Satoshis
+          LocalBalance = 20000L |> Money.Satoshis
+          RemoteBalance = (50000L - 20000L) |> Money.Satoshis
           Id = chanId3 }
       ]
       let multiplePeerRules = {
@@ -593,7 +593,7 @@ type LiquidityTest() =
           with
           PeerRules = Map.ofSeq[
             (peer1 |> NodeId, { MinimumIncoming = 80s<percent>; MinimumOutGoing = 0s<percent> })
-            (peer2 |> NodeId, { MinimumIncoming = 40s<percent>; MinimumOutGoing = 50s<percent> })
+            (peer2 |> NodeId, { MinimumIncoming = 30s<percent>; MinimumOutGoing = 40s<percent> })
           ]
       }
       let expected = {
@@ -681,8 +681,6 @@ type LiquidityTest() =
                                expected: Result<SwapSuggestions, AutoLoopError>) =
     let setup (_services: IServiceCollection) =
       ()
-
-    if name.Contains("loop in") |> not then Task.FromResult() else
     let parameters = {
       Parameters.Default SupportedCryptoCode.BTC
         with

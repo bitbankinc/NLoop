@@ -646,31 +646,21 @@ module Swap =
                 feeEstimator.Estimate
                   loopIn.HTLCConfTarget
                   quoteAsset
-              let estimatedFee =
-                Transactions.dummySwapTxFee feeRate
-              if loopIn.MaxMinerFee < estimatedFee then
-                // we give up executing the swap here rather than dealing with the fee-market nitty-gritty.
-                return [
-                  let msg = $"OnChain FeeRate is too high. (actual fee: {estimatedFee}. Our maximum: {loopIn.MaxMinerFee})"
-                  FinishedByError { Id = loopIn.Id
-                                    Error = msg }
-                ]
-              else
-                let! tx =
-                  let req = {
-                    WalletFundingRequest.Amount = loopIn.ExpectedAmount
-                    CryptoCode = quoteAsset
-                    DestAddress = loopIn.SwapAddress
-                    TargetConf = loopIn.HTLCConfTarget
-                  }
-                  payToAddress(req)
-                let fee = feeRate.GetFee(tx)
-                let! index =
-                  tx.ValidateOurSwapTxOut(loopIn.AddressType, loopIn.RedeemScript, loopIn.ExpectedAmount)
-                  |> expectBogusSwapTx
-                return [
-                  OurSwapTxPublished { Fee = fee; TxHex = tx.ToHex(); HtlcOutIndex = index }
-                ]
+              let! tx =
+                let req = {
+                  WalletFundingRequest.Amount = loopIn.ExpectedAmount
+                  CryptoCode = quoteAsset
+                  DestAddress = loopIn.SwapAddress
+                  TargetConf = loopIn.HTLCConfTarget
+                }
+                payToAddress(req)
+              let fee = feeRate.GetFee(tx)
+              let! index =
+                tx.ValidateOurSwapTxOut(loopIn.AddressType, loopIn.RedeemScript, loopIn.ExpectedAmount)
+                |> expectBogusSwapTx
+              return [
+                OurSwapTxPublished { Fee = fee; TxHex = tx.ToHex(); HtlcOutIndex = index }
+              ]
           }
           return [NewLoopInAdded{ Height = h; LoopIn = loopIn }] @ additionalEvents |> enhance
         | CommitReceivedOffChainPayment amt, In(_, loopIn) ->

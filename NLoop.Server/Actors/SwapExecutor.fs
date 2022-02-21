@@ -2,211 +2,23 @@ namespace NLoop.Server.Actors
 
 open System
 open System.Collections.Generic
-open System.Threading.Channels
 open FSharp.Control
 open System.Net.Http
 open System.Threading
 open System.Threading.Tasks
-open DotNetLightning.Payment
 open DotNetLightning.Utils
-open EventStore.ClientAPI
-open FSharp.Control
-open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open FsToolkit.ErrorHandling
 open LndClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
-open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
-open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
-open System.Reactive.Linq
-
-[<AutoOpen>]
-module internal SwapActorHelpers =
-  let getSwapDeps b f g payInvoice payToAddress offer =
-    { Swap.Deps.Broadcaster = b
-      Swap.Deps.FeeEstimator = f
-      Swap.Deps.GetRefundAddress = g
-      Swap.Deps.PayInvoiceImmediate = payInvoice
-      Swap.Deps.PayToAddress = payToAddress
-      Swap.Deps.Offer = offer
-      }
-
-  let getObs (eventAggregator: IEventAggregator) (sId) =
-      eventAggregator.GetObservable<Swap.EventWithId, Swap.ErrorWithId>()
-      |> Observable.filter(function
-                           | Choice1Of2 { Id = swapId }
-                           | Choice2Of2 { Id = swapId } -> swapId = sId)
-
-
-[<RequireQualifiedAccess>]
-module Observable =
-  let inline chooseOrError
-    (selector: Swap.Event -> _ option)
-    (obs: IObservable<Choice<Swap.EventWithId, Swap.ErrorWithId>>) =
-      obs
-      |> Observable.choose(
-        function
-        | Choice1Of2{ Event = Swap.Event.FinishedByError { Error = err } } -> err |> Error |> Some
-        | Choice2Of2{ Error = DomainError e } -> e.Msg |> Error |> Some
-        | Choice2Of2{ Error = Store(StoreError e) } -> e |> Error |> Some
-        | Choice1Of2{ Event = e } -> selector e |> Option.map(Ok)
-      )
-      |> Observable.catchWith(fun ex -> Observable.Return(Error $"Error while handling observable {ex}"))
-      |> Observable.first
-      |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable
-
-type SwapActor(opts: IOptions<NLoopOptions>,
-               lightningClientProvider: ILightningClientProvider,
-               broadcaster: IBroadcaster,
-               feeEstimator: IFeeEstimator,
-               eventAggregator: IEventAggregator,
-               getAllSwapEvents: GetAllEvents<Swap.Event>,
-               getRefundAddress: GetAddress,
-               getWalletClient: GetWalletClient,
-               store: Store,
-               logger: ILogger<SwapActor>) =
-  let aggr =
-    let payInvoiceImmediate =
-      fun (cc: SupportedCryptoCode) (param: Swap.PayInvoiceParams) (i: PaymentRequest) ->
-        let req = {
-          SendPaymentRequest.Invoice = i
-          MaxFee = param.MaxFee
-          OutgoingChannelIds = param.OutgoingChannelIds
-          TimeoutSeconds = Constants.OfferTimeoutSeconds
-        }
-        task {
-          match! lightningClientProvider.GetClient(cc).SendPayment(req) with
-          | Ok r ->
-            return {
-              Swap.PayInvoiceResult.RoutingFee = r.Fee
-              Swap.PayInvoiceResult.AmountPayed = i.AmountValue.Value
-            }
-          | Error e -> return raise <| exn $"Failed payment {e}"
-        }
-    let fundFromWallet =
-      fun (req: WalletFundingRequest) -> task {
-        let cli = getWalletClient(req.CryptoCode)
-        let! txid = cli.FundToAddress(req.DestAddress, req.Amount, req.TargetConf)
-        let blockchainCli = opts.Value.GetBlockChainClient(req.CryptoCode)
-        return! blockchainCli.GetRawTransaction(TxId txid)
-      }
-    let offer =
-      fun (cc: SupportedCryptoCode) (param: Swap.PayInvoiceParams) (i: PaymentRequest) ->
-        let req = {
-          SendPaymentRequest.Invoice = i
-          MaxFee = param.MaxFee
-          OutgoingChannelIds = param.OutgoingChannelIds
-          TimeoutSeconds = Constants.OfferTimeoutSeconds
-        }
-        lightningClientProvider.GetClient(cc).Offer(req)
-    getSwapDeps broadcaster feeEstimator getRefundAddress payInvoiceImmediate fundFromWallet offer
-    |> Swap.getAggregate
-  let mutable handler =
-    Swap.getHandler aggr store
-
-  /// We use queue to assure the change to the command execution is sequential.
-  /// This is OK (since performance rarely be a consideration in swap) but it is
-  /// not ideal in terms of performance, ideally we should allow a concurrent update
-  /// and handle the StoreError (e.g. retry or abort)
-  /// :todo:
-  let workQueue = Channel.CreateBounded<SwapId * ESCommand<Swap.Command> * bool> 10
-
-  let _worker = task {
-    let mutable finished = false
-    while not <| finished do
-      let! channelOpened = workQueue.Reader.WaitToReadAsync()
-      finished <- not <| channelOpened
-      if not finished then
-        let! swapId, cmd, commitError = workQueue.Reader.ReadAsync()
-        match! handler.Execute swapId cmd with
-        | Ok events ->
-          events
-          |> List.iter(fun e ->
-            eventAggregator.Publish e
-            eventAggregator.Publish e.Data
-            eventAggregator.Publish({ Swap.EventWithId.Id = swapId; Swap.EventWithId.Event = e.Data })
-          )
-        | Error (EventSourcingError.Store s as e) ->
-          logger.LogError($"Store Error when executing the swap handler %A{s}")
-          eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = e })
-          // todo: retry
-          ()
-        | Error (EventSourcingError.DomainError e as s) ->
-          logger.LogError($"Error when executing swap handler %A{e}")
-          eventAggregator.Publish({ Swap.ErrorWithId.Id = swapId; Swap.ErrorWithId.Error = s })
-          if commitError then
-            let cmd =
-              { ESCommand.Data = Swap.Command.MarkAsErrored (e.Msg)
-                Meta = { CommandMeta.Source = $"{nameof(SwapActor)}-errorhandler"
-                         EffectiveDate = UnixDateTime.UtcNow } }
-            try
-              do! workQueue.Writer.WriteAsync((swapId, cmd, false))
-            with
-            | _ex ->
-              ()
-  }
-
-  member val Handler = handler with get
-  member val Aggregate = aggr with get
-  member this.Execute(swapId, msg: Swap.Command, source, commitErrorOnFailure: bool option) = unitTask {
-    let commitErrorOnFailure = defaultArg commitErrorOnFailure false
-    let source = defaultArg source (nameof(SwapActor))
-    logger.LogDebug($"New Command {msg} for swap {swapId}: (source {source})")
-    let cmd =
-      { ESCommand.Data = msg
-        Meta = { CommandMeta.Source = source
-                 EffectiveDate = UnixDateTime.UtcNow } }
-
-    let! channelOpened = workQueue.Writer.WaitToWriteAsync()
-    if channelOpened then
-      do! workQueue.Writer.WriteAsync((swapId, cmd, commitErrorOnFailure))
-  }
-
-  interface ISwapActor with
-    member this.Aggregate = this.Aggregate
-    member this.Execute(i, cmd, s, commitError) =
-      this.Execute(i, cmd, s, commitError)
-
-    member this.GetAllEntities(since, ?ct: CancellationToken) = task {
-      let ct = defaultArg ct CancellationToken.None
-      let! events = getAllSwapEvents since ct
-      let eventListToStateMap (l: RecordedEvent<Swap.Event> list) =
-        l
-        |> List.groupBy(fun re -> re.StreamId)
-        |> List.filter(fun (_streamId, reList) ->
-          reList |> List.isEmpty |> not &&
-            (reList.Head.Data.Type = Swap.new_loop_out_added || reList.Head.Data.Type = Swap.new_loop_in_added)
-        )
-        |> List.map(fun (streamId, reList) ->
-          streamId,
-          reList |> List.map(fun re -> re.AsEvent) |> this.Handler.Reconstitute
-        )
-        |> Map.ofList
-      return
-        events
-        |> Result.map eventListToStateMap
-    }
-    member this.Handler = this.Handler
-
-type ISwapExecutor =
-  abstract member ExecNewLoopOut:
-    req: LoopOutRequest *
-    height: BlockHeight *
-    ?s: string *
-    ?ct: CancellationToken -> Task<Result<LoopOutResponse, string>>
-  abstract member ExecNewLoopIn:
-    req: LoopInRequest *
-    height: BlockHeight *
-    ?s: string *
-    ?ct: CancellationToken -> Task<Result<LoopInResponse, string>>
 type SwapExecutor(
                   invoiceProvider: ILightningInvoiceProvider,
                   opts: IOptions<NLoopOptions>,
@@ -219,6 +31,7 @@ type SwapExecutor(
                   getSwapPreimage: GetSwapPreimage,
                   getNetwork: GetNetwork,
                   getAddress: GetAddress,
+                  getWallet: GetWalletClient,
                   swapActor: ISwapActor,
                   listeners: IEnumerable<ISwapEventListener>
   )=
@@ -342,13 +155,39 @@ type SwapExecutor(
         let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let onChainNetwork = getNetwork(pairId.Quote)
 
+        let group = {
+          Swap.Group.Category = Swap.Category.In
+          Swap.Group.PairId = pairId
+        }
+        let onChainNetwork = getNetwork(group.OnChainAsset)
         let! refundKey = getSwapKey()
         let! preimage = getSwapPreimage()
 
         let mutable maybeSwapId = None
-        let lnClient = lightningClientProvider.GetClient(pairId.Base)
+
+        let lnClient = lightningClientProvider.GetClient(group.OffChainAsset)
+        // -- fee rate check --
+        let htlcConfTarget =
+          loopIn.HtlcConfTarget
+          |> ValueOption.map(uint >> BlockHeightOffset32)
+          |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
+        let wallet = getWallet group.OnChainAsset
+        let! swapTxFee =
+          // we use p2sh-p2wsh to estimate the worst case fee.
+          let addr = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey.Hash.GetAddress(onChainNetwork)
+          let d = Dictionary<_,_>()
+          d.Add(addr, loopIn.Amount)
+          wallet.GetSendingTxFee(d, htlcConfTarget)
+          |> TaskResult.mapError(fun walletError -> walletError.ToString())
+        if loopIn.Limits.MaxMinerFee < swapTxFee then
+          let msg =
+            $"OnChain FeeRate is too high. (actual fee: {swapTxFee.Satoshi} sats. Our maximum: " +
+            $"{loopIn.Limits.MaxMinerFee.Satoshi} sats)"
+          return! Error msg
+        else
+        // -- --
+
         let! channels = lnClient.ListChannels()
         let! maybeRouteHints =
           match loopIn.ChannelId with
@@ -387,10 +226,10 @@ type SwapExecutor(
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
           invoiceProvider.GetAndListenToInvoice(
-            pairId.Base,
+            group.OffChainAsset,
             preimage,
             amt,
-            loopIn.Label |> Option.defaultValue(String.Empty),
+            loopIn.Label |> Option.defaultValue String.Empty,
             maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 
@@ -417,10 +256,6 @@ type SwapExecutor(
           | Error e ->
             return! Error(e)
           | Ok addressType ->
-            let group = {
-              Swap.Group.Category = Swap.Category.In
-              Swap.Group.PairId = pairId
-            }
             for l in listeners do
               l.RegisterSwap(swapId, group)
             let loopIn = {
@@ -437,9 +272,7 @@ type SwapExecutor(
               ChainName = opts.Value.ChainName.ToString()
               Label = loopIn.Label |> Option.defaultValue String.Empty
               HTLCConfTarget =
-                loopIn.HtlcConfTarget
-                |> ValueOption.map(uint >> BlockHeightOffset32)
-                |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
+                htlcConfTarget
               Cost = SwapCost.Zero
               AddressType = addressType
               MaxMinerFee =
