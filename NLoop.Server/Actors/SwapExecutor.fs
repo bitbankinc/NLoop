@@ -219,6 +219,7 @@ type SwapExecutor(
                   getSwapPreimage: GetSwapPreimage,
                   getNetwork: GetNetwork,
                   getAddress: GetAddress,
+                  getWallet: GetWalletClient,
                   swapActor: ISwapActor,
                   listeners: IEnumerable<ISwapEventListener>
   )=
@@ -342,13 +343,39 @@ type SwapExecutor(
         let source = defaultArg source (nameof(SwapExecutor))
         let pairId =
           loopIn.PairIdValue
-        let onChainNetwork = getNetwork(pairId.Quote)
 
+        let group = {
+          Swap.Group.Category = Swap.Category.In
+          Swap.Group.PairId = pairId
+        }
+        let onChainNetwork = getNetwork(group.OnChainAsset)
         let! refundKey = getSwapKey()
         let! preimage = getSwapPreimage()
 
         let mutable maybeSwapId = None
-        let lnClient = lightningClientProvider.GetClient(pairId.Base)
+
+        let lnClient = lightningClientProvider.GetClient(group.OffChainAsset)
+        // -- fee rate check --
+        let htlcConfTarget =
+          loopIn.HtlcConfTarget
+          |> ValueOption.map(uint >> BlockHeightOffset32)
+          |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
+        let wallet = getWallet group.OnChainAsset
+        let! swapTxFee =
+          // we use p2sh-p2wsh to estimate the worst case fee.
+          let addr = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey.Hash.GetAddress(onChainNetwork)
+          let d = Dictionary<_,_>()
+          d.Add(addr, loopIn.Amount)
+          wallet.GetSendingTxFee(d, htlcConfTarget)
+          |> TaskResult.mapError(fun walletError -> walletError.ToString())
+        if loopIn.Limits.MaxMinerFee < swapTxFee then
+          let msg =
+            $"OnChain FeeRate is too high. (actual fee: {swapTxFee.Satoshi} sats. Our maximum: " +
+            $"{loopIn.Limits.MaxMinerFee.Satoshi} sats)"
+          return! Error msg
+        else
+        // -- --
+
         let! channels = lnClient.ListChannels()
         let! maybeRouteHints =
           match loopIn.ChannelId with
@@ -387,10 +414,10 @@ type SwapExecutor(
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
           invoiceProvider.GetAndListenToInvoice(
-            pairId.Base,
+            group.OffChainAsset,
             preimage,
             amt,
-            loopIn.Label |> Option.defaultValue(String.Empty),
+            loopIn.Label |> Option.defaultValue String.Empty,
             maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 
@@ -417,10 +444,6 @@ type SwapExecutor(
           | Error e ->
             return! Error(e)
           | Ok addressType ->
-            let group = {
-              Swap.Group.Category = Swap.Category.In
-              Swap.Group.PairId = pairId
-            }
             for l in listeners do
               l.RegisterSwap(swapId, group)
             let loopIn = {
@@ -437,9 +460,7 @@ type SwapExecutor(
               ChainName = opts.Value.ChainName.ToString()
               Label = loopIn.Label |> Option.defaultValue String.Empty
               HTLCConfTarget =
-                loopIn.HtlcConfTarget
-                |> ValueOption.map(uint >> BlockHeightOffset32)
-                |> ValueOption.defaultValue pairId.DefaultLoopInParameters.HTLCConfTarget
+                htlcConfTarget
               Cost = SwapCost.Zero
               AddressType = addressType
               MaxMinerFee =
