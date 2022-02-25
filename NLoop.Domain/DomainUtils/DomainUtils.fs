@@ -1,6 +1,7 @@
 namespace NLoop.Domain.Utils
 
 open System.IO
+open System.Text.Json
 open DotNetLightning.Serialization
 open DotNetLightning.Utils
 open System
@@ -82,6 +83,10 @@ type EventSourcingError<'T> =
   | Store of StoreError
   | DomainError of 'T
 
+type EventMetaDto = {
+  EffectiveDate: DateTimeOffset
+  SourceName: string
+}
 type EventMeta = {
   /// Date at which event is effective in the domain
   EffectiveDate: UnixDateTime
@@ -93,31 +98,18 @@ type EventMeta = {
     let d =
       this.EffectiveDate.Value
       |> fun x -> DateTimeOffset(x, TimeSpan.Zero)
-      |> NBitcoin.Utils.DateTimeToUnixTime
-      |> fun u ->  NBitcoin.Utils.ToBytes(u, false).BytesWithLength()
-    let source =
-      this.SourceName
-      |> System.Text.Encoding.UTF8.GetBytes
-      |> fun b -> b.BytesWithLength()
-    Array.concat [d; source]
+    JsonSerializer.SerializeToUtf8Bytes({ EventMetaDto.EffectiveDate = d; SourceName = this.SourceName })
 
   static member FromBytes(b: byte[]) =
     result {
       try
-        let effectiveDateB, b = b.PopWithLen()
-        let sourceName, _b = b.PopWithLen()
-        let effectiveDate =
-          effectiveDateB
-          |> fun b -> NBitcoin.Utils.ToUInt32(b, false)
-          |>  NBitcoin.Utils.UnixTimeToDateTime
-          |> fun dateTimeOffset -> dateTimeOffset.UtcDateTime
-        let! d = UnixDateTime.Create(effectiveDate)
+        let m = JsonSerializer.Deserialize<EventMetaDto>(ReadOnlySpan<_>.op_Implicit b)
+        let! d = UnixDateTime.Create(m.EffectiveDate.UtcDateTime)
         return
           {
             EffectiveDate = d
             SourceName =
-              sourceName
-              |> System.Text.Encoding.UTF8.GetString
+              m.SourceName
           }
       with
       | ex ->

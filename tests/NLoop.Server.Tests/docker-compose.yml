@@ -304,9 +304,13 @@ services:
     ports:
       - "1113:1113"
       - "2113:2113"
-    command: --enable-external-tcp --ext-ip=0.0.0.0 --int-ip=0.0.0.0 --ext-host-advertise-as=esdb --advertise-host-to-client-as=localhost
-      #- --enable-external-tcp
-      #- --enable-external-http
+    command:
+      - --enable-external-tcp
+      - --ext-ip=0.0.0.0
+      - --int-ip=0.0.0.0
+      - --ext-host-advertise-as=esdb
+      - --advertise-host-to-client-as=localhost
+      - --enable-atom-pub-over-http
     volumes:
       - "./data/esdb:/etc/eventstore"
 
