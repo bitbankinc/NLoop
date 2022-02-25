@@ -43,6 +43,8 @@ curl http://localhost:5000/v1/info
 
 ```
 
+You can access http://localhost:2113 for EventStoreDB admin ui to check the current state of the db.
+
 To reset the state, you can just run the following commands after stopping the docker-compose.
 
 ```sh
