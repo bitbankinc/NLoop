@@ -52,9 +52,12 @@ Check [README.md in test project](./tests/NLoop.Server.Tests/README.md)
 
 Check out our [`openapi.yml`](./openapi.yml) (or [its rendered version](https://bitbankinc.github.io/NLoop/)) for the REST API specification.
 
-There is a one endpoint which is not included in the spec.
-That is a WebSocket endpoint for listening to events.
-* `/v1/events`
+### Subscribing to events
+
+If you want to react to the changes caused by nloop, (e.g. notify to slack/discord when the swap starts and/or finished.)
+we recommend subscribing to eventstoredb directly rather than long-polling the api.
+Please see [the official documentation](https://developers.eventstore.com/clients/dotnet/5.0/subscriptions.html) for how to.
+Actual object you get is json-encoded [Events](https://github.com/bitbankinc/NLoop/blob/master/NLoop.Domain/Swap.fs#L299) with metadata.
 
 ## configuration options
 
