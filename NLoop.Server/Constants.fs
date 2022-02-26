@@ -37,7 +37,7 @@ module Constants =
     ]
 #else
     [
-      ("Default", "Information")
+      ("Default", "Debug")
       ("System.Net.Http", "Warning")
       ("Microsoft", "Warning")
       ("Grpc", "Debug")
