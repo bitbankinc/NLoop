@@ -496,7 +496,6 @@ module Swap =
 
   // ----- aggregates ----
 
-
   let private enhanceEvents date source (events: Event list) =
     events |> List.map(fun e -> e.ToEventSourcingEvent date source)
 

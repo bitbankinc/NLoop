@@ -87,7 +87,6 @@ type BlockchainListener(
         swaps.Keys
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener), true))
         |> Task.WhenAll
-      this.CurrentTip <- newB
   }
 
   let onBlockDisconnected blockHash = unitTask {
@@ -131,13 +130,17 @@ type BlockchainListener(
           else
           let! maybeAncestor =
             rewindToNextOfCommonAncestor (client.GetBlock >> Async.AwaitTask) currentBlock newBlock getRewindLimit
+            |> Async.Catch
             |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct)
           match maybeAncestor with
-          | None ->
+          | Choice2Of2 err ->
+            logger.LogError $"error when rewinding blocks: {err}"
+            return ()
+          | Choice1Of2 None ->
             logger.LogCritical "The block with no common ancestor detected, this should never happen"
             assert false
             return ()
-          | Some (ancestor, disconnectedBlockHashes) ->
+          | Choice1Of2 (Some (ancestor, disconnectedBlockHashes)) ->
             for h in disconnectedBlockHashes do
               do! onBlockDisconnected h
             ct.ThrowIfCancellationRequested()
