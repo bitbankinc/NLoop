@@ -25,11 +25,9 @@ COPY ["LndClient/LndClient.fsproj", "LndClient/"]
 COPY ["NLoop.OpenAPIClient/NLoop.OpenAPIClient.csproj", "NLoop.OpenAPIClient/"]
 COPY ["NLoop.Domain/NLoop.Domain.fsproj", "NLoop.Domain/"]
 COPY ["NLoop.Server/NLoop.Server.fsproj", "NLoop.Server/"]
-COPY ["NLoop.CLI/NLoop.CLI.fsproj", "NLoop.CLI/"]
 COPY ["Directory.Build.props", "Directory.Build.props"]
 
 RUN dotnet restore "NLoop.Server/NLoop.Server.fsproj"
-RUN dotnet restore "NLoop.CLI/NLoop.CLI.fsproj"
 
 # 3. Build
 COPY . .

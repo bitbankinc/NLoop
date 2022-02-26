@@ -50,31 +50,16 @@ jobs:
           --self-contained true \
           NLoop.Server \
           --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}
-      - name: publish (cli)
-        shell: bash
-        run: |
-          dotnet publish -c Release \
-          -o publish \
-          -p:PublishReadyToRun=true \
-          -p:PublishSingleFile=true \
-          -p:PublishTrimmed=true \
-          -p:RuntimeIdentifier=${{ matrix.RID }} \
-          -p:IncludeNativeLibrariesForSelfExtract=true \
-          --self-contained true \
-          NLoop.CLI \
-          --version-suffix date$(date +%Y%m%d-%H%M).git-$(git rev-parse --short=7 HEAD)-${{ matrix.RID }}
 
       - name: prepare artifacts
         shell: bash
         run: |
           gzip -c publish/nloopd > nloopd.${{ matrix.RID }}.gz
-          gzip -c publish/nloop-cli > nloop-cli.${{ matrix.RID }}.gz
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             nloopd.${{ matrix.RID }}.gz
-            nloop-cli.${{ matrix.RID }}.gz
           generate_release_notes: true
           token: ${{ secrets.GITHUB_TOKEN }}

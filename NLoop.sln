@@ -1,8 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # 
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.CLI", "NLoop.CLI\NLoop.CLI.fsproj", "{DF2599E7-E9DE-473E-84CA-4C4E29116C72}"
-EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Server", "NLoop.Server\NLoop.Server.fsproj", "{F99A8283-95F8-463A-B8A1-8E2BB68EE7A3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{4CF4C444-22AD-4BBD-A6F1-38051BC11435}"
@@ -31,10 +29,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{DF2599E7-E9DE-473E-84CA-4C4E29116C72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{DF2599E7-E9DE-473E-84CA-4C4E29116C72}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{DF2599E7-E9DE-473E-84CA-4C4E29116C72}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{DF2599E7-E9DE-473E-84CA-4C4E29116C72}.Release|Any CPU.Build.0 = Release|Any CPU
 		{F99A8283-95F8-463A-B8A1-8E2BB68EE7A3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{F99A8283-95F8-463A-B8A1-8E2BB68EE7A3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F99A8283-95F8-463A-B8A1-8E2BB68EE7A3}.Release|Any CPU.ActiveCfg = Release|Any CPU
