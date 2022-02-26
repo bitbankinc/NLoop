@@ -87,6 +87,7 @@ type BlockchainListener(
         swaps.Keys
         |> Seq.map(fun s -> actor.Execute(s, cmd, nameof(BlockchainListener), true))
         |> Task.WhenAll
+      this.CurrentTip <- newB
   }
 
   let onBlockDisconnected blockHash = unitTask {
