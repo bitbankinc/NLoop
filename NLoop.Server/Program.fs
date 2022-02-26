@@ -118,9 +118,6 @@ module App =
          .AllowAnyHeader()
          |> ignore
 
-  let configureSignalR(endpoints: IEndpointRouteBuilder) =
-      endpoints.MapHub<EventHub>("/v1/events") |> ignore
-
   let configureApp (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
     let opts = app.ApplicationServices.GetService<IOptions<NLoopOptions>>().Value
@@ -137,8 +134,6 @@ module App =
       .UseCors(configureCors opts) |> ignore
     app
       .UseAuthentication()
-      .UseRouting()
-      .UseEndpoints(Action<_>(configureSignalR))
       .UseGiraffe(webApp)
 
   let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
