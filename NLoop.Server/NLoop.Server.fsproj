@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>nloopd</AssemblyName>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
     <RuntimeIdentifiers>win-x64;osx-x64;linux-x64</RuntimeIdentifiers>
@@ -14,10 +14,11 @@
     <ProjectReference Include="..\LndClient\LndClient.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AspNetCore.HealthChecks.EventStore" Version="5.0.1" />
     <PackageReference Include="DigitalRuby.ExchangeSharp" Version="0.9.1" />
     <PackageReference Include="FSharp.Control.Reactive" Version="5.0.2" />
     <PackageReference Include="Giraffe" Version="5.0.0-rc-6" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="5.0.3" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="6.0.0" />
     <PackageReference Include="Microsoft.IO.RecyclableMemoryStream" Version="2.0.0" />
     <PackageReference Include="NetMQ" Version="4.0.1.6" />
     <PackageReference Include="NReco.Logging.File" Version="1.1.3" />
@@ -65,7 +66,6 @@
     <Compile Include="LoopHandlers.fs" />
     <Compile Include="AutoLoopHandlers.fs" />
     <Compile Include="QueryHandlers.fs" />
-    <Compile Include="Hubs.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

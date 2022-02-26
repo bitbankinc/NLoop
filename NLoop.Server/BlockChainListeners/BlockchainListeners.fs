@@ -79,6 +79,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
             do! startRPCListener cc
       }
 
+
       do!
         opts.Value.OnChainCrypto
         |> Seq.map roundTrip

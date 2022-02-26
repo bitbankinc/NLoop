@@ -209,6 +209,10 @@ type NLoopExtensions() =
         .AddSingleton<ISwapExecutor, SwapExecutor>()
         |> ignore
 
+      this
+        .AddHealthChecks()
+        |> ignore
+
       if (not <| test) then
         // it is important here that Startup order is
         // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
