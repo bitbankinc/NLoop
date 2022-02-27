@@ -124,7 +124,7 @@ type NLoopOptions() =
   member val LndAllowInsecure = false with get, set
 
   // --- exchange ---
-  member val Exchanges = [| "BitBank" |] with get, set
+  member val Exchanges = [| "FTX" |] with get, set
   // --- ---
 
   member val TargetIncomingLiquidityRatio = 50s<percent> with get, set
