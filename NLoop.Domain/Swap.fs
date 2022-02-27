@@ -665,7 +665,7 @@ module Swap =
         | CommitReceivedOffChainPayment amt, In(_, loopIn) ->
           return [
             OffChainPaymentReceived { Amount = amt }
-            if loopIn.IsOurSuccessTxConfirmed then
+            if loopIn.IsTheirSuccessTxConfirmed then
               FinishedSuccessfully{ Id = loopIn.Id }
           ] |> enhance
         // --- ---
@@ -971,7 +971,7 @@ module Swap =
     | RefundTxPublished { TxId = txid }, In(h, x) ->
       In(h, { x with RefundTransactionId = Some txid })
     | SuccessTxConfirmed _, In(h, x) ->
-      In(h, { x with IsOurSuccessTxConfirmed = true })
+      In(h, { x with IsTheirSuccessTxConfirmed = true })
     | RefundTxConfirmed _, In(h, x) ->
       In(h, { x with Cost = updateCost state event x.Cost })
     | OffChainPaymentReceived _, In(h, x) ->

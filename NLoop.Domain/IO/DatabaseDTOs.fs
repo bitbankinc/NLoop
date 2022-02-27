@@ -177,7 +177,7 @@ type LoopIn = {
   LastHop: PubKey option
 
   IsOffChainPaymentReceived: bool
-  IsOurSuccessTxConfirmed: bool
+  IsTheirSuccessTxConfirmed: bool
 
   AddressType: SwapAddressType
 

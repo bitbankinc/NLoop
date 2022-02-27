@@ -297,7 +297,7 @@ type AutoLoopManagerTests() =
       MaxSwapFee = req.Limits.MaxSwapFee
       LastHop = req.LastHop
       IsOffChainPaymentReceived = false
-      IsOurSuccessTxConfirmed = false
+      IsTheirSuccessTxConfirmed = false
       AddressType = SwapAddressType.P2WSH
       Cost = SwapCost.Zero
     }

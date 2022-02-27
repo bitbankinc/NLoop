@@ -280,7 +280,7 @@ type SwapExecutor(
               MaxSwapFee =
                 loopIn.Limits.MaxSwapFee
               IsOffChainPaymentReceived = false
-              IsOurSuccessTxConfirmed = false
+              IsTheirSuccessTxConfirmed = false
               LastHop = maybeRouteHints.TryGetLastHop()
             }
             let obs =
