@@ -26,12 +26,15 @@ type RPCLongPollingBlockchainListener(
   let mutable client: IBlockChainClient option = None
 
   member private this.ExecuteAsync(ct: CancellationToken) = unitTask {
+    let mutable count = 0
     while not <| ct.IsCancellationRequested do
       try
         let! tip = client.Value.GetBestBlock(ct)
-        logger.LogDebug $"long-polling blockchain, got tip: {tip}"
+        if count % 20 = 0 then
+          logger.LogDebug $"long-polling blockchain {cc}, got tip: {tip}"
         do! this.OnBlock(tip.Block, getRewindLimit, ct)
         do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
+        count <- count + 1
       with
       | :? OperationCanceledException ->
         logger.LogDebug $"operation canceled. stopping {nameof(RPCLongPollingBlockchainListener)} ..."

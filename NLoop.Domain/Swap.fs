@@ -150,6 +150,17 @@ module Swap =
     /// Tell the domain about the chain reorg with this command.
     /// past on-chain events which took place on the block will be skipped.
     | UnConfirmBlock of blockHash: uint256
+    with
+    member this.CommandTag =
+      match this with
+      | NewLoopOut _ -> "new_loop_out"
+      | CommitSwapTxInfoFromCounterParty _ -> "commit_swap_tx_info_from_counterparty"
+      | OffChainOfferResolve _ -> "offchain_offer_resolve"
+      | NewLoopIn _ -> "new_loop_in"
+      | CommitReceivedOffChainPayment _ -> "commit_received_offchain_payment"
+      | MarkAsErrored _ -> "mark_as_errored"
+      | NewBlock _ -> "new_block"
+      | UnConfirmBlock _ -> "un_confirm_block"
 
   type PayInvoiceParams = {
     MaxFee: Money

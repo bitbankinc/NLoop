@@ -120,6 +120,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
         let! swapId, cmd, commitError = workQueue.Reader.ReadAsync()
         match! handler.Execute swapId cmd with
         | Ok events ->
+          logger.LogDebug $"executed command: {cmd.Data.CommandTag} successfully"
           events
           |> List.iter(fun e ->
             eventAggregator.Publish e
