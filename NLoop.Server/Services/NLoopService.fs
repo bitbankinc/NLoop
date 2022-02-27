@@ -178,13 +178,6 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddSignalR()
-        .AddJsonProtocol(fun opts ->
-          opts.PayloadSerializerOptions.AddNLoopJsonConverters()
-        )
-        |> ignore
-
-      this
         .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
           opts.Value.GetNetwork(cc)
@@ -214,6 +207,10 @@ type NLoopExtensions() =
         .AddSingleton<IEventAggregator, ReactiveEventAggregator>()
         .AddSingleton<ISwapActor, SwapActor>()
         .AddSingleton<ISwapExecutor, SwapExecutor>()
+        |> ignore
+
+      this
+        .AddHealthChecks()
         |> ignore
 
       if (not <| test) then

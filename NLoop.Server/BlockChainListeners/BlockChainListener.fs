@@ -142,20 +142,27 @@ type BlockchainListener(
             assert false
             return ()
           | Choice1Of2 (Some (ancestor, disconnectedBlockHashes)) ->
+            logger.LogInformation $"reorg detected in {cc}"
             for h in disconnectedBlockHashes do
               do! onBlockDisconnected h
             ct.ThrowIfCancellationRequested()
             do! newChainTipAsync ancestor
             let mutable iHeight = ancestor.Height
             let mutable iHash = ancestor.Block.Header.GetHash()
-            let! bestBlockHash = client.GetBestBlockHash() |> Async.AwaitTask
+            let mutable bestBlockHash = null
+            let! tmpBBH = client.GetBestBlockHash() |> Async.AwaitTask
+            bestBlockHash <- tmpBBH
             while bestBlockHash <> iHash do
               ct.ThrowIfCancellationRequested()
               iHeight <- iHeight + BlockHeightOffset16.One
               let! nextB = client.GetBlockFromHeight(iHeight) |> Async.AwaitTask
               let nextBH = { Height = iHeight; Block = nextB }
               do! newChainTipAsync nextBH
+              // we need re-check the best block hash for the rare case that reorg happens again while we are re-syncing
+              let! tmpBBH = client.GetBestBlockHash() |> Async.AwaitTask
+              bestBlockHash <- tmpBBH
               iHash <- nextB.Header.GetHash()
+            logger.LogDebug "finished rescanning after reorg"
           ()
       with
       | ex ->

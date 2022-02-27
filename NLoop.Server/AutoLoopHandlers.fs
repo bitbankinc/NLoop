@@ -157,7 +157,11 @@ let setLiquidityParamsCore
       }
       match! man.SetParameters p with
       | Ok () ->
-        return! json {||} next ctx
+        if req.AutoMaxInFlight > 2 then
+          let msg = "autoloop is experimental, usually it is not good idea to set auto_max_inflight larger than 2"
+          return! json {| warn = msg |} next ctx
+        else
+          return! json {||} next ctx
       | Error e ->
         return!
           errorBadRequest [e.Message] next ctx

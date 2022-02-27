@@ -27,6 +27,5 @@ ASPNETCORE_ENVIRONMENT=Development dotnet run --project NLoop.Server -- \
   --eventstoreurl tcp://admin:changeit@localhost:1113 \
   --boltzhost http://localhost \
   --boltzport 6028 \
-  --exchanges BitBank \
-  --exchanges BitMEX
+  --exchanges FTX
 

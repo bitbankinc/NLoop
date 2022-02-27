@@ -37,17 +37,17 @@ type BoltzClientExtensions =
     let hasPrepay = r.Info |> Array.contains("prepay.minerfee")
     let minerFee = p.Fees.MinerFees.BaseAsset.Reverse.Lockup |> Money.Satoshis
     return {
-      SwapFee =
+      SwapDTO.LoopOutQuote.SwapFee =
         // boltz fee is returned with percentage, we have to convert to absolute value.
         percentToSat(req.Amount, p.Fees.Percentage)
         + if hasPrepay then Money.Zero else minerFee
-      SweepMinerFee =
+      SwapDTO.LoopOutQuote.SweepMinerFee =
         p.Fees.MinerFees.BaseAsset.Reverse.Claim |> Money.Satoshis
-      SwapPaymentDest =
+      SwapDTO.LoopOutQuote.SwapPaymentDest =
         nodes.Nodes |> Seq.head |> fun i -> i.Value.NodeKey
-      CltvDelta =
+      SwapDTO.LoopOutQuote.CltvDelta =
         timeoutResponse.Timeouts.[ps].Quote |> uint |> BlockHeightOffset32
-      PrepayAmount =
+      SwapDTO.LoopOutQuote.PrepayAmount =
         // In boltz, what we have to pay as `prepay.minerfee` always equals to their (estimated) lockup tx fee
         if hasPrepay then
           minerFee
@@ -65,7 +65,7 @@ type BoltzClientExtensions =
     return {
       SwapDTO.LoopInQuote.MinerFee =
         p.Fees.MinerFees.QuoteAsset.Normal |> Money.Satoshis
-      SwapFee =
+      SwapDTO.LoopInQuote.SwapFee =
         percentToSat(req.Amount, p.Fees.Percentage)
     }
   }

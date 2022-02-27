@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/aspnet:5.0-focal AS base
+FROM mcr.microsoft.com/dotnet/aspnet:6.0-focal AS base
 WORKDIR /app
 EXPOSE 5000
 
@@ -9,7 +9,7 @@ ENV ASPNETCORE_URLS=http://+:5000
 RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
 USER appuser
 
-FROM mcr.microsoft.com/dotnet/sdk:5.0-focal AS build
+FROM mcr.microsoft.com/dotnet/sdk:6.0-focal AS build
 WORKDIR /src
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT 1
@@ -25,11 +25,9 @@ COPY ["LndClient/LndClient.fsproj", "LndClient/"]
 COPY ["NLoop.OpenAPIClient/NLoop.OpenAPIClient.csproj", "NLoop.OpenAPIClient/"]
 COPY ["NLoop.Domain/NLoop.Domain.fsproj", "NLoop.Domain/"]
 COPY ["NLoop.Server/NLoop.Server.fsproj", "NLoop.Server/"]
-COPY ["NLoop.CLI/NLoop.CLI.fsproj", "NLoop.CLI/"]
 COPY ["Directory.Build.props", "Directory.Build.props"]
 
 RUN dotnet restore "NLoop.Server/NLoop.Server.fsproj"
-RUN dotnet restore "NLoop.CLI/NLoop.CLI.fsproj"
 
 # 3. Build
 COPY . .
