@@ -94,7 +94,7 @@ module CustomHandlers =
       let! nodes = boltzCli.GetNodes()
       let logger =
         ctx
-          .GetLogger<_>()
+          .GetLogger<ILogger>()
       match nodes.Nodes |> Seq.tryFind(fun kv -> kv.Key = offChainCryptoCode.ToString()) with
       | None ->
           return! errorBadRequest [$"counterparty server does not support {offChainCryptoCode.ToString()} as an off-chain currency"] next ctx
