@@ -71,6 +71,6 @@ e.g. for cli options `--eventstoreurl`, `NLOOP_EVENTSTOREURL` is equivalent.
 
 * [x] loop-in autoloop
 * [ ] support interacting with multiple swap-server
-* [ ] support swap against lightning-loop-server
-* [ ] grpc interface
+* [ ] support c-lightning
+* ~~[ ] support swap against lightning-loop-server~~ We decided not to support lightning-loop server, see: https://github.com/bitbankinc/NLoop/issues/13#issuecomment-1050795958
 
