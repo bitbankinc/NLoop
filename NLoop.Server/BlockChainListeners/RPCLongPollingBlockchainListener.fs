@@ -33,7 +33,8 @@ type RPCLongPollingBlockchainListener(
         do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
       with
       | :? OperationCanceledException ->
-        ()
+        logger.LogWarning $"operation canceled. stopping {nameof(RPCLongPollingBlockchainListener)} ..."
+        return ()
       | ex ->
         logger.LogError(ex, "Error when getting the best block from the Blockchain ({CryptoCode})", cc)
         do! Task.Delay (TimeSpan.FromSeconds Constants.BlockchainLongPollingIntervalSec, ct)
@@ -43,7 +44,10 @@ type RPCLongPollingBlockchainListener(
     member this.StartAsync(_cancellationToken) = unitTask {
       try
         client <- getBlockchainClient(cc) |> Some
-        let! _ = client.Value.GetBlockChainInfo()
+        // let! _ = client.Value.GetBlockChainInfo(_cancellationToken)
+        let! bestBlock = client.Value.GetBestBlock(_cancellationToken)
+        logger.LogInformation $"CurrentTip: {bestBlock}"
+        this.CurrentTip <- bestBlock
         ()
       with
       | :? RPCException as ex ->

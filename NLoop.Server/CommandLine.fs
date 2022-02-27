@@ -297,7 +297,7 @@ module NLoopServerCommandLine =
 
   let getRootCommand() =
     let rc = RootCommand()
-    rc.Name <- "nloopd"
+    rc.Name <- Constants.AppName
     rc.Description <- "Daemon to manage your LN node with submarine swaps"
     for o in getOptions() do
       rc.AddOption(o)

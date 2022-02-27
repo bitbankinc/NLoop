@@ -221,6 +221,8 @@ module Main =
               let opts = kestrelOpts.ApplicationServices.GetRequiredService<IOptions<NLoopOptions>>().Value
               let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
 
+              logger.LogInformation $"Starting {Constants.AppName}. version: {Constants.AssemblyVersion}"
+
               let ipAddresses = ResizeArray<_>()
               match opts.RPCHost |> IPAddress.TryParse with
               | true, ip ->

@@ -19,6 +19,9 @@ module Constants =
      Environment.GetEnvironmentVariable(envHome)
 
   [<Literal>]
+  let AppName = "nloopd"
+
+  [<Literal>]
   let HomeDirectoryName = ".nloop"
   let HomeDirectoryPath = Path.Combine(HomePath, HomeDirectoryName)
   let DefaultDataDirectoryPath = Path.Combine(HomeDirectoryPath, "data")
