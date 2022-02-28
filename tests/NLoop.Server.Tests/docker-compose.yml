@@ -83,6 +83,34 @@ services:
       - "43783:43783" # RPC
     volumes:
       - "./data/litecoin:/data"
+
+  clightning_user:
+    restart: unless-stopped
+    image: nloop/lightningd:v0.10.2
+    build:
+      context: ./Dockerfiles
+      dockerfile: lightning
+      args:
+        LIGHTNINGD_VERSION: "v0.10.2"
+    environment:
+      EXPOSE_TCP: "true"
+    command:
+      - "--network=regtest"
+      - "--lightning-dir=/root/.lightning"
+      - "--allow-deprecated-apis=false"
+      - "--bitcoin-datadir=/deps/.bitcoin"
+      - "--bitcoin-rpcuser=johndoe"
+      - "--bitcoin-rpcpassword=unsafepassword"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=43782"
+    depends_on:
+      - bitcoind
+    volumes:
+      - "clightning_user:/root/.lightning"
+      - "./data/bitcoin:/deps/.bitcoin"
+    expose:
+      - "9735"
+
   lnd_user:
     restart: unless-stopped
     image: nloop/lnd:v0.14.2-beta
@@ -314,4 +342,6 @@ services:
     volumes:
       - "./data/esdb:/etc/eventstore"
 
+volumes:
+  clightning_user:
 
