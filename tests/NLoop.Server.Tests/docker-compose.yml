@@ -86,12 +86,12 @@ services:
 
   clightning_user:
     restart: unless-stopped
-    image: nloop/lightningd:v0.10.2
+    image: nloop/lightningd:v0.10.1
     build:
       context: ./Dockerfiles
       dockerfile: lightning
       args:
-        LIGHTNINGD_VERSION: "v0.10.2"
+        LIGHTNINGD_VERSION: "v0.10.1"
     environment:
       EXPOSE_TCP: "true"
     command:
