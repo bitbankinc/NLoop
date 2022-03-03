@@ -26,8 +26,7 @@ Read the [anouncement blogpost](https://tech.bitbank.cc/nloop-announcement-en/) 
 
 ### Quick start
 
-We have a two binaries for you to work with.
-* `nloopd` ... standalone daemon to perform/manage the submarine swap.
+nloop is published as single file executable named `nloopd`.
 
 Download the latest binary from [the release page](https://github.com/joemphilips/NLoop/releases)
 and run with `--help` to see the possible configuration option.
