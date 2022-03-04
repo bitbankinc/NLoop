@@ -11,8 +11,8 @@ bitcoin() {
   # send on-chain funds to both sides.
   ./docker-lncli-user.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
   ./docker-lncli-server_btc.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
-  ./docker-bitcoin-cli.sh generatetoaddress 6 bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m # Just for confirmation
   ./docker-lightning-cli-user.sh newaddr | jq -r ".bech32" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
+  ./docker-bitcoin-cli.sh generatetoaddress 6 bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m # Just for confirmation
 
   # Connect peers
   ./docker-lncli-user.sh getinfo | jq ".uris[0]" | xargs -IXX ./docker-lncli-server_btc.sh connect XX  

@@ -75,6 +75,7 @@ RUN pip3 install mrkd
 RUN ./configure --prefix=/tmp/lightning_install --enable-static && make -j3 DEVELOPER=${DEVELOPER} && make install
 
 
+
 FROM debian:buster-slim as final
 
 ARG TRACE_TOOLS=false
@@ -105,12 +106,38 @@ RUN mkdir $LIGHTNINGD_DATA && \
     mkdir /etc/bundledplugins && \
     mkdir $LIGHTNINGD_DATA/plugins && \
     touch $LIGHTNINGD_DATA/config
+
 VOLUME [ "/root/.lightning" ]
+
+# -- plugins --
+ARG EXTRA_PLUGINS='--recurse-submodules=csvexportpays \
+--recurse-submodules=graphql \
+--recurse-submodules=jwt-factory \
+--recurse-submodules=python-teos \
+--recurse-submodules=trustedcoin \
+--recurse-submodules=webhook'
+
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential python3-wheel python3-dev python3-venv libleveldb-dev pkg-config libc-bin git libpq-dev postgresql
+
+COPY --from=builder /opt/lightningd/ /opt/lightningd/
+
+RUN mkdir /tmp/oldplugins && mv /opt/lightningd/plugins/* /tmp/oldplugins/ && \
+    rm -rf /opt/lightningd/plugins && \
+    cd /opt/lightningd/ && \
+    git clone --depth 1 --shallow-submodules -j4 \
+        ${EXTRA_PLUGINS} \
+        https://github.com/lightningd/plugins /opt/lightningd/plugins && \
+    cd /opt/lightningd/plugins && \
+    pip3 install setuptools && \
+    find -name requirements.txt -exec pip3 install -r {} \; && \
+    mv /tmp/oldplugins/* /opt/lightningd/plugins/ && rmdir /tmp/oldplugins
+# -- --
+
 COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/deschashplugin $LIGHTNINGD_DATA/plugins
 COPY --from=downloader /opt/deschashplugin /etc/bundledplugins
-COPY --from=builder /opt/lightningd/tools/docker-entrypoint.sh entrypoint.sh
+COPY lightning-entrypoint.sh entrypoint.sh
 
 EXPOSE 9735 9835
 ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "./entrypoint.sh" ]
