@@ -162,6 +162,8 @@ services:
     depends_on:
       - bitcoind
       - litecoind
+    links:
+      - clightning_user
     ports:
       - "32736:32736"
       - "32777:32777"
