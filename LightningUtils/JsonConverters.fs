@@ -13,7 +13,6 @@ open NLoop.Domain
 
 type PeerConnectionStringJsonConverter() =
   inherit JsonConverter<PeerConnectionString>()
-
   override this.Write(writer, value, _options) =
     writer.WriteStringValue(value.ToString())
   override this.Read(reader, _typeToConvert, _options) =

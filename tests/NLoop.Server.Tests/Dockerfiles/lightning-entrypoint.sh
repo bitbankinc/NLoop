@@ -97,6 +97,8 @@ cp -u /etc/bundledplugins/* $LIGHTNINGD_DATA/plugins/
 
 # copy more as you needed in here.
 cp -ur /opt/lightningd/plugins/summary $LIGHTNINGD_DATA/plugins/summary
+cp -ur /opt/lightningd/plugins/helpme $LIGHTNINGD_DATA/plugins/helpme
+cp -ur /opt/lightningd/plugins/monitor $LIGHTNINGD_DATA/plugins/monitor
 
 echo "C-Lightning starting, listening on port ${LIGHTNINGD_PORT}"
 echo "C-lightning arguments are $@"

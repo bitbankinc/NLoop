@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="CLightningRPCTypes.fs" />
+        <Compile Include="LightningClient.fs" />
+        <Compile Include="Notifications.fs" />
+        <Compile Include="Plugin.fs" />
+        <Compile Include="PluginV2.fs" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
+      <ProjectReference Include="..\LightningUtils\LightningUtils.fsproj" />
+    </ItemGroup>
+
+</Project>

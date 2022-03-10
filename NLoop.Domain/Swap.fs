@@ -1085,8 +1085,8 @@ module SwapCost =
 
   let foldSwapStates (states: Swap.State seq) =
       states
-      |> Seq.choose(fun state ->
-        (match state with
+      |> Seq.choose(
+        function
         | Swap.State.HasNotStarted -> None
         | Swap.State.Out(_height, { Cost = cost; PairId = pairId }) ->
           let group = { Swap.Group.Category = Swap.Category.Out; Swap.Group.PairId = pairId }
@@ -1102,7 +1102,6 @@ module SwapCost =
           cost
           |> split group
           |> Some
-        )
       )
       |> Seq.fold(fun acc ((onchainAsset, onchainCost), (offChainAsset, offChainCost)) ->
           acc

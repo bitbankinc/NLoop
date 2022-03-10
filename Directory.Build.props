@@ -6,10 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="NBitcoin.Altcoins" Version="2.0.31" />
     <PackageReference Include="DotNetLightning" Version="1.1.2-date20210930-0447-git-593097c" />
     <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
     <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
     <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.0.3" />
+    <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
   </ItemGroup>
 
   <PropertyGroup>
