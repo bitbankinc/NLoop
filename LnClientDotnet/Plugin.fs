@@ -6,8 +6,8 @@ open System.Collections.Generic
 open System.IO
 open System.Text
 open System.Text.Json
-open System.Text.Json.Nodes
-open NLoop.Domain.IO
+open System.Threading
+open System.Threading.Tasks
 
 type FeatureBits = DotNetLightning.Serialization.FeatureBits
 
@@ -49,13 +49,12 @@ type Hook = {
 type MethodResult = JsonElement
 
 type MethodArg = {
-  RPCClient: CLightningClient
+  RPCClient: CLightningClient option
   NotificationTopics: string list
   FeatureBits: FeatureBitSet
   LightningVersion: string option
   Request: Request
 }
-
 type MethodMetadata = {
   Name: string
   Category: string option
@@ -106,7 +105,8 @@ type [<NoEquality;NoComparison>] Method = internal {
       Background = false
       Metadata = methodMetadata
       Before = []
-      After = [] }
+      After = []
+    }
 
 
 type PluginOptType =
@@ -193,6 +193,7 @@ type MethodParams =
     match this with
     | ByName o -> o
     | ByPosition s -> raise <| InvalidDataException $"We thought arguments are object, got array: {s}"
+
   member this.UnsafeGetArray() =
     match this with
     | ByPosition s  -> s
@@ -206,8 +207,11 @@ type Request = {
 }
 
 type Plugin = private {
+  /// Map of plugin name -> options it takes on startup.
   Options: Map<string, PluginOptions>
+  /// Map of method name -> registered handler
   Methods: Map<string, Method>
+  /// The notification topics which the plugin may return to the lightningd.
   NotificationTopics: string list
   FeatureBits: FeatureBitSet
   Subscriptions: Map<string, Subscription>
@@ -262,17 +266,16 @@ type Plugin = private {
           %s
         %s
         """
-    let parts =
-      this.Methods
-      |> Map.filter(fun k v -> k <> "init" && k <> "getmanifest" && v.MethodType = MethodType.RPCMETHOD)
-      |> Map.iter(fun name method ->
-        if methodHeader |> isNull |> not then
-          sb.Append(methodHeader) |> ignore
-          methodHeader <- null
-        let doc = method.Metadata.LongDesc |> Option.defaultValue "No documentation found"
-        sb.Append(methodTemplate name doc) |> ignore
-        ()
-      )
+    this.Methods
+    |> Map.filter(fun k v -> k <> "init" && k <> "getmanifest" && v.MethodType = MethodType.RPCMETHOD)
+    |> Map.iter(fun name method ->
+      if methodHeader |> isNull |> not then
+        sb.Append(methodHeader) |> ignore
+        methodHeader <- null
+      let doc = method.Metadata.LongDesc |> Option.defaultValue "No documentation found"
+      sb.Append(methodTemplate name doc) |> ignore
+      ()
+    )
 
     let optionsHeader =
       """
@@ -310,7 +313,6 @@ type Plugin = private {
 
     let jsonValue =
       let opts = JsonSerializerOptions()
-      opts.AddNLoopJsonConverters()
       JsonSerializer.Serialize(value, opts)
     lock this._writeLock <| fun () ->
       this.StdOut.Write(jsonValue)
@@ -322,13 +324,27 @@ type Plugin = private {
       raise <| InvalidDataException $"Non-integer request id {i}"
     | hasId, i ->
       {
-        Method = jsonRequest.GetProperty("method").ToString()
+        Method =
+          match jsonRequest.TryGetProperty("method") with
+          | true, m -> m.ToString()
+          | _ ->
+            let msg = "Invalid json! No \"method\" property"
+            Console.Error.WriteLine(msg)
+            raise <| Exception msg
         Params =
-          match jsonRequest.GetProperty("params") with
-          | j when j.ValueKind = JsonValueKind.Array ->
+          match jsonRequest.TryGetProperty("params") with
+          | true, j when j.ValueKind = JsonValueKind.Array ->
             MethodParams.ByPosition (j.EnumerateArray() :> seq<JsonElement>)
-          | j when j.ValueKind = JsonValueKind.Object ->
+          | true, j when j.ValueKind = JsonValueKind.Object ->
             MethodParams.ByName (j.EnumerateObject() |> Seq.map(fun o -> (o.Name, o.Value)) |> Map.ofSeq )
+          | false, _ ->
+            let msg = $"Invalid json! No \"params\" property"
+            Console.Error.WriteLine(msg)
+            raise <| Exception msg
+          | true, j ->
+            let msg = $"Invalid json! \"params\" property was {j.ToString()}"
+            Console.Error.WriteLine(msg)
+            raise <| Exception msg
         Background = false
         Id = if hasId then i.GetInt32() |> JsonRPCV2Id.Num |> Some else None
       }
@@ -341,7 +357,7 @@ module Plugin =
       {
         MethodArg.Request = req
         FeatureBits = p.FeatureBits
-        RPCClient = p.RPC.Value
+        RPCClient = p.RPC
         NotificationTopics = p.NotificationTopics
         LightningVersion = p.LightningVersion
       }
@@ -415,8 +431,8 @@ module Plugin =
   let private init: MethodFunc =
     let f
       (o: MethodArg) (plugin: Plugin) =
-        let p = o.Request.Params.UnsafeGetObject()
-        let configurations = p |> Map.find("configuration")
+        let reqParams = o.Request.Params.UnsafeGetObject()
+        let configurations = reqParams |> Map.find("configuration")
         let verifyStr(d: JsonElement, key: string) =
           match d.TryGetProperty key with
           | true, v when v.ValueKind = JsonValueKind.String ->
@@ -432,8 +448,6 @@ module Plugin =
 
         let lightningDir = verifyStr(configurations, "lightning-dir")
         let rpcFileName = verifyStr(configurations, "rpc-file")
-        let opts = JsonSerializerOptions()
-        opts.AddNLoopJsonConverters()
         let nextState = {
           plugin
             with
@@ -441,16 +455,16 @@ module Plugin =
             LightningDir = Some lightningDir
             RPC =
               let path = Path.Combine(lightningDir, rpcFileName)
-              Some <| CLightningClient(path)
+              Some <| CLightningClient(Uri($"unix://{path}"))
             Startup = verifyBool(configurations, "startup")
             Options =
-              let options = p |> Map.find("options")
+              let options = reqParams |> Map.find("options")
               options.EnumerateArray()
               |> Seq.fold(fun (acc: Map<string, PluginOptions>) (optionObj: JsonElement) ->
                   acc
                   |> Map.add
                        (optionObj.GetProperty("name").GetString())
-                       (JsonSerializer.Deserialize<PluginOptions>(optionObj, opts))
+                       (JsonSerializer.Deserialize<PluginOptions>(optionObj))
                 )
                 Map.empty
         }
@@ -460,7 +474,6 @@ module Plugin =
           None, nextState
     MethodFunc f
 
-
   let private dispatchRequest(req: Request) (p: Plugin) =
     let name = req.Method
     match p.Methods |> Map.tryFind name with
@@ -469,17 +482,21 @@ module Plugin =
     | Some method ->
       let req = { req with Background = method.Background }
       try
+        printfn $"dispatchRequest: disptaching request with {method.Func}"
         let res, nextState = execFunc method.Func req p
+        printfn $"dispatchRequest: res: {res}"
         match res with
         | Some r when not <| method.Background ->
           let resultString = JsonSerializer.Serialize(r)
-          let v = $"{{'jsonrpc':'2.0','id':{req.Id},'result':'{r}'}}"
+          let v = $"{{\"jsonrpc\":\"2.0\",\"id\":{req.Id},\"result\":\"{resultString}\"}}"
           p.WriteLocked(v)
+        | _ ->
+          ()
         nextState
       with
       | ex ->
-        failwith "todo: handle error"
-        p
+        Console.Error.WriteLine(ex.ToString())
+        reraise()
 
   let private dispatchNotification(req: Request) (p: Plugin): Plugin =
     let name = req.Method
@@ -496,15 +513,12 @@ module Plugin =
       p
 
   let private dispatch (msg: string) (p: Plugin): Plugin =
+    printfn $"dispatch: msg: {msg}"
     let req = p.ParseRequest(JsonSerializer.Deserialize(msg))
+    printfn $"dispatch: req: {req}"
     match req.Id with
     | Some _ -> dispatchRequest req p
     | None -> dispatchNotification req p
-
-  /// We received a couple of messages, now try to dispatch them all.
-  /// Returns the last partial message that was not complete yet.
-  let private multiDispatch(msgs: string[]) (p: Plugin): Plugin =
-    msgs |> Array.fold(fun acc msg -> dispatch msg acc) p
 
   let empty = {
     Plugin.Options = Map.empty
@@ -575,6 +589,9 @@ module Plugin =
         RpcFileName = Some path
     }
 
+  /// Add new RPC method to the lightningd.
+  /// lightningd will bypass the rpc call to the handler.
+  /// Handler must return the json object to the lightningd, which finally returned to the caller.
   let addMethod (meta: MethodMetadata) (method: MethodArg -> MethodResult) (p: Plugin) =
     if p.Methods |> Map.containsKey meta.Name then
       raise <| ArgumentException $"method: {meta.Name} Already registered"
@@ -584,6 +601,8 @@ module Plugin =
         Methods = p.Methods |> Map.add meta.Name (Method.Create(MethodFunc.fromSimpleFunc method, MethodType.RPCMETHOD, meta))
     }
 
+  /// Simple version of the `addMethod`, it is recommended to use `addMethod`
+  /// For any serious application.
   let addMethodWithNoDescription (name: string) (method: MethodArg -> MethodResult) (p: Plugin) =
     addMethod (MethodMetadata.CreateFromName name) method p
 
@@ -596,6 +615,8 @@ module Plugin =
         Subscriptions = p.Subscriptions |> Map.add topic func
     }
 
+  /// add an startup option for the plugin.
+  /// lightningd will take this option on startup and passes it to the plugin.
   let addOption name (options: PluginOptions) (p: Plugin) =
     if p.Options |> Map.containsKey name then
       raise <| ArgumentException $"option: {name} Already registered"
@@ -621,22 +642,32 @@ module Plugin =
   let addSimpleHook name func background (p: Plugin) =
     addHook name func background [] [] p
 
+  /// Add a function called after plugin initialization
+  let addInit func (p: Plugin) =
+    {
+      p
+        with
+        ChildInit = MethodFunc.fromSimpleFunc func |> Some
+    }
   let addBackgroundHook name func before after (p: Plugin) =
     addHook name func true before after p
   let addBackgroundSimpleHook name func (p: Plugin) =
     addHook name func true [] [] p
 
-  let run (p: Plugin): unit =
+  let runWithCancellation (ct: CancellationToken) (p: Plugin) =
     let v = Environment.GetEnvironmentVariable "LIGHTNINGD_PLUGIN"
     if v <> "1" then
       p.PrintUsage()
     else
-      let partial = ResizeArray<string>()
-      let mutable state = p
-      while true do
-        let s = p.StdIn.ReadLine()
-        partial.Add(s)
-        if partial.Count < 2 then () else
-        state <- multiDispatch (partial.ToArray()) p
-        partial.Clear()
-
+        let mutable state = p
+        try
+          while not <| ct.IsCancellationRequested do
+            let s = p.StdIn.ReadLine()
+            if s |> String.IsNullOrWhiteSpace then () else
+            let nextState = dispatch s p
+            Interlocked.CompareExchange(ref state, nextState, Unchecked.defaultof<_>) |> ignore
+        with
+        | ex ->
+          Console.Error.Write(ex.ToString())
+          reraise()
+  let run (p: Plugin) = runWithCancellation CancellationToken.None p

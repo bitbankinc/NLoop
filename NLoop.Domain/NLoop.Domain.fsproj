@@ -7,6 +7,8 @@
 
   <ItemGroup>
     <Compile Include="Utils.fs" />
+    <Compile Include="ValueObjects.fs" />
+    <Compile Include="Extensions.fs" />
     <Compile Include="DomainUtils\DomainUtils.fs" />
     <Compile Include="DomainUtils\DomainUtils.InMemoryStore.fs" />
     <Compile Include="DomainUtils\DomainUtils.EventStore.fs" />
@@ -14,15 +16,14 @@
     <Compile Include="Scripts.fs" />
     <Compile Include="Transactions.fs" />
     <Compile Include="IO\Interfaces.fs" />
+    <Compile Include="IO\JsonConverters.fs" />
     <Compile Include="IO\DatabaseDTOs.fs" />
     <Compile Include="Swap.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="EventStore.Client" Version="21.2.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\LightningUtils\LightningUtils.fsproj" />
+    <PackageReference Include="NBitcoin.Altcoins" Version="2.0.31" />
+    <PackageReference Include="FSharp.SystemTextJson" Version="0.16.6" />
   </ItemGroup>
 </Project>

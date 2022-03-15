@@ -15,7 +15,6 @@ open System.Threading.Tasks
 open DotNetLightning.Utils
 open LnClientDotnet.CLightningDTOs
 open NBitcoin
-open NLoop.Domain.IO
 
 type O = OptionalArgumentAttribute
 type D = DefaultParameterValueAttribute
@@ -107,7 +106,7 @@ type CLightningRPCError = {
 
 exception CLightningRPCException of CLightningRPCError
 
-type CLightningClient (network: Network, address: Uri) =
+type CLightningClient (address: Uri) =
   let getAddr (domain: string) =
     task {
       match IPAddress.TryParse domain with
@@ -166,7 +165,6 @@ type CLightningClient (network: Network, address: Uri) =
       do! networkStream.FlushAsync(ct)
       let result =
         let opts = JsonSerializerOptions()
-        opts.AddNLoopJsonConverters(network)
         JsonSerializer.DeserializeAsync<JsonElement>(networkStream, opts, ct)
 
       use _ = ct.Register(fun () -> socket.Dispose())
@@ -192,27 +190,3 @@ type CLightningClient (network: Network, address: Uri) =
         ct.ThrowIfCancellationRequested()
         return failwith "unreachable"
    }
-
-  member this.ConnectAsync(nodeId: PubKey, host: string, port: int, [<O;D(CancellationToken())>] ct) =
-    this.SendCommandAsync<obj>("connect", [|$"{nodeId.ToHex()}@{host}:{port}"|], true, ct = ct)
-
-  member this.NewAddressAsync([<O;D(CancellationToken())>]ct) =
-    task {
-      let! o = this.SendCommandAsync<JsonElement>("newaddr", ct = ct)
-      return o.GetProperty("address").GetString()
-    }
-
-  member this.ListChannelsAsync(scid: ShortChannelId voption, [<O;D(CancellationToken())>] ct) =
-    task {
-      let scid = scid |> ValueOption.map(fun scid -> scid.ToString())  |> ValueOption.toObj
-      return! this.SendCommandAsync<ListChannelsResponse>("listchannels", [|scid|], false, true, ct = ct)
-    }
-  member this.ListChannelsAsync([<O;D(CancellationToken())>] ct) =
-    this.ListChannelsAsync(ValueNone, ct)
-  member this.ListChannelsAsync(scid: ShortChannelId, [<O;D(CancellationToken())>] ct) =
-    this.ListChannelsAsync(ValueSome scid, ct)
-
-  member this.GetInvoice(invoiceId: string, [<O;D(CancellationToken())>] ct) =
-    task {
-      let! i = this.SendCommandAsync<>
-    }
