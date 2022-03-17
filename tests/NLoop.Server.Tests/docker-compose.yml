@@ -108,7 +108,7 @@ services:
       - "--bitcoin-rpcpassword=unsafepassword"
       - "--bitcoin-rpcconnect=bitcoind"
       - "--bitcoin-rpcport=43782"
-      # - "--plugin-dir=/lugins"
+      # - "--plugin-dir=/plugins"
       # - "--plugin=/root/.lightning/plugins/summary"
       # - "--plugin=/opt/lightningd/plugins/summary"
     depends_on:
