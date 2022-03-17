@@ -6,8 +6,12 @@ open System.Collections.Generic
 open System.IO
 open System.Text
 open System.Text.Json
+open System.Text.Json
+open System.Text.Json.Serialization
 open System.Threading
 open System.Threading.Tasks
+open Newtonsoft.Json.Serialization
+open Newtonsoft.Json.Serialization
 
 type FeatureBits = DotNetLightning.Serialization.FeatureBits
 
@@ -46,11 +50,11 @@ type Hook = {
   After: string list
 }
 
-type MethodResult = JsonElement
+/// json to return lightningd
+type MethodResult = obj
 
 type MethodArg = {
-  RPCClient: CLightningClient option
-  NotificationTopics: string list
+  RPCClient: CLightningClient
   FeatureBits: FeatureBitSet
   LightningVersion: string option
   Request: Request
@@ -73,14 +77,26 @@ type MethodMetadata = {
     }
 
 type MethodFunc = delegate of MethodArg * Plugin -> MethodResult option * Plugin
-type Subscription = delegate of MethodArg * Plugin -> unit
+
+type SubscriptionArg = {
+  RPCClient: CLightningClient option
+  NotificationTopics: string list
+  FeatureBits: FeatureBitSet
+  LightningVersion: string option
+  Request: Request
+}
+type Subscription = delegate of SubscriptionArg * Plugin -> unit
 
 module private MethodFunc =
   let fromSimpleFunc (f: MethodArg -> MethodResult) =
     MethodFunc(fun arg plugin -> Some (f arg), plugin)
 
-  let fromSubscription (f: Subscription) =
-    MethodFunc(fun arg plugin -> f.Invoke(arg, plugin); None, plugin)
+  let fromSimpleAction(f: MethodArg -> unit) =
+    MethodFunc(fun arg plugin -> f arg; None, plugin)
+
+module private Subscription =
+  let fromSimpleFunc (f: SubscriptionArg -> unit) =
+    Subscription(fun arg _plugin -> f arg;)
 
 type [<NoEquality;NoComparison>] Method = internal {
   Func: MethodFunc
@@ -120,23 +136,28 @@ type PluginOptValue =
   | String of string
   | Int of int
   | Bool of bool
-  | Flag of bool
   with
   member this.StringValue =
     match this with
     | String s -> s
     | Int i -> int.ToString()
-    | Bool v
-    | Flag v -> v.ToString()
+    | Bool v -> v.ToString()
+
+  static member FromJsonElement(j: JsonElement) =
+    match j.ValueKind with
+    | JsonValueKind.String -> String (j.Deserialize())
+    | JsonValueKind.Number -> Int (j.Deserialize())
+    | JsonValueKind.True | JsonValueKind.False -> Bool (j.Deserialize())
+    | x -> raise <| Exception $"Invalid json type from lightningd {x}"
 
 type PluginOptions = {
-  Name: string
+  Name: string option
   Default: PluginOptValue option
   Description: string option
   OptType: PluginOptType
   Deprecated: bool
   Multi: bool
-  Value: PluginOptType option
+  Value: PluginOptValue option
 }
   with
   static member Create(name,
@@ -176,8 +197,11 @@ type Manifest = {
 
 [<Struct>]
 type JsonRPCV2Id =
-  | Str of stringId: string
   | Num of numId: int
+  with
+  member this.Value =
+    match this with
+    | Num i -> i
 
 type RPCError = {
   Error: CLightningRPCError
@@ -188,22 +212,38 @@ type RPCError = {
 type MethodParams =
   | ByPosition of JsonElement seq
   | ByName of Map<string, JsonElement>
+  | None
   with
   member this.UnsafeGetObject() =
     match this with
     | ByName o -> o
-    | ByPosition s -> raise <| InvalidDataException $"We thought arguments are object, got array: {s}"
+    | ByPosition s ->
+      raise <| InvalidDataException $"We thought arguments are object, got array: {s}"
+    | None ->
+      raise <| InvalidDataException $"We thought arguments are object, got None"
 
   member this.UnsafeGetArray() =
     match this with
     | ByPosition s  -> s
-    | ByName o -> raise <| InvalidDataException $"We thought arguments are array, got array: {o}"
+    | ByName o ->
+      raise <| InvalidDataException $"We thought arguments are array, got array: {o}"
+    | None ->
+      raise <| InvalidDataException $"We thought arguments are array, got None"
 
 type Request = {
   Method: string
   Params: MethodParams
   Background: bool
   Id: JsonRPCV2Id option
+}
+
+type Response = {
+  [<JsonPropertyName "jsonrpc">]
+  JsonRpcVersion: string
+  [<JsonPropertyName "id">]
+  Id: int
+  [<JsonPropertyName "result">]
+  Result: MethodResult
 }
 
 type Plugin = private {
@@ -301,7 +341,7 @@ type Plugin = private {
         sb.Append("\n This option can be specified multiple times") |> ignore
       let ty = (opt.OptType.ToString().ToLowerInvariant())
       let de = opt.Default |> Option.map(fun d -> d.StringValue) |> Option.defaultValue "none"
-      sb.Append(optionsTemplate opt.Name ty de desc) |> ignore
+      sb.Append(optionsTemplate (opt.Name |> Option.defaultValue "None") ty de desc) |> ignore
     )
 
     Console.WriteLine (sb.ToString())
@@ -310,12 +350,8 @@ type Plugin = private {
   member this.CallbackArg = this.RPC
 
   member internal this.WriteLocked(value: string) =
-
-    let jsonValue =
-      let opts = JsonSerializerOptions()
-      JsonSerializer.Serialize(value, opts)
     lock this._writeLock <| fun () ->
-      this.StdOut.Write(jsonValue)
+      this.StdOut.Write(value)
       this.StdOut.Flush()
 
   member internal this.ParseRequest (jsonRequest: JsonElement): Request =
@@ -338,9 +374,7 @@ type Plugin = private {
           | true, j when j.ValueKind = JsonValueKind.Object ->
             MethodParams.ByName (j.EnumerateObject() |> Seq.map(fun o -> (o.Name, o.Value)) |> Map.ofSeq )
           | false, _ ->
-            let msg = $"Invalid json! No \"params\" property"
-            Console.Error.WriteLine(msg)
-            raise <| Exception msg
+            MethodParams.None
           | true, j ->
             let msg = $"Invalid json! \"params\" property was {j.ToString()}"
             Console.Error.WriteLine(msg)
@@ -352,16 +386,25 @@ type Plugin = private {
 [<RequireQualifiedAccess>]
 module Plugin =
 
-  let private execFunc (func: MethodFunc) (req: Request) (p: Plugin): MethodResult option * Plugin =
+  let private execMethod isInit (func: MethodFunc) (req: Request) (p: Plugin): MethodResult option * Plugin =
     let methodArg =
       {
         MethodArg.Request = req
-        FeatureBits = p.FeatureBits
-        RPCClient = p.RPC
-        NotificationTopics = p.NotificationTopics
-        LightningVersion = p.LightningVersion
+        MethodArg.FeatureBits = p.FeatureBits
+        MethodArg.RPCClient = if isInit then Unchecked.defaultof<_> else p.RPC.Value
+        MethodArg.LightningVersion = p.LightningVersion
       }
     func.Invoke(methodArg, p)
+
+  let private execSubscription (subsc: Subscription) (req: Request) (p: Plugin) : unit =
+    let arg = {
+      SubscriptionArg.Request = req
+      RPCClient = p.RPC
+      NotificationTopics = p.NotificationTopics
+      FeatureBits = p.FeatureBits
+      LightningVersion = p.LightningVersion
+    }
+    subsc.Invoke(arg, p)
 
   let getManifest: MethodFunc =
     let f (methodarg: MethodArg) (p: Plugin) =
@@ -458,18 +501,23 @@ module Plugin =
               Some <| CLightningClient(Uri($"unix://{path}"))
             Startup = verifyBool(configurations, "startup")
             Options =
-              let options = reqParams |> Map.find("options")
-              options.EnumerateArray()
-              |> Seq.fold(fun (acc: Map<string, PluginOptions>) (optionObj: JsonElement) ->
+              (
+              match reqParams |> Map.find("options") with
+              | o when o.ValueKind = JsonValueKind.Object ->
+                o.EnumerateObject()
+                |> Seq.map(fun o -> (o.Name, o.Value))
+              | o -> raise <| Exception $"Invalid init options from lightningd: {o}"
+              )
+              |> Seq.fold(fun (acc: Map<string, PluginOptions>) ((name, value): string * JsonElement) ->
                   acc
-                  |> Map.add
-                       (optionObj.GetProperty("name").GetString())
-                       (JsonSerializer.Deserialize<PluginOptions>(optionObj))
-                )
-                Map.empty
+                  |> Map.change
+                       name
+                       (Option.map(fun o -> { o with Value = PluginOptValue.FromJsonElement value |> Some }))
+                ) plugin.Options
         }
         match nextState.ChildInit with
-        | Some i -> i.Invoke(o, nextState)
+        | Some i ->
+          i.Invoke(o, nextState)
         | None ->
           None, nextState
     MethodFunc f
@@ -482,14 +530,15 @@ module Plugin =
     | Some method ->
       let req = { req with Background = method.Background }
       try
-        printfn $"dispatchRequest: disptaching request with {method.Func}"
-        let res, nextState = execFunc method.Func req p
-        printfn $"dispatchRequest: res: {res}"
+        let res, nextState = execMethod (name = "init") method.Func req p
         match res with
-        | Some r when not <| method.Background ->
-          let resultString = JsonSerializer.Serialize(r)
-          let v = $"{{\"jsonrpc\":\"2.0\",\"id\":{req.Id},\"result\":\"{resultString}\"}}"
-          p.WriteLocked(v)
+        | Some r when r |> isNull |> not && r.ToString() |> String.IsNullOrWhiteSpace |> not && not <| method.Background ->
+          let v = {
+            Response.JsonRpcVersion = "2.0"
+            Id = req.Id.Value.Value
+            Result = r
+          }
+          p.WriteLocked(JsonSerializer.Serialize(v))
         | _ ->
           ()
         nextState
@@ -505,7 +554,7 @@ module Plugin =
         raise <| InvalidDataException $"No subscription for {name} found."
     | Some subsc ->
       try
-        let _ = execFunc (MethodFunc.fromSubscription subsc) req
+        let _ = execSubscription subsc req
         ()
       with
       | ex ->
@@ -513,9 +562,7 @@ module Plugin =
       p
 
   let private dispatch (msg: string) (p: Plugin): Plugin =
-    printfn $"dispatch: msg: {msg}"
     let req = p.ParseRequest(JsonSerializer.Deserialize(msg))
-    printfn $"dispatch: req: {req}"
     match req.Id with
     | Some _ -> dispatchRequest req p
     | None -> dispatchNotification req p
@@ -529,7 +576,8 @@ module Plugin =
     NotificationTopics = []
     FeatureBits = FeatureBitSet.Zero
     Subscriptions = Map.empty
-    LightningVersion = Environment.GetEnvironmentVariable("LIGHTNINGD_VERSION") |> Option.ofObj
+    LightningVersion =
+      Environment.GetEnvironmentVariable("LIGHTNINGD_VERSION") |> Option.ofObj
     ChildInit = None
     DeprecatedAPIs = true
     Dynamic = true
@@ -643,11 +691,11 @@ module Plugin =
     addHook name func background [] [] p
 
   /// Add a function called after plugin initialization
-  let addInit func (p: Plugin) =
+  let addChildInit (func: MethodArg -> unit) (p: Plugin) =
     {
       p
         with
-        ChildInit = MethodFunc.fromSimpleFunc func |> Some
+        ChildInit = MethodFunc.fromSimpleAction func |> Some
     }
   let addBackgroundHook name func before after (p: Plugin) =
     addHook name func true before after p
@@ -664,8 +712,7 @@ module Plugin =
           while not <| ct.IsCancellationRequested do
             let s = p.StdIn.ReadLine()
             if s |> String.IsNullOrWhiteSpace then () else
-            let nextState = dispatch s p
-            Interlocked.CompareExchange(ref state, nextState, Unchecked.defaultof<_>) |> ignore
+            state <- dispatch s state
         with
         | ex ->
           Console.Error.Write(ex.ToString())

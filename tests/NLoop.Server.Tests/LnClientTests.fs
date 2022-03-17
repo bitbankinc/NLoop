@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.Linq
 open System.IO
 open System.Text
 open System.Text.Json
@@ -16,19 +17,22 @@ module private ClightningClientTestHelpers =
   let inline flatten (s: string) =
     s |> JsonSerializer.Deserialize<JsonDocument> |> JsonSerializer.Serialize
 
+  let inline flattenObs a =
+    a |> JsonSerializer.Serialize |> flatten
+
 type PluginTests() =
   [<Fact>]
-  member  this.PluginCanRun() =
+  member  this.CanHandleMethod() =
       Environment.SetEnvironmentVariable("LIGHTNINGD_PLUGIN", "1")
       let dummyInit = $"""
   {{
     "id": 0,
     "method": "init",
     "params": {{
-      "options": [{{
+      "options": {{
         "greeting": "World",
         "number": [0]
-      }}],
+      }},
       "configuration": {{
         "lightning-dir": "/home/user/.lightning/testnet",
         "rpc-file": "lightning-rpc",
@@ -54,23 +58,41 @@ type PluginTests() =
       let initB =
         dummyInit
         |> flatten |> utf8.GetBytes
+      let dummyMethodCallB =
+        "{\"id\": 0,\"method\":\"testmethod\"}" |> flatten |> utf8.GetBytes
       use cts = new CancellationTokenSource()
-      use inMem = new MemoryStream(initB)
+      cts.CancelAfter(1000)
+      let data = Array.concat [| initB; "\n\n" |> utf8.GetBytes; dummyMethodCallB  |]
+      use inMem = new MemoryStream(data)
       use inStream = new StreamReader(inMem)
-      use outMem = new MemoryStream(Array.zeroCreate 1024)
+      use outMem = new MemoryStream(Array.zeroCreate 1024,0,1024,writable =true,publiclyVisible=true)
       let outStream = new StreamWriter(outMem)
+
+      let childInitExecuted = TaskCompletionSource()
+      let testMethodExecuted = TaskCompletionSource()
+      let methodResult =
+        {| test1 = "ok" |} |> box
       let t =
         Task.Run(fun () ->
-        let methodHandler _methodArg =
-          JsonSerializer.Deserialize<JsonElement> "{ \"test1\": \"ok\" }"
-        Plugin.empty
-        |> Plugin.setMockStdIn(inStream)
-        |> Plugin.setMockStdOut(outStream)
-        |> Plugin.addMethodWithNoDescription
-          "testmethod"  methodHandler
-        |> Plugin.runWithCancellation cts.Token
-      )
-      let result = outMem.ToArray() |> utf8.GetString
-      printfn $"result: {result}"
-      t.GetAwaiter().GetResult()
-      ()
+          let methodHandler methodArg =
+            testMethodExecuted.SetResult()
+            methodResult
+          Plugin.empty
+          |> Plugin.setMockStdIn(inStream)
+          |> Plugin.setMockStdOut(outStream)
+          |> Plugin.addChildInit(fun arg ->
+            childInitExecuted.SetResult()
+          )
+          |> Plugin.addMethodWithNoDescription
+            "testmethod" methodHandler
+          |> Plugin.runWithCancellation cts.Token
+        , cts.Token)
+      (task {
+        do! childInitExecuted.Task
+        do! testMethodExecuted.Task
+        do! Task.Delay 100
+        let result = outMem.ToArray() |> utf8.GetString
+        Assert.Contains(methodResult |> flattenObs, result)
+        let! _ = t
+        ()
+      }).GetAwaiter().GetResult()
