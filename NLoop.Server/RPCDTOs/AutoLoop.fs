@@ -43,8 +43,9 @@ type SwapDisqualifiedReason =
     | x -> $"{x}"
 
 type LiquidityRuleType =
-  | THRESHOLD
-  | UNKNOWN
+  | UNKNOWN = 0
+  | THRESHOLD = 1
+
 open FsToolkit.ErrorHandling
 type LiquidityRule = {
   /// The channel id to apply this rule.

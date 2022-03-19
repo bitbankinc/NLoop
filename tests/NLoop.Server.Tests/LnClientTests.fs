@@ -10,11 +10,9 @@ open System.Threading
 open System.Threading.Tasks
 open LnClientDotnet
 open Microsoft.Extensions.DependencyInjection
+open NLoop.Domain
 open NLoop.Server.DTOs
-open NLoopClient
-open Nerdbank.Streams
-open Nerdbank.Streams
-open Nerdbank.Streams
+open NLoop.Server.RPCDTOs
 open StreamJsonRpc
 open NLoop.Server
 open Xunit
@@ -70,114 +68,66 @@ module private ClightningClientTestHelpers =
     }
 
 type PluginTests() =
-  [<Fact>]
-  member  this.CanHandleMethod() =
-      Environment.SetEnvironmentVariable("LIGHTNINGD_PLUGIN", "1")
-      let dummyInit = $"""
-  {{
-    "id": 0,
-    "method": "init",
-    "params": {{
-      "options": {{
-        "greeting": "World",
-        "number": [0]
-      }},
-      "configuration": {{
-        "lightning-dir": "/home/user/.lightning/testnet",
-        "rpc-file": "lightning-rpc",
-        "startup": true,
-        "network": "testnet",
-        "feature_set": {{
-            "init": "02aaa2",
-            "node": "8000000002aaa2",
-            "channel": "",
-            "invoice": "028200"
-        }},
-        "proxy": {{
-            "type": "ipv4",
-            "address": "127.0.0.1",
-            "port": 9050
-        }},
-        "torv3-enabled": true,
-        "always_use_proxy": false
-      }}
-    }}
-  }}
-  """
-      let initB =
-        dummyInit
-        |> flatten |> utf8.GetBytes
-      let dummyMethodCallB =
-        "{\"id\": 0,\"method\":\"testmethod\"}" |> flatten |> utf8.GetBytes
-      use cts = new CancellationTokenSource()
-      cts.CancelAfter(1000)
-      let data = Array.concat [| initB; "\n\n" |> utf8.GetBytes; dummyMethodCallB  |]
-      use inMem = new MemoryStream(data)
-      use inStream = new StreamReader(inMem)
-      use outMem = new MemoryStream(Array.zeroCreate 1024,0,1024,writable =true,publiclyVisible=true)
-      let outStream = new StreamWriter(outMem)
+  let sp =
+    TestHelpers.GetTestServiceProvider(fun (serviceCollection: IServiceCollection) ->
+      serviceCollection.AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>() |> ignore
+    )
+  let rpcServer = sp.GetService<INLoopJsonRpcServer>()
 
-      let childInitExecuted = TaskCompletionSource()
-      let testMethodExecuted = TaskCompletionSource()
-      let methodResult =
-        {| test1 = "ok" |} |> box
-      let t =
-        Task.Run(fun () ->
-          let methodHandler methodArg =
-            testMethodExecuted.SetResult()
-            methodResult
-          Plugin.empty
-          |> Plugin.setMockStdIn(inStream)
-          |> Plugin.setMockStdOut(outStream)
-          |> Plugin.addChildInit(fun arg ->
-            childInitExecuted.SetResult()
-          )
-          |> Plugin.addMethodWithNoDescription
-            "testmethod" methodHandler
-          |> Plugin.runWithCancellation cts.Token
-        , cts.Token)
-      (task {
-        do! childInitExecuted.Task
-        do! testMethodExecuted.Task
-        do! Task.Delay 100
-        let result = outMem.ToArray() |> utf8.GetString
-        Assert.Contains(methodResult |> flattenObs, result)
-        let! _ = t
-        ()
-      }).GetAwaiter().GetResult()
+  let _serverTask = createRpcServer(rpcServer)
 
   [<Fact>]
-  member this.ServerStreamTests () =
+  member this.ServerStreamTests_Info() =
     task {
-      use cts = new CancellationTokenSource()
-      use sp =
-        TestHelpers.GetTestServiceProvider(fun (serviceCollection: IServiceCollection) ->
-          serviceCollection.AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>() |> ignore
-        )
-      let rpcServer = sp.GetService<INLoopJsonRpcServer>()
-      (*
-      j.AddLocalRpcTarget(rpcServer)
-      j.StartListening()
-
-      let clientHandler = new NewLineDelimitedMessageHandler(clientToServerStream, serverToClientStream, formatter=new JsonMessageFormatter())
-      let client: JsonRpc =
-        JsonRpc.Attach(clientToServerStream, serverToClientStream)
-        new JsonRpc(clientHandler)
-      j.AddLocalRpcTarget(rpcServer)
-      *)
-
-      let serverTask = createRpcServer(rpcServer)
       let! client = getClientProxy()
-
       let! resp =
         client.Version()
-        // client.InvokeWithCancellationAsync<string>("version", cancellationToken=cts.Token)
       Assert.NotNull(resp)
-      //let! t = Task.WhenAny(j.Completion, Task.Delay(-1, cts.Token))
-      //do! t
+      let! info =
+        client.Info()
+      Assert.NotNull(info.Version)
       ()
     }
 
   [<Fact>]
-  member this.TestJsonRpcServer() =
-    ()
+  member this.ServerStreamTests_Autoloop() =
+    let req = {
+      SetLiquidityParametersRequest.Parameters =
+        {
+          LiquidityParameters.Rules = [|
+            {
+              ChannelId = chanId1 |> ValueSome
+              PubKey = ValueNone
+              Type = LiquidityRuleType.THRESHOLD
+              IncomingThreshold = 25s<percent>
+              OutgoingThreshold = 25s<percent>
+            }
+          |]
+          FeePPM = 20L<ppm> |> ValueSome
+          SweepFeeRateSatPerKVByte = ValueNone
+          MaxSwapFeePpm = ValueNone
+          MaxRoutingFeePpm = ValueNone
+          MaxPrepayRoutingFeePpm = ValueNone
+          MaxPrepay = ValueNone
+          MaxMinerFee = ValueNone
+          SweepConfTarget = 3
+          FailureBackoffSecond = 600
+          AutoLoop = false
+          AutoMaxInFlight = 1
+          MinSwapAmountLoopOut = None
+          MaxSwapAmountLoopOut = None
+          MinSwapAmountLoopIn = None
+          MaxSwapAmountLoopIn = None
+          OnChainAsset = SupportedCryptoCode.BTC |> ValueSome
+          HTLCConfTarget = 3 |> Some
+        }
+    }
+    task {
+      let! client = getClientProxy()
+      let dtoReq = req |> convertDTOToJsonRPCStyle
+      let! _ = client.SetLiquidityParams(dtoReq, NLoopClient.CryptoCode.BTC)
+      let! dtoResp = client.GetLiquidityParams(NLoopClient.CryptoCode.BTC)
+      let resp = dtoResp |> convertDTOToNLoopCompatibleStyle
+      Assert.Equal(req.Parameters, resp)
+      ()
+    }
