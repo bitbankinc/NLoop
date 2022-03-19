@@ -172,9 +172,7 @@ type Startup(_conf: IConfiguration, env: IHostEnvironment) =
 
 module Main =
 
-  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
-      builder.AddConsole() |> ignore
-
+  let configureFileLogging(ctx: WebHostBuilderContext) (builder : ILoggingBuilder)  =
       let isProduction = ctx.HostingEnvironment.IsProduction()
       if isProduction |> not then
         builder.AddDebug() |> ignore
@@ -195,6 +193,9 @@ module Main =
         .AddFile(filePath, configureFileLogging)
         .SetMinimumLevel(LogLevel.Debug)
         |> ignore
+  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
+      builder.AddConsole() |> ignore
+      configureFileLogging ctx builder
 
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.AddInMemoryCollection(Constants.DefaultLoggingSettings) |> ignore
@@ -211,7 +212,21 @@ module Main =
     ()
 
   let configureHostBuilder  (hostBuilder: IHostBuilder) =
-    hostBuilder.ConfigureAppConfiguration(configureConfig)
+    let hostBuilder =
+      hostBuilder
+        .ConfigureAppConfiguration(configureConfig)
+
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    if isPluginMode then
+      hostBuilder
+        .ConfigureWebHost(fun webHostBuilder ->
+          webHostBuilder
+            .UseStartup<Startup>()
+            .ConfigureLogging(configureFileLogging)
+            |> ignore
+        )
+    else
+    hostBuilder
       .ConfigureWebHostDefaults(
         fun webHostBuilder ->
           webHostBuilder

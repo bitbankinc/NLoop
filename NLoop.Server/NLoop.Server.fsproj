@@ -23,6 +23,7 @@
     <PackageReference Include="NetMQ" Version="4.0.1.6" />
     <PackageReference Include="NReco.Logging.File" Version="1.1.3" />
     <PackageReference Include="Ply" Version="0.3.*" />
+    <PackageReference Include="StreamJsonRpc" Version="2.10.44" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta1.20574.7" />
     <PackageReference Include="System.CommandLine.Hosting" Version="0.3.0-alpha.20574.7" />
   </ItemGroup>
@@ -60,6 +61,7 @@
     <Compile Include="Services\BlockchainProxies.fs" />
     <Compile Include="Services\BoltzListener.fs" />
     <Compile Include="Services\AutoLoopManager.fs" />
+    <Compile Include="Services\StreamJsonRpcHost.fs" />
     <Compile Include="Services\NLoopService.fs" />
     <Compile Include="Services\RequestResponseLoggingMiddleware.fs" />
     <Compile Include="GiraffeExtensions.fs" />
@@ -67,6 +69,7 @@
     <Compile Include="AutoLoopHandlers.fs" />
     <Compile Include="QueryHandlers.fs" />
     <Compile Include="CommandLine.fs" />
+    <Compile Include="JsonRpcServer.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

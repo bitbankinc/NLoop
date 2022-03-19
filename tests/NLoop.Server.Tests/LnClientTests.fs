@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.IO.Pipes
 open System.Linq
 open System.IO
 open System.Text
@@ -8,6 +9,14 @@ open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
 open LnClientDotnet
+open Microsoft.Extensions.DependencyInjection
+open NLoop.Server.DTOs
+open NLoopClient
+open Nerdbank.Streams
+open Nerdbank.Streams
+open Nerdbank.Streams
+open StreamJsonRpc
+open NLoop.Server
 open Xunit
 
 [<AutoOpen>]
@@ -19,6 +28,46 @@ module private ClightningClientTestHelpers =
 
   let inline flattenObs a =
     a |> JsonSerializer.Serialize |> flatten
+
+  [<Literal>]
+  let private pipeName = "SamplePipeName"
+  let private serverPipe () =
+    new NamedPipeServerStream(
+      pipeName,
+      PipeDirection.InOut,
+      NamedPipeServerStream.MaxAllowedServerInstances,
+      PipeTransmissionMode.Byte,
+      PipeOptions.Asynchronous
+    )
+
+  let private clientPipe() =
+    new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous)
+  let inline getClientProxy() =
+    let formatter =
+      let f = new JsonMessageFormatter()
+      f
+
+    let pipe = clientPipe()
+    let handler = new NewLineDelimitedMessageHandler(pipe, pipe, formatter)
+    task {
+      do! pipe.ConnectAsync()
+      return JsonRpc.Attach<INLoopJsonRpcServer> handler
+    }
+
+  let inline createRpcServer(server: INLoopJsonRpcServer) =
+    let formatter = new JsonMessageFormatter()
+
+    backgroundTask {
+      while true do
+        let pipe = serverPipe()
+        do! pipe.WaitForConnectionAsync()
+        let handler = new NewLineDelimitedMessageHandler(pipe, pipe, formatter)
+        use rpc = new JsonRpc(handler)
+        rpc.AddLocalRpcTarget<INLoopJsonRpcServer>(server, JsonRpcTargetOptions())
+        rpc.StartListening()
+        do! rpc.Completion
+        ()
+    }
 
 type PluginTests() =
   [<Fact>]
@@ -96,3 +145,39 @@ type PluginTests() =
         let! _ = t
         ()
       }).GetAwaiter().GetResult()
+
+  [<Fact>]
+  member this.ServerStreamTests () =
+    task {
+      use cts = new CancellationTokenSource()
+      use sp =
+        TestHelpers.GetTestServiceProvider(fun (serviceCollection: IServiceCollection) ->
+          serviceCollection.AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>() |> ignore
+        )
+      let rpcServer = sp.GetService<INLoopJsonRpcServer>()
+      (*
+      j.AddLocalRpcTarget(rpcServer)
+      j.StartListening()
+
+      let clientHandler = new NewLineDelimitedMessageHandler(clientToServerStream, serverToClientStream, formatter=new JsonMessageFormatter())
+      let client: JsonRpc =
+        JsonRpc.Attach(clientToServerStream, serverToClientStream)
+        new JsonRpc(clientHandler)
+      j.AddLocalRpcTarget(rpcServer)
+      *)
+
+      let serverTask = createRpcServer(rpcServer)
+      let! client = getClientProxy()
+
+      let! resp =
+        client.Version()
+        // client.InvokeWithCancellationAsync<string>("version", cancellationToken=cts.Token)
+      Assert.NotNull(resp)
+      //let! t = Task.WhenAny(j.Completion, Task.Delay(-1, cts.Token))
+      //do! t
+      ()
+    }
+
+  [<Fact>]
+  member this.TestJsonRpcServer() =
+    ()
