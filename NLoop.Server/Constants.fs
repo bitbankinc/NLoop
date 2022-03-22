@@ -99,3 +99,6 @@ module Constants =
   let [<Literal>] ExchangeLongPollingIntervalSec = 20.
 
   let MaxBlockRewind = BlockHeightOffset32 1200u
+
+
+  let [<Literal>] ApiDocUrl = "https://bitbankinc.github.io/NLoop/"

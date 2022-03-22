@@ -55,7 +55,7 @@ module Observable =
       |> Observable.first
       |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable
 
-type SwapActor(opts: IOptions<NLoopOptions>,
+type SwapActor(getOpts: GetOptions,
                lightningClientProvider: ILightningClientProvider,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
@@ -87,7 +87,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       fun (req: WalletFundingRequest) -> task {
         let cli = getWalletClient(req.CryptoCode)
         let! txid = cli.FundToAddress(req.DestAddress, req.Amount, req.TargetConf)
-        let blockchainCli = opts.Value.GetBlockChainClient(req.CryptoCode)
+        let blockchainCli = getOpts().GetBlockChainClient(req.CryptoCode)
         return! blockchainCli.GetRawTransaction(TxId txid)
       }
     let offer =

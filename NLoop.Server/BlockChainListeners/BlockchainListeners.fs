@@ -12,7 +12,7 @@ open NLoop.Server.Options
 open NLoop.Server.Projections
 
 
-type BlockchainListeners(opts: IOptions<NLoopOptions>,
+type BlockchainListeners(getOpts: GetOptions,
                          loggerFactory: ILoggerFactory,
                          getBlockchainClient,
                          swapActor,
@@ -50,7 +50,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
       cts.Token.ThrowIfCancellationRequested()
 
       let roundTrip cc = unitTask {
-        let cOpts = opts.Value.ChainOptions.[cc]
+        let cOpts = getOpts().ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
             RPCLongPollingBlockchainListener(loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), getNetwork, swapActor, cc)
@@ -81,7 +81,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
 
 
       do!
-        opts.Value.OnChainCrypto
+        getOpts().OnChainCrypto
         |> Seq.map roundTrip
         |> Task.WhenAll
 

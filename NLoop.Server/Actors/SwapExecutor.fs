@@ -21,7 +21,7 @@ open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
 type SwapExecutor(
                   invoiceProvider: ILightningInvoiceProvider,
-                  opts: IOptions<NLoopOptions>,
+                  getOpts: GetOptions,
                   logger: ILogger<SwapExecutor>,
                   eventAggregator: IEventAggregator,
                   swapServerClient: ISwapServerClient,
@@ -88,7 +88,7 @@ type SwapExecutor(
           SwapTxHex = None
           ClaimTransactionId = None
           PairId = pairId
-          ChainName = opts.Value.ChainName.ToString()
+          ChainName = getOpts().ChainName.ToString()
           Label = req.Label |> Option.defaultValue String.Empty
           PrepayInvoice =
             outResponse.MinerFeeInvoice
@@ -269,7 +269,7 @@ type SwapExecutor(
               SwapTxInfoHex = None
               RefundTransactionId = None
               PairId = pairId
-              ChainName = opts.Value.ChainName.ToString()
+              ChainName = getOpts().ChainName.ToString()
               Label = loopIn.Label |> Option.defaultValue String.Empty
               HTLCConfTarget =
                 htlcConfTarget

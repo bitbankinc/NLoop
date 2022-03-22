@@ -182,7 +182,7 @@ type RPCMethod = {
   Name: string
   Category: string
   Usage: string
-  Description: string
+  Description: string option
   LongDescription: string option
 }
 type Manifest = {
@@ -454,7 +454,7 @@ module Plugin =
             RPCMethod.Name = m.Metadata.Name
             Category = m.Metadata.Category |> Option.defaultValue "plugin"
             Usage = String.Join(' ', args)
-            Description = failwith "todo"
+            Description = m.Metadata.Desc
             LongDescription = m.Metadata.LongDesc
           }
         )

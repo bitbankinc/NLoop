@@ -813,7 +813,7 @@ type SwapBuilder = {
     }
 
 type AutoLoopManager(logger: ILogger<AutoLoopManager>,
-                     opts: IOptions<NLoopOptions>,
+                     getOpts: GetOptions,
                      swapStateProjection: IOnGoingSwapStateProjection,
                      recentSwapFailureProjection: IRecentSwapFailureProjection,
                      swapServerClient: ISwapServerClient,
@@ -978,7 +978,7 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       do! builder.VerifyTargetIsNotInUse traffic peerOrChannel
       ct.ThrowIfCancellationRequested()
       let amount =
-        rule.SwapAmount(balance, restrictions, category, opts.Value.TargetIncomingLiquidityRatio)
+        rule.SwapAmount(balance, restrictions, category, getOpts().TargetIncomingLiquidityRatio)
       if amount = Money.Zero then
         return! Error(SwapDisqualifiedReason.LiquidityOk)
       else
@@ -1177,10 +1177,10 @@ type AutoLoopManager(logger: ILogger<AutoLoopManager>,
       logger.LogError($"{ex}")
   }
 
-type AutoLoopManagers(opts: IOptions<NLoopOptions>, sp: IServiceProvider) =
+type AutoLoopManagers(getOpts: GetOptions, sp: IServiceProvider) =
   let managers = Dictionary<SupportedCryptoCode, AutoLoopManager>()
   do
-    for c in opts.Value.OffChainCrypto do
+    for c in getOpts().OffChainCrypto do
       let man =
         new
           AutoLoopManager(

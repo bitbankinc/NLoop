@@ -105,7 +105,7 @@ module QueryHandlers =
       | Error e ->
         return! error503 $"Failed to read events from DB\n {e}" next ctx
       | Ok entities ->
-        let opts = ctx.GetService<IOptions<NLoopOptions>>()
+        let opts = ctx.GetService<GetOptions>()()
         let resp: GetCostSummaryResponse =
           entities
           |> Map.toSeq
@@ -113,7 +113,7 @@ module QueryHandlers =
           |> SwapCost.foldSwapStates
           |> Map.toArray
           |> Array.map(fun (cc, cost) -> { CostSummary.Cost = cost; CryptoCode = cc })
-          |> fun a -> { GetCostSummaryResponse.Costs = a; ServerEndpoint = opts.Value.BoltzHost }
+          |> fun a -> { GetCostSummaryResponse.Costs = a; ServerEndpoint = opts.BoltzHost }
         return! json resp next ctx
     }
 

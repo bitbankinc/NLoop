@@ -41,6 +41,7 @@
         "tags": [
           "general"
         ],
+        "description": "Get basic information about nloop.",
         "operationId": "info",
         "responses": {
           "200": {
@@ -87,7 +88,7 @@
         "tags": [
           "swap"
         ],
-        "description": "Get the full history of swas. This might take long if you have a lots of entries in a database.",
+        "description": "Get the full history of swaps. This might take long if you have a lots of entries in a database.",
         "operationId": "history",
         "parameters": [
           {
@@ -276,7 +277,7 @@
           "loop",
           "autoloop"
         ],
-        "description": "Get suggestion for the swaps.",
+        "description": "Get suggestion for the swaps. You must set liquidity parameters for autoloop before getting the suggestion, this endpoint is usually useful when you set `autoloop=false` to liquidity params. (that is, autoloop dry-run mode.)",
         "operationId": "suggest",
         "parameters": [
           {

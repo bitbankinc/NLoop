@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open LndClient
+open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
@@ -142,4 +143,8 @@ type NLoopOptions() =
         | Ok x -> x
         | Error e -> failwith $"Invalid Lnd config: {e}"
 
+type GetOptions = unit -> NLoopOptions
 
+type PluginServerSettings(initialOpts: IOptions<NLoopOptions>) =
+  member val IsInitiated = false with get, set
+  member val Opts = initialOpts.Value with get, set

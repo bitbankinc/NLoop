@@ -99,7 +99,7 @@ type BoltzClientExtensions =
     }
   }
 
-type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOptions<NLoopOptions>, feeEst: IFeeEstimator) =
+type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, getOptions: GetOptions, feeEst: IFeeEstimator) =
   interface ISwapServerClient with
     member this.LoopOut(request, ct) =
       let ct = defaultArg ct CancellationToken.None
@@ -157,7 +157,7 @@ type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOp
           let! fee =
             let onChainAsset = request.Pair.Quote
             let dummyP2SHAddr =
-              let n = opts.Value.GetNetwork(onChainAsset)
+              let n = getOptions().GetNetwork(onChainAsset)
               Scripts.dummySwapScriptV1.WitHash.GetAddress(n)
             let wallet = getWallet(onChainAsset)
             let dest = seq [(dummyP2SHAddr, request.Amount)] |> dict

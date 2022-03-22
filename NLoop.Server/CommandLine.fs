@@ -40,24 +40,28 @@ module NLoopServerCommandLine =
         o.Argument <-
           let a = Argument<bool>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.NoHttps)
           a
         o :> Option
         let o = Option<int>($"--{nameof(NLoopOptions.Instance.HttpsPort).ToLowerInvariant()}", "Port for listening HTTPs request")
         o.Argument <-
           let a = Argument<int>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.HttpsPort)
           a
         o
         let o = Option<FileInfo>($"--{nameof(NLoopOptions.Instance.HttpsCert).ToLowerInvariant()}", "Path to the https certification file")
         o.Argument <-
           let a = Argument<FileInfo>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.HttpsCert)
           a
         o
         let o = Option<string>($"--{nameof(NLoopOptions.Instance.HttpsCertPass).ToLowerInvariant()}", "Password to encrypt https cert file.")
         o.Argument <-
           let a = Argument<string>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.HttpsCertPass)
           a
         o
       ]
@@ -68,18 +72,21 @@ module NLoopServerCommandLine =
         o.Argument <-
           let a = Argument<FileInfo>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.RPCCookieFile)
           a
         o :> Option
         let o = Option<string>($"--{nameof(NLoopOptions.Instance.RPCHost).ToLowerInvariant()}", "host which server listens for rpc call")
         o.Argument <-
           let a = Argument<string>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.RPCHost)
           a
         o
         let o = Option<int>($"--{nameof(NLoopOptions.Instance.RPCPort).ToLowerInvariant()}", "port which server listens for rpc call")
         o.Argument <-
           let a = Argument<int>()
           a.Arity <- ArgumentArity.ExactlyOne
+          a.SetDefaultValue(NLoopOptions.Instance.RPCPort)
           a
         o
       ]
@@ -95,13 +102,14 @@ module NLoopServerCommandLine =
       o.Argument <-
         let a = Argument<string>()
         a.Arity <- ArgumentArity.ExactlyOne
+        a.SetDefaultValue(NLoopOptions.Instance.Network)
         a.FromAmong(networkNames)
       o :> Option
       let o = Option<DirectoryInfo>([|$"--{nameof(NLoopOptions.Instance.DataDir).ToLowerInvariant()}"; "-d"|], "Directory to store data other than those stored in eventstoredb.")
       o.Argument <-
         let a = Argument<DirectoryInfo>()
         a.Arity <- ArgumentArity.ExactlyOne
-        a.SetDefaultValue(Constants.DefaultDataDirectoryPath)
+        a.SetDefaultValue(NLoopOptions.Instance.DataDir)
         a
       o
 
@@ -113,11 +121,12 @@ module NLoopServerCommandLine =
      let opts = c.GetDefaultOptions()
      let nDefaults = networks |> List.map(fun n -> (n, c.GetDefaultOptions(n)))
      seq [
+       let getDefaults(chainOptionToField: IChainOptions -> obj) =
+         nDefaults
+         |> List.fold(fun acc (n, o) -> $"{acc}{n.ToString().ToLowerInvariant()}: {chainOptionToField o}, ") "defaults: ("
+         |> (+) <| ")"
        let o =
-         let defaults =
-           nDefaults
-           |> List.fold(fun acc (n, o) -> $"{acc}{n.ToString().ToLowerInvariant()}: {o.RPCPort}, ") "defaults: ("
-           |> (+) <| ")"
+         let defaults = getDefaults(fun o -> o.RPCHost |> box)
          Option<string>(b (nameof(opts.RPCHost)),
                         $"RPC host name of the blockchain client. {defaults}")
        o.Argument <-
@@ -125,8 +134,10 @@ module NLoopServerCommandLine =
          a.Arity <- ArgumentArity.ZeroOrOne
          a
        o :> Option
-       let o = Option<int>(b (nameof(opts.RPCPort)),
-                              "RPC port number of the blockchain client")
+       let o =
+         let defaults = getDefaults(fun o -> o.RPCPort |> box)
+         Option<int>(b (nameof(opts.RPCPort)),
+                     $"RPC port number of the blockchain client. {defaults}")
        o.Argument <-
          let a = Argument<int>()
          a.Arity <- ArgumentArity.ZeroOrOne

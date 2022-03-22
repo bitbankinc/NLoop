@@ -49,8 +49,8 @@ let private validateLoopOutRequest (opts: NLoopOptions) (req: LoopOutRequest) =
 
 let handleLoopOut (req: LoopOutRequest) =
   fun (next : HttpFunc) (ctx : HttpContext) ->
-    let opts = ctx.GetService<IOptions<NLoopOptions>>()
-    (validateLoopOutRequest opts.Value req
+    let opts = ctx.GetService<GetOptions>()()
+    (validateLoopOutRequest opts req
      >=> checkBlockchainIsSyncedAndSetTipHeight req.PairIdValue
      >=> checkWeHaveChannel req.PairIdValue.Quote req.OutgoingChannelIds
      >=> checkWeHaveRouteToCounterParty req.PairIdValue.Quote req.Amount req.OutgoingChannelIds

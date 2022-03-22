@@ -46,7 +46,6 @@ type LiquidityRuleType =
   | UNKNOWN = 0
   | THRESHOLD = 1
 
-open FsToolkit.ErrorHandling
 type LiquidityRule = {
   /// The channel id to apply this rule.
   /// PubKey and the ChannelId fields are mutually exclusive

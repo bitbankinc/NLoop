@@ -29,6 +29,8 @@ paths:
     get:
       tags:
         - general
+      description:
+        Get basic information about nloop.
       responses:
         '200':
           description: OK
@@ -56,7 +58,7 @@ paths:
   /v1/swaps/history:
     get:
       description:
-        Get the full history of swas. This might take long if you have a lots of entries in a database.
+        Get the full history of swaps. This might take long if you have a lots of entries in a database.
       tags:
         - swap
       parameters:
@@ -175,7 +177,9 @@ paths:
   /v1/auto/suggest/{offchainAsset}:
     get:
       description:
-        Get suggestion for the swaps.
+        Get suggestion for the swaps. You must set liquidity parameters for autoloop before
+        getting the suggestion, this endpoint is usually useful when you set `autoloop=false`
+        to liquidity params. (that is, autoloop dry-run mode.)
       parameters:
         - in: path
           name: offchainAsset

@@ -14,6 +14,7 @@ open Microsoft.AspNetCore.Routing
 open Microsoft.Extensions.Configuration
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
+open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open Microsoft.IO
 open Microsoft.Extensions.Hosting
@@ -39,6 +40,8 @@ open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
 open NReco.Logging.File
+open CLightningPlugin
+
 module App =
   let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
@@ -172,7 +175,7 @@ type Startup(_conf: IConfiguration, env: IHostEnvironment) =
 
 module Main =
 
-  let configureFileLogging(ctx: WebHostBuilderContext) (builder : ILoggingBuilder)  =
+  let configureFileLogging(ctx: HostBuilderContext) (builder : ILoggingBuilder)  =
       let isProduction = ctx.HostingEnvironment.IsProduction()
       if isProduction |> not then
         builder.AddDebug() |> ignore
@@ -193,9 +196,13 @@ module Main =
         .AddFile(filePath, configureFileLogging)
         .SetMinimumLevel(LogLevel.Debug)
         |> ignore
-  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
+  let configureLogging (ctx: HostBuilderContext) (builder : ILoggingBuilder) =
       builder.AddConsole() |> ignore
       configureFileLogging ctx builder
+
+  let configureJsonRpcLogging(ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+    builder.AddJsonRpcNotificationLogger() |> ignore
+    configureFileLogging ctx builder
 
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.AddInMemoryCollection(Constants.DefaultLoggingSettings) |> ignore
@@ -219,14 +226,15 @@ module Main =
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
     if isPluginMode then
       hostBuilder
+        .ConfigureLogging(configureJsonRpcLogging)
         .ConfigureWebHost(fun webHostBuilder ->
           webHostBuilder
             .UseStartup<Startup>()
-            .ConfigureLogging(configureFileLogging)
             |> ignore
         )
     else
     hostBuilder
+      .ConfigureLogging(configureLogging)
       .ConfigureWebHostDefaults(
         fun webHostBuilder ->
           webHostBuilder
@@ -259,7 +267,6 @@ module Main =
                   kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
                     s.UseConnectionLogging().UseHttps(cert) |> ignore))
               )
-            .ConfigureLogging(configureLogging)
             |> ignore
       )
 

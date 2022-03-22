@@ -267,31 +267,59 @@ module Swap =
     Data: byte[]
   }
 
-  let [<Literal>] new_loop_out_added = "new_loop_out_added"
-  let [<Literal>] claim_tx_published = "claim_tx_published"
-  let [<Literal>] offchain_offer_started = "offchain_offer_started"
-  let [<Literal>] offchain_offer_resolved = "offchain_offer_resolved"
-  let [<Literal>] claim_tx_confirmed =  "claim_tx_confirmed"
-  let [<Literal>] prepay_finished =  "prepay_finished"
-  let [<Literal>] their_swap_tx_published = "their_swap_tx_published"
-  let [<Literal>] offchain_payment_received = "offchain_payment_received"
+  let [<Literal>] new_loop_out_added                 = "new_loop_out_added"
+  let [<Literal>] claim_tx_published                 = "claim_tx_published"
+  let [<Literal>] offchain_offer_started             = "offchain_offer_started"
+  let [<Literal>] offchain_offer_resolved            = "offchain_offer_resolved"
+  let [<Literal>] claim_tx_confirmed                 = "claim_tx_confirmed"
+  let [<Literal>] prepay_finished                    = "prepay_finished"
+  let [<Literal>] their_swap_tx_published            = "their_swap_tx_published"
+  let [<Literal>] offchain_payment_received          = "offchain_payment_received"
   let [<Literal>] their_swap_tx_confirmed_first_time = "their_swap_tx_confirmed_first_time"
 
-  let [<Literal>] new_loop_in_added =  "new_loop_in_added"
-  let [<Literal>] our_swap_tx_published =    "our_swap_tx_published"
-  let [<Literal>] our_swap_tx_confirmed  =  "our_swap_tx_confirmed"
-  let [<Literal>] refund_tx_published    =  "refund_tx_published"
-  let [<Literal>] refund_tx_confirmed   =   "refund_tx_confirmed"
-  let [<Literal>] success_tx_confirmed  =   "success_tx_confirmed"
+  let [<Literal>] new_loop_in_added                  = "new_loop_in_added"
+  let [<Literal>] our_swap_tx_published              = "our_swap_tx_published"
+  let [<Literal>] our_swap_tx_confirmed              = "our_swap_tx_confirmed"
+  let [<Literal>] refund_tx_published                = "refund_tx_published"
+  let [<Literal>] refund_tx_confirmed                = "refund_tx_confirmed"
+  let [<Literal>] success_tx_confirmed               = "success_tx_confirmed"
 
-  let [<Literal>] new_tip_received      =   "new_tip_received"
-  let [<Literal>] block_unconfirmed     =   "block_unconfirmed"
+  let [<Literal>] new_tip_received                   = "new_tip_received"
+  let [<Literal>] block_unconfirmed                  = "block_unconfirmed"
 
-  let [<Literal>] finished_successfully =   "finished_successfully"
-  let [<Literal>] finished_by_refund    =   "finished_by_refund"
-  let [<Literal>] finished_by_error     =   "finished_by_error"
-  let [<Literal>] finished_by_timeout   =   "finished_by_timeout"
-  let [<Literal>] unknown_tag_event =    "unknown_tag_event"
+  let [<Literal>] finished_successfully              = "finished_successfully"
+  let [<Literal>] finished_by_refund                 = "finished_by_refund"
+  let [<Literal>] finished_by_error                  = "finished_by_error"
+  let [<Literal>] finished_by_timeout                = "finished_by_timeout"
+  let [<Literal>] unknown_tag_event                  = "unknown_tag_event"
+
+  let AllTagEvents = [
+    new_loop_out_added
+    claim_tx_published
+    offchain_offer_started
+    offchain_offer_resolved
+    claim_tx_confirmed
+    prepay_finished
+    their_swap_tx_published
+    offchain_payment_received
+    their_swap_tx_confirmed_first_time
+
+    new_loop_in_added
+    our_swap_tx_published
+    our_swap_tx_confirmed
+    refund_tx_published
+    refund_tx_confirmed
+    success_tx_confirmed
+
+    new_tip_received
+    block_unconfirmed
+
+    finished_successfully
+    finished_by_refund
+    finished_by_error
+    finished_by_timeout
+    unknown_tag_event
+  ]
 
   /// in Event-Sourcing system, there is no DB migration.
   /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
