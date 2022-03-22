@@ -2,31 +2,17 @@ namespace NLoop.Server
 
 open System
 open System.Collections.Generic
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.Options
-open Microsoft.Extensions.Options
-open Microsoft.Extensions.Options
-open Microsoft.Extensions.Options
-open Microsoft.VisualStudio.Threading
 open Microsoft.VisualStudio.Threading
 open NLoop.Server.RPCDTOs
-open System.Text.Json
-open System.Text.Json.Serialization
-open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
-open NBitcoin
 open NLoop.Domain
-open NLoop.Domain.IO
 open NLoop.Server.Actors
 open NLoop.Server.Options
 open NLoop.Server.DTOs
 open NLoop.Server.Services
-open Nerdbank.Streams
 open StreamJsonRpc
 
 type D = DefaultParameterValueAttribute
@@ -136,8 +122,6 @@ type INLoopJsonRpcServer =
 /// won't corrupt the communication channel.
 type NLoopJsonRpcServer(blockListener: IBlockChainListener,
                         swapExecutor: ISwapExecutor,
-                        loggerOpts: IOptions<PluginLoggerOptions>,
-                        logger: ILogger<NLoopJsonRpcServer>,
                         pluginSettings: PluginServerSettings,
                         tryGetAutoLoopManager: TryGetAutoLoopManager) =
   let semaphore = new AsyncSemaphore(1)
@@ -225,8 +209,16 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
       resp.Options <-
         NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptionsDTO.FromRootCLIOption)
       resp.RPCMethods <- methods
+      resp.Notifications <-
+        Swap.AllTagEvents
+        |> Seq.map(fun s ->
+          let dto = NotificationsDTO()
+          dto.Method <- s
+          dto
+        )
       return resp
     }
+
   [<JsonRpcMethod("loopout")>]
   member this.LoopOut(req: NLoopClient.LoopOutRequest): Task<NLoopClient.LoopOutResponse> =
     task {
@@ -291,7 +283,7 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
       let offchainAsset: SupportedCryptoCode = convertDTOToNLoopCompatibleStyle offchainAsset
       match tryGetAutoLoopManager(offchainAsset) with
       | None ->
-        raise <| Exception ($"No AutoLoopManager for offchain asset {offchainAsset}")
+        raise <| Exception $"No AutoLoopManager for offchain asset {offchainAsset}"
       | Some man ->
       match req.Rules |> Seq.map(fun r -> r.Validate()) |> Seq.toList |> List.sequenceResultA with
       | Error errs ->
@@ -418,6 +410,3 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
   interface IDisposable with
     member this.Dispose() =
       semaphore.Dispose()
-and [<ProviderAlias("Plugin")>] PluginLoggerOptions() =
-  member val PluginInitiated = false with get, set
-

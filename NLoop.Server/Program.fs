@@ -41,6 +41,7 @@ open NLoop.Server.Services
 open FSharp.Control.Tasks.Affine
 open NReco.Logging.File
 open CLightningPlugin
+open StreamJsonRpc
 
 module App =
   let noCookie: HttpHandler =
@@ -230,6 +231,19 @@ module Main =
         .ConfigureWebHost(fun webHostBuilder ->
           webHostBuilder
             .UseStartup<Startup>()
+            .ConfigureServices(fun sp ->
+              sp
+                .AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>()
+                .AddSingleton<NLoopJsonRpcServer>()
+              |> ignore
+              // warm up rpc server
+              let rpcServer = sp.BuildServiceProvider().GetRequiredService<NLoopJsonRpcServer>()
+              let formatter = new JsonMessageFormatter()
+              let handler = new NewLineDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter)
+              use rpc = new JsonRpc(handler)
+              rpc.AddLocalRpcTarget<INLoopJsonRpcServer>(rpcServer, JsonRpcTargetOptions())
+              rpc.StartListening()
+            )
             |> ignore
         )
     else
