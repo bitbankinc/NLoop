@@ -242,6 +242,7 @@ module Main =
               let handler = new NewLineDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter)
               use rpc = new JsonRpc(handler)
               rpc.AddLocalRpcTarget<INLoopJsonRpcServer>(rpcServer, JsonRpcTargetOptions())
+              rpc.ExceptionStrategy <- ExceptionProcessing.CommonErrorData
               rpc.StartListening()
             )
             |> ignore

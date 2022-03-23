@@ -56,3 +56,17 @@ git checkout -- data
 For tests those which have a trait "Docker=On", you should first run `docker-compose up` in the background,
 These tests are too heavy that it won't run in the CI, but it is necessary to assure the health of the app.
 
+### testing the behaviour for running nloopd as a c-lightning plugin.
+
+You must first prepare single-file-compiled `nloopd` and incorporate it into clightning docker image
+
+```bash
+# ... move to solution root
+
+# this outputs `nloopd` into `tests/NLoop.Server.Tests/Dockerfiles/publish`
+./scripts/build_singlebinary_debug.sh 
+
+# build the new clightning image containing nloopd in it.
+docker-compose build clightning
+```
+

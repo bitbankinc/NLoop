@@ -92,6 +92,8 @@ services:
       dockerfile: lightning
       args:
         LIGHTNINGD_VERSION: "v0.10.1"
+      cache_from:
+        - nloop/lightningd:v0.10.1
     environment:
       EXPOSE_TCP: "true"
       LIGHTNINGD_NETWORK: regtest

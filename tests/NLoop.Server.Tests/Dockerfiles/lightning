@@ -137,6 +137,10 @@ COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
 COPY --from=downloader /opt/deschashplugin $LIGHTNINGD_DATA/plugins
 COPY --from=downloader /opt/deschashplugin /etc/bundledplugins
+
+# prepare nloopd as a plugin
+COPY ./publish/nloopd /opt/lightningd/plugins/
+
 COPY lightning-entrypoint.sh entrypoint.sh
 
 EXPOSE 9735 9835
