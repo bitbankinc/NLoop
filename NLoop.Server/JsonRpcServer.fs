@@ -2,7 +2,9 @@ namespace NLoop.Server
 
 open System
 open System.Collections.Generic
+open System.Reflection
 open System.Runtime.InteropServices
+open DotNetLightning.Serialization
 open Microsoft.VisualStudio.Threading
 open NLoop.Server.RPCDTOs
 open System.Threading.Tasks
@@ -17,89 +19,107 @@ open StreamJsonRpc
 
 type D = DefaultParameterValueAttribute
 
-[<NoComparison;NoEquality>]
-type RPCMethod() =
-  member val Name: string = null with get, set
-  member val Usage: string = null with get, set
-  member val Description: string = null with get, set
-  member val LongDescription: string = null with get, set
+[<NoComparison;NoEquality;CLIMutable>]
+type RPCMethod = {
+   [<Newtonsoft.Json.JsonProperty "name">]
+   Name: string
+   [<Newtonsoft.Json.JsonProperty "usage">]
+   Usage: string
+   [<Newtonsoft.Json.JsonProperty "description">]
+   Description: string
+   [<Newtonsoft.Json.JsonProperty "long_description">]
+   LongDescription: string
+}
 
 
-type PluginOptionsDTO() =
+[<NoComparison;NoEquality;CLIMutable>]
+type PluginOptionsDTO = {
   [<Newtonsoft.Json.JsonProperty "name">]
-  member val Name: string = null with get, set
+  Name: string
   [<Newtonsoft.Json.JsonProperty "default">]
-  member val Default: obj = null with get, set
+  Default: obj
   [<Newtonsoft.Json.JsonProperty "description">]
-  member val Description: string = null with get, set
+  Description: string
   [<Newtonsoft.Json.JsonProperty "type">]
-  member val OptType: string = null with get, set
+  OptType: string
   [<Newtonsoft.Json.JsonProperty "deprecated">]
-  member val Deprecated: bool = false with get, set
+  Deprecated: bool
+}
   with
   static member FromRootCLIOption(op: System.CommandLine.Option)  =
-    let ret = PluginOptionsDTO()
-    ret.Name <- op.Name
-    ret.Default <- op.Argument.GetDefaultValue()
-    ret.Description <- op.Description
-    ret.OptType <- op.Argument.ArgumentType.ToString()
-    ret
+    {
+      Name = op.Name
+      Default = if op.Argument.HasDefaultValue then op.Argument.GetDefaultValue() else obj()
+      Description = op.Description
+      OptType = op.Argument.ArgumentType.ToString()
+      Deprecated = false
+    }
 
-type FeatureSetDTO() =
-  member val init: string = null with get, set
-  member val node: string = null with get, set
-  member val channel: string = null with get, set
-  member val invoice: string = null with get, set
+[<CLIMutable>]
+type FeatureSetDTO = {
+  init: string
+  node: string
+  channel: string
+  invoice: string
+}
 
+[<CLIMutable>]
+type NotificationsDTO = {
+  [<Newtonsoft.Json.JsonProperty "method">]
+  Method: string
+}
 
-type NotificationsDTO() =
-  member val Method: string = null with get, set
-type Manifest() =
+[<CLIMutable>]
+type Manifest = {
   [<Newtonsoft.Json.JsonProperty "options">]
-  member val Options: PluginOptionsDTO seq = null with get, set
+  Options: PluginOptionsDTO seq
   [<Newtonsoft.Json.JsonProperty "rpcmethods">]
-  member val RPCMethods: RPCMethod seq = null with get, set
-  member val Subscriptions: string seq = null with get, set
-  member val Hooks: obj seq = null with get, set
-  member val Dynamic: bool = false with get, set
-  member val Notifications: NotificationsDTO seq =
-    seq [
-      for t in Swap.AllTagEvents do
-        let n = NotificationsDTO()
-        n.Method <- t
-        n
-    ]
-    with get, set
-  member val FeatureBits: FeatureSetDTO = FeatureSetDTO() with get, set
+  RPCMethods: RPCMethod seq
+  [<Newtonsoft.Json.JsonProperty "subscriptions">]
+  Subscriptions: string seq
+  [<Newtonsoft.Json.JsonProperty "hooks">]
+  Hooks: obj seq
+  [<Newtonsoft.Json.JsonProperty "dynamic">]
+  Dynamic: bool
+  [<Newtonsoft.Json.JsonProperty "notifications">]
+  Notifications: NotificationsDTO seq
+  [<Newtonsoft.Json.JsonProperty "featurebits">]
+  FeatureBits: FeatureSetDTO
+}
 
-type ProxyDTO() =
+[<CLIMutable>]
+type ProxyDTO = {
   [<Newtonsoft.Json.JsonProperty "type">]
-  member val ty: string = null with get, set
-  member val address: string = null with get, set
-  member val port: int = 0 with get, set
-type LightningInitConfigurationDTO() =
+  ty: string
+  address: string
+  port: int
+}
+
+[<CLIMutable>]
+type LightningInitConfigurationDTO = {
   [<Newtonsoft.Json.JsonProperty "lightning-dir">]
-  member val LightningDir: string = null with get, set
+  LightningDir: string
   [<Newtonsoft.Json.JsonProperty "rpc-file">]
-  member val RpcFile: string = null with get, set
+  RpcFile: string
 
   [<Newtonsoft.Json.JsonProperty "startup">]
-  member val Startup: bool = true with get, set
+  Startup: bool
 
   [<Newtonsoft.Json.JsonProperty "network">]
-  member val Network: string = null with get, set
+  Network: string
 
   [<Newtonsoft.Json.JsonProperty "feature_set">]
-  member val FeatureSet: FeatureSetDTO = FeatureSetDTO() with get, set
+  FeatureSet: FeatureSetDTO
 
   [<Newtonsoft.Json.JsonProperty "proxy">]
-  member val Proxy: ProxyDTO = ProxyDTO() with get, set
+  Proxy: ProxyDTO
 
   [<Newtonsoft.Json.JsonProperty "torv3-enabled">]
-  member val TorV3Enabled: bool = false with get, set
+  TorV3Enabled: bool
 
   [<Newtonsoft.Json.JsonProperty "always_use_proxy">]
-  member val AlwaysUseProxy: bool = false with get, set
+  AlwaysUseProxy: bool
+}
 
 type INLoopJsonRpcServer =
   abstract member GetLiquidityParams: offChainAsset: NLoopClient.CryptoCode -> Task<NLoopClient.LiquidityParameters>
@@ -109,7 +129,8 @@ type INLoopJsonRpcServer =
 
   abstract member LoopOut: request: NLoopClient.LoopOutRequest -> Task<NLoopClient.LoopOutResponse>
   abstract member LoopIn: request: NLoopClient.LoopInRequest -> Task<NLoopClient.LoopInResponse>
-
+  abstract member Init: configuration: LightningInitConfigurationDTO * options: Dictionary<string, obj> -> Task<obj>
+  abstract member GetManifest: unit -> Task<Manifest>
 /// json-rpc 2.0 server for StreamJsonRpc.
 /// This is necessary for NLoop to work as a clightning-plugin.
 /// Sadly, StreamJsonRpc does not support System.Text.Json natively.
@@ -145,7 +166,7 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
   member val IsInitiated = false with get, set
 
   [<JsonRpcMethod("init")>]
-  member this.Init(configuration: LightningInitConfigurationDTO, options: Dictionary<string, obj>) =
+  member this.Init(configuration: LightningInitConfigurationDTO, options: Dictionary<string, obj>): Task<obj> =
     task {
       use! _releaser = semaphore.EnterAsync()
       let disabledReason =
@@ -172,11 +193,15 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
   member this.GetManifest(): Task<Manifest> =
     task {
       use! _releaser = semaphore.EnterAsync()
+
+      let userDefinedMethodInfo =
+        let equalStr a b = String.Equals(a, b, StringComparison.OrdinalIgnoreCase)
+        this.GetType().GetMethods(BindingFlags.Public ||| BindingFlags.Instance ||| BindingFlags.DeclaredOnly)
+        |> Seq.filter(fun m -> not <| m.IsSpecialName && not <| (equalStr "init" m.Name) && not <| (equalStr "getmanifest" m.Name))
       let methods =
-        this.GetType().GetMethods()
-        |> Seq.choose(fun m ->
+        userDefinedMethodInfo
+        |> Seq.map(fun m ->
           let name = m.Name.ToLowerInvariant()
-          if ["init"; "getmanifest"] |> Seq.contains name then None else
           let argSpec =
             m.GetParameters()
           let numDefaults =
@@ -198,25 +223,26 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
                   // keyword arguments
                   $"[{s.Name}]"
               )
-          let responseObj = RPCMethod()
-          responseObj.Name <- name
-          responseObj.Usage <- String.Join(' ', args)
-          responseObj.Description <- RpcDescriptions.[name]
-          responseObj.LongDescription <- RpcDescriptions.[name] + $": see {Constants.ApiDocUrl} for more details."
-          Some responseObj
+          {
+            Name = name
+            Usage = String.Join(' ', args)
+            Description = RpcDescriptions.[name]
+            LongDescription = RpcDescriptions.[name] + $": see {Constants.ApiDocUrl} for more details."
+          }
         )
-      let resp = Manifest()
-      resp.Options <-
-        NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptionsDTO.FromRootCLIOption)
-      resp.RPCMethods <- methods
-      resp.Notifications <-
-        Swap.AllTagEvents
-        |> Seq.map(fun s ->
-          let dto = NotificationsDTO()
-          dto.Method <- s
-          dto
-        )
-      return resp
+
+      return {
+        Options =
+          NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptionsDTO.FromRootCLIOption)
+        RPCMethods = methods
+        Notifications =
+          Swap.AllTagEvents
+          |> Seq.map(fun s -> { Method = s })
+        Subscriptions = []
+        Hooks = []
+        Dynamic = true
+        FeatureBits = Unchecked.defaultof<_>
+      }
     }
 
   [<JsonRpcMethod("loopout")>]
@@ -406,6 +432,9 @@ type NLoopJsonRpcServer(blockListener: IBlockChainListener,
     member this.LoopIn(request) = this.LoopIn(request)
     member this.LoopOut(request) = this.LoopOut(request)
     member this.Version() = Constants.AssemblyVersion |> Task.FromResult
+    [<JsonRpcMethod("getmanifest")>]
+    member this.GetManifest() = this.GetManifest()
+    member this.Init(configuration, options) = this.Init(configuration, options)
 
   interface IDisposable with
     member this.Dispose() =

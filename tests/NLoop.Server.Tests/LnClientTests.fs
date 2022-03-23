@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.Collections.Generic
 open System.IO.Pipes
 open System.Linq
 open System.IO
@@ -16,6 +17,12 @@ open NLoop.Server.RPCDTOs
 open StreamJsonRpc
 open NLoop.Server
 open Xunit
+
+[<CLIMutable>]
+type InitDTO = {
+  configuration: LightningInitConfigurationDTO
+  options: Dictionary<string, obj>
+}
 
 [<AutoOpen>]
 module private ClightningClientTestHelpers =
@@ -50,18 +57,6 @@ module private ClightningClientTestHelpers =
     task {
       do! pipe.ConnectAsync()
       return JsonRpc.Attach<INLoopJsonRpcServer> handler
-    }
-
-  let inline getBareClientProxy() =
-    let formatter =
-      let f = new JsonMessageFormatter()
-      f
-
-    let pipe = clientPipe()
-    let handler = new NewLineDelimitedMessageHandler(pipe, pipe, formatter)
-    task {
-      do! pipe.ConnectAsync()
-      return new JsonRpc (handler)
     }
 
   let inline createRpcServer(server: INLoopJsonRpcServer) =
@@ -144,17 +139,39 @@ type PluginTests() =
       ()
     }
 
-
-(*
   [<Fact>]
-  member this.ServerStreamTests_Plugin() =
+  member this.ServerStreamTests_Init() =
     task {
-      let! client = getBareClientProxy()
+      use cts = new CancellationTokenSource()
+      cts.CancelAfter(1000)
+      let! client = getClientProxy()
       let dto =
-        let d = LightningInitConfigurationDTO()
-        d
-      // do! client.InvokeWithParameterObjectAsync()
+        let d = {
+          LightningInitConfigurationDTO.Network = "regtest"
+          LightningDir = "foobar"
+          RpcFile = "lightning-rpc"
+          Startup = true
+          FeatureSet = Unchecked.defaultof<_>
+          Proxy = Unchecked.defaultof<_>
+          TorV3Enabled = false
+          AlwaysUseProxy = false
+        }
+        {
+          configuration = d
+          options = Dictionary<_,_>()
+        }
+      let! _ = client.Init(dto.configuration, dto.options)
       ()
     }
 
+  [<Fact>]
+  member this.ServerStreamTests_GetManifest() =
+    task {
+      let! client = getClientProxy()
+      let! manifest = client.GetManifest()
+
+      Assert.Equal<string list>(manifest.Notifications |> Seq.map(fun n -> n.Method) |> Seq.toList, Swap.AllTagEvents)
+      ()
+   }
+(*
 *)

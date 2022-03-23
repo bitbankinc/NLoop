@@ -92,7 +92,8 @@ module NLoopServerCommandLine =
       ]
       yield! httpRpcOptions
 
-      Option<bool>("--noauth", "Disable cookie authentication")
+      let o = Option<bool>("--noauth", "Disable cookie authentication")
+      o
     ]
   let optionsForBothCliAndServer =
     seq [
