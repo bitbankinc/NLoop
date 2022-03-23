@@ -265,55 +265,60 @@ type Clients = {
     let externalClients = ExternalClients.GetExternalServiceClients()
     let logServer = defaultArg logServer false
     let testHost =
-      WebHostBuilder()
-        .UseContentRoot(dataPath)
-        .UseStartup<Startup>()
-        .ConfigureAppConfiguration(fun _b ->())
+      HostBuilder()
         .ConfigureLogging(Main.configureLogging)
-        .ConfigureTestServices(fun s ->
-          let cliOpts: ParseResult =
-            let p =
-              let rc = NLoopServerCommandLine.getRootCommand()
-              CommandLineBuilder(rc)
-                .UseMiddleware(Main.useWebHostMiddleware)
-                .Build()
-            let lndUri, lndCertThumbprint, lndMacaroonPath =
-              getLndGrpcSettings lndUserPath lndUserGrpcPort
-            p.Parse($"""--network regtest
-                    --datadir {dataPath}
-                    --nohttps true
-                    --btc.rpcuser=johndoe
-                    --btc.rpcpassword=unsafepassword
-                    --btc.rpcport={bitcoinPort}
-                    --ltc.rpcuser=johndoe
-                    --ltc.rpcpassword=unsafepassword
-                    --ltc.rpcport={litecoinPort}
-                    --lndgrpcserver {lndUri}
-                    --lndmacaroonfilepath {lndMacaroonPath}
-                    --lndcertthumbprint {lndCertThumbprint}
-                    --eventstoreurl tcp://admin:changeit@localhost:{esdbTcpPort}
-                    --boltzhost http://localhost
-                    --boltzport {esdbHttpPort}
-                    --exchanges BitBank --exchanges BitMEX \
-                    --boltzhttps false
-                    """)
-          s
-            .AddSingleton<BindingContext>(BindingContext(cliOpts))
-            .AddSingleton<BoltzClient>(externalClients.Server.Boltz)
+        .ConfigureWebHost(fun webHostBuilder ->
+          webHostBuilder
+            .UseContentRoot(dataPath)
+            .UseStartup<Startup>()
+            .ConfigureAppConfiguration(fun _b ->())
+            .ConfigureTestServices(fun s ->
+              let cliOpts: ParseResult =
+                let p =
+                  let rc = NLoopServerCommandLine.getRootCommand()
+                  CommandLineBuilder(rc)
+                    .UseMiddleware(Main.useWebHostMiddleware)
+                    .Build()
+                let lndUri, lndCertThumbprint, lndMacaroonPath =
+                  getLndGrpcSettings lndUserPath lndUserGrpcPort
+                p.Parse($"""--network regtest
+                        --datadir {dataPath}
+                        --nohttps true
+                        --btc.rpcuser=johndoe
+                        --btc.rpcpassword=unsafepassword
+                        --btc.rpcport={bitcoinPort}
+                        --ltc.rpcuser=johndoe
+                        --ltc.rpcpassword=unsafepassword
+                        --ltc.rpcport={litecoinPort}
+                        --lndgrpcserver {lndUri}
+                        --lndmacaroonfilepath {lndMacaroonPath}
+                        --lndcertthumbprint {lndCertThumbprint}
+                        --eventstoreurl tcp://admin:changeit@localhost:{esdbTcpPort}
+                        --boltzhost http://localhost
+                        --boltzport {esdbHttpPort}
+                        --exchanges BitBank --exchanges BitMEX \
+                        --boltzhttps false
+                        """)
+              s
+                .AddSingleton<BindingContext>(BindingContext(cliOpts))
+                .AddSingleton<BoltzClient>(externalClients.Server.Boltz)
+              |> ignore
+              if logServer then () else
+                s.AddSingleton<ILoggerFactory, NullLoggerFactory>() |> ignore
+          )
+            .UseTestServer()
           |> ignore
-          if logServer then () else
-            s.AddSingleton<ILoggerFactory, NullLoggerFactory>() |> ignore
         )
-        |> fun b -> new TestServer(b)
+        .Build()
     let userNLoop =
-      let httpClient = testHost.CreateClient()
+      let httpClient = testHost.GetTestClient()
       let nloopClient = httpClient |> NLoopClient
       nloopClient.BaseUrl <- httpClient.BaseAddress.ToString()
       nloopClient
     {
       ExternalClients = externalClients
       NLoopClient = userNLoop
-      NLoopServer = testHost
+      NLoopServer = testHost.GetTestServer()
     }
 
   interface IDisposable with

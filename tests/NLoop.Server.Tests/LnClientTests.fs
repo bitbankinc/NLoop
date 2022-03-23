@@ -52,6 +52,18 @@ module private ClightningClientTestHelpers =
       return JsonRpc.Attach<INLoopJsonRpcServer> handler
     }
 
+  let inline getBareClientProxy() =
+    let formatter =
+      let f = new JsonMessageFormatter()
+      f
+
+    let pipe = clientPipe()
+    let handler = new NewLineDelimitedMessageHandler(pipe, pipe, formatter)
+    task {
+      do! pipe.ConnectAsync()
+      return new JsonRpc (handler)
+    }
+
   let inline createRpcServer(server: INLoopJsonRpcServer) =
     let formatter = new JsonMessageFormatter()
 
@@ -131,3 +143,18 @@ type PluginTests() =
       Assert.Equal(req.Parameters, resp)
       ()
     }
+
+
+(*
+  [<Fact>]
+  member this.ServerStreamTests_Plugin() =
+    task {
+      let! client = getBareClientProxy()
+      let dto =
+        let d = LightningInitConfigurationDTO()
+        d
+      // do! client.InvokeWithParameterObjectAsync()
+      ()
+    }
+
+*)

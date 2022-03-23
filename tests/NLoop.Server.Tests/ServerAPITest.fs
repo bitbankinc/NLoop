@@ -188,7 +188,8 @@ type ServerAPITest() =
   [<Fact>]
   [<Trait("Docker", "Off")>]
   member this.``ServerTest(getversion)`` () = task {
-    use server = new TestServer(TestHelpers.GetTestHost())
+    use! host = TestHelpers.GetTestHost()
+    use server = host.GetTestServer()
     use httpClient = server.CreateClient()
     let! resp =
       new HttpRequestMessage(HttpMethod.Get, "/v1/version")
@@ -338,7 +339,7 @@ type ServerAPITest() =
                                   quote: SwapDTO.LoopOutQuote,
                                   expectedStatusCode: HttpStatusCode,
                                   expectedErrorMsg: string option) = task {
-    use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
+    use! host = (TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
         let lnClientParam = {
           DummyLnClientParameters.Default
             with
@@ -372,6 +373,7 @@ type ServerAPITest() =
           |> ignore
       ))
 
+    use server = host.GetTestServer()
     let opts =
       let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
       o.AddNLoopJsonConverters()
@@ -445,7 +447,7 @@ type ServerAPITest() =
                                  expectedErrorMsg: string option
                                  ) =
     task {
-      use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
+      use! host = (TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
         let lnClientParam =
           let invoice = getDummyTestInvoice (Some (swapAmount.ToLNMoney())) preimage Network.RegTest
           {
@@ -493,6 +495,7 @@ type ServerAPITest() =
         let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
         o.AddNLoopJsonConverters()
         o
+      use server = host.GetTestServer()
       let client = server.CreateClient()
       use e =
         server.Services.GetRequiredService<IEventAggregator>()
@@ -562,7 +565,7 @@ type ServerAPITest() =
                               expectedStatusCode: HttpStatusCode,
                               expectedErrorMsg: string option) =
     task {
-      use server = new TestServer(TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
+      use! host = (TestHelpers.GetTestHost(fun (sp: IServiceCollection) ->
           let lnClientParam = {
             DummyLnClientParameters.Default
               with
@@ -575,7 +578,8 @@ type ServerAPITest() =
           ()
         ))
 
-      let client = server.CreateClient()
+      use server = host.GetTestServer()
+      use client = server.CreateClient()
       let! resp =
         let opts =
           let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)

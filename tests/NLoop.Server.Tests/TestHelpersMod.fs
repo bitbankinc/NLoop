@@ -22,6 +22,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
 open LndClient
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin.DataEncoders
@@ -440,14 +441,18 @@ type TestHelpers =
 
   static member GetTestHost(?configureServices: IServiceCollection -> unit) =
     let configureServices = defaultArg configureServices (fun _ -> ())
-    WebHostBuilder()
-      .UseContentRoot(Directory.GetCurrentDirectory())
-      .ConfigureAppConfiguration(fun configBuilder ->
-        configBuilder.AddJsonFile("appsettings.test.json") |> ignore
-        )
-      .UseStartup<TestHelpersMod.TestStartup>()
+    HostBuilder()
       .ConfigureLogging(Main.configureLogging)
-      .ConfigureTestServices(fun (services: IServiceCollection) ->
-        TestHelpers.ConfigureTestServices(services, configureServices)
-      )
-      .UseTestServer()
+      .ConfigureWebHost(fun webHostBuilder ->
+        webHostBuilder
+          .UseContentRoot(Directory.GetCurrentDirectory())
+          .ConfigureAppConfiguration(fun configBuilder ->
+            configBuilder.AddJsonFile("appsettings.test.json") |> ignore
+            )
+          .UseStartup<TestHelpersMod.TestStartup>()
+          .ConfigureTestServices(fun (services: IServiceCollection) ->
+            TestHelpers.ConfigureTestServices(services, configureServices)
+          )
+          .UseTestServer()
+          |> ignore
+      ).StartAsync()

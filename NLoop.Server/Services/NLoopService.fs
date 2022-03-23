@@ -133,6 +133,7 @@ type NLoopExtensions() =
               conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
           )
         )
+        .AddSingleton<PluginServerSettings>()
         .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
           let pluginSettings = sp.GetService<PluginServerSettings>()
           if pluginSettings.IsInitiated then
