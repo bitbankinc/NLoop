@@ -23,8 +23,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LndGrpcClient", "LndGrpcCli
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "BoltzClient", "BoltzClient\BoltzClient.fsproj", "{FB6FD234-3842-4740-84FF-919599598E9B}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "LnClientDotnet", "LnClientDotnet\LnClientDotnet.fsproj", "{37B7DBEC-A28A-4174-A3F0-5729CD6C96E5}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CLightningPlugin", "CLightningPlugin\CLightningPlugin.csproj", "{B2E77FEE-2803-468E-A556-545682C26B07}"
 EndProject
 Global
@@ -73,10 +71,6 @@ Global
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FB6FD234-3842-4740-84FF-919599598E9B}.Release|Any CPU.Build.0 = Release|Any CPU
-		{37B7DBEC-A28A-4174-A3F0-5729CD6C96E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{37B7DBEC-A28A-4174-A3F0-5729CD6C96E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{37B7DBEC-A28A-4174-A3F0-5729CD6C96E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{37B7DBEC-A28A-4174-A3F0-5729CD6C96E5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B2E77FEE-2803-468E-A556-545682C26B07}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{B2E77FEE-2803-468E-A556-545682C26B07}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B2E77FEE-2803-468E-A556-545682C26B07}.Release|Any CPU.ActiveCfg = Release|Any CPU
