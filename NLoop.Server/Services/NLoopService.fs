@@ -35,8 +35,8 @@ open NLoop.Server.Projections
 type NLoopExtensions() =
 
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
-      let test = defaultArg test false
+  static member AddNLoopServices(this: IServiceCollection, ?coldStart: bool) =
+      let coldStart = defaultArg coldStart false
       this
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
@@ -221,7 +221,7 @@ type NLoopExtensions() =
         .AddHealthChecks()
         |> ignore
 
-      if (not <| test) then
+      if (not <| coldStart) then
         // it is important here that Startup order is
         // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
         // Since otherwise on startup it fails to re-register swaps on blockchain listeners.

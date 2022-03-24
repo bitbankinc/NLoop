@@ -140,7 +140,7 @@ module App =
       .UseAuthentication()
       .UseGiraffe(webApp)
 
-  let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
+  let configureServices coldStart (env: IHostEnvironment option) (services : IServiceCollection) =
       // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters()
@@ -148,7 +148,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(test)
+      services.AddNLoopServices(coldStart)
 
       if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -165,7 +165,7 @@ module App =
 
       services.AddGiraffe() |> ignore
 
-  let configureServicesTest services = configureServices true None services
+  let configureServicesWithColdStart services = configureServices true None services
 
 type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
@@ -228,23 +228,11 @@ module Main =
     if isPluginMode then
       hostBuilder
         .ConfigureLogging(configureJsonRpcLogging)
-        .ConfigureWebHost(fun webHostBuilder ->
-          webHostBuilder
-            .UseStartup<Startup>()
-            .ConfigureServices(fun sp ->
-              sp
-                .AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>()
-                .AddSingleton<NLoopJsonRpcServer>()
-              |> ignore
-              // warm up rpc server
-              let rpcServer = sp.BuildServiceProvider().GetRequiredService<NLoopJsonRpcServer>()
-              let formatter = new JsonMessageFormatter()
-              let handler = new NewLineDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter)
-              use rpc = new JsonRpc(handler)
-              rpc.AddLocalRpcTarget<INLoopJsonRpcServer>(rpcServer, JsonRpcTargetOptions())
-              rpc.ExceptionStrategy <- ExceptionProcessing.CommonErrorData
-              rpc.StartListening()
-            )
+        .ConfigureServices(App.configureServicesWithColdStart)
+        .ConfigureServices(fun serviceCollection ->
+          serviceCollection
+            .AddSingleton<INLoopJsonRpcServer, NLoopJsonRpcServer>()
+            .AddSingleton<NLoopJsonRpcServer>()
             |> ignore
         )
     else
@@ -285,6 +273,26 @@ module Main =
             |> ignore
       )
 
+  type IHost with
+    member this.StartJsonRpcServerForInit() =
+      task {
+        let sp = this.Services
+        // warm up rpc server
+        let rpcServer = sp.GetRequiredService<NLoopJsonRpcServer>()
+        let formatter = new JsonMessageFormatter()
+        let handler = new NewLineDelimitedMessageHandler(Console.OpenStandardOutput(), Console.OpenStandardInput(), formatter)
+        use rpc = new JsonRpc(handler)
+        rpc.AddLocalRpcTarget<INLoopJsonRpcServer>(rpcServer, JsonRpcTargetOptions())
+        rpc.ExceptionStrategy <- ExceptionProcessing.CommonErrorData
+        rpc.StartListening()
+
+        // wait for c-lightning to send "init" rpc call
+        let mutable opts = sp.GetRequiredService<PluginServerSettings>()
+        while not <| opts.IsInitiated do
+          ()
+        return ()
+      }
+
   /// Mostly the same with `CommandLineBuilder.UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
   /// We need this because we want to bind the CLI options into <see cref="NLoop.Server.NLoopOptions"/> with
@@ -309,6 +317,10 @@ module Main =
     use host = hostBuilder.Build();
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
     do! next.Invoke(ctx)
+
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    if isPluginMode then
+      do! host.StartJsonRpcServerForInit()
     do! host.RunAsync();
   })
 

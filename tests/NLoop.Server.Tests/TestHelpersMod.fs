@@ -435,7 +435,7 @@ type TestHelpers =
   static member GetTestServiceProvider(?configureServices) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     let services = ServiceCollection()
-    App.configureServicesTest services
+    App.configureServicesWithColdStart services
     TestHelpers.ConfigureTestServices(services, configureServices)
     services.BuildServiceProvider()
 

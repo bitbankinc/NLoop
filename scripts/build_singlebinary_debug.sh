@@ -2,6 +2,8 @@
 
 set -eu
 
+dotnet tool restore
+
 RID=""
 if [[ $(uname) = Darwin ]]; then
   RID=osx-x64

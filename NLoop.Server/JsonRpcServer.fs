@@ -131,6 +131,8 @@ type INLoopJsonRpcServer =
   abstract member LoopIn: request: NLoopClient.LoopInRequest -> Task<NLoopClient.LoopInResponse>
   abstract member Init: configuration: LightningInitConfigurationDTO * options: Dictionary<string, obj> -> Task<obj>
   abstract member GetManifest: unit -> Task<Manifest>
+
+
 /// json-rpc 2.0 server for StreamJsonRpc.
 /// This is necessary for NLoop to work as a clightning-plugin.
 /// Sadly, StreamJsonRpc does not support System.Text.Json natively.
