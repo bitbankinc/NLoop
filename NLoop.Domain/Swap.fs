@@ -293,6 +293,34 @@ module Swap =
   let [<Literal>] finished_by_timeout   =   "finished_by_timeout"
   let [<Literal>] unknown_tag_event =    "unknown_tag_event"
 
+  let AllTagEvents = [
+    new_loop_out_added
+    claim_tx_published
+    offchain_offer_started
+    offchain_offer_resolved
+    claim_tx_confirmed
+    prepay_finished
+    their_swap_tx_published
+    offchain_payment_received
+    their_swap_tx_confirmed_first_time
+
+    new_loop_in_added
+    our_swap_tx_published
+    our_swap_tx_confirmed
+    refund_tx_published
+    refund_tx_confirmed
+    success_tx_confirmed
+
+    new_tip_received
+    block_unconfirmed
+
+    finished_successfully
+    finished_by_refund
+    finished_by_error
+    finished_by_timeout
+    unknown_tag_event
+  ]
+
   /// in Event-Sourcing system, there is no DB migration.
   /// So events must be forward-compatible, i.e., old version must be able to deserialize the newer events.
   /// We use json serializer and record types to achieve this goal. json serializer
