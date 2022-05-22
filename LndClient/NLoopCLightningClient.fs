@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Threading
 open System.Threading.Tasks
+open DotNetLightning.Utils.Primitives
 open DotNetLightning.ClnRpc
 open DotNetLightning.ClnRpc.Requests
 open DotNetLightning.Payment
@@ -16,7 +17,7 @@ module private CLightningHelpers =
   let hex = HexEncoder()
 
 type NLoopCLightningClient(uri: Uri, network: Network) =
-  let cli =  ClnClient(uri)
+  let cli =  ClnClient(network, uri)
 
   new(uri: Uri) = NLoopCLightningClient(uri, Network.RegTest)
 
@@ -35,7 +36,7 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
         // so that by specifying peer id as an argument for `listpeers`, we can get a much smaller response.
         let! listChannelResp =
           let req = {
-            ListchannelsRequest.ShortChannelId = Some <| ShortChannelId(channelId.ToString())
+            ListchannelsRequest.ShortChannelId = Some <| ShortChannelId.ParseUnsafe(channelId.ToString())
             Source = None
             Destination = None
           }
@@ -63,21 +64,22 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
               c.ChannelId |> Option.bind(fun cId -> if cId.ToString() = channelId.ToString() then Some (p, c) else None)
             )
 
-        let convertNodePolicy (p: ListpeersPeers) (channel: ListpeersPeersChannels) (node1: bool) = {
+        let convertNodePolicy (p: Responses.ListpeersPeers) (channel: Responses.ListpeersPeersChannels) (node1: bool) = {
           NodePolicy.Disabled = listChannelChannel.Active |> not
           Id =
-            if node1 then listChannelChannel.Source.Value |> PubKey
-            else listChannelChannel.Destination.Value |> PubKey
+            if node1 then listChannelChannel.Source
+            else listChannelChannel.Destination
           TimeLockDelta =
             // cltv_expiry_delta must be `u16` according to the [bolt07](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md)
             channel.OurToSelfDelay
             |> Option.defaultWith(fun _ -> failwith "bogus listpeers. channel has no our_to_self_delay")
             |> uint16 |> BlockHeightOffset16
           MinHTLC =
-            channel.MinimumHtlcInMsat |> Option.defaultValue 0L<msat> |> LNMoney.MilliSatoshis
+            channel.MinimumHtlcInMsat |> Option.defaultValue 0L<msat> |> int64 |> LNMoney.MilliSatoshis
           FeeBase =
             channel.FeeBaseMsat
             |> Option.defaultValue 0L<msat>
+            |> int64
             |> LNMoney.MilliSatoshis
           FeeProportionalMillionths =  channel.FeeProportionalMillionths |> Option.defaultValue 0u
         }
@@ -86,6 +88,7 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
             GetChannelInfoResponse.Capacity =
               c.TotalMsat
               |> Option.defaultValue(0L<msat>)
+              |> int64
               |> fun c -> LNMoney.MilliSatoshis(c).ToMoney()
             Node1Policy =
               convertNodePolicy p c true
@@ -147,12 +150,12 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
           [
             for p in peers.Peers do
               for c in p.Channels do
-                if c.State <> ListpeersPeersChannelsState.CHANNELD_NORMAL then
+                if c.State <> Responses.ListpeersPeersChannelsState.CHANNELD_NORMAL then
                   ()
                 else
                   let toUs =
                     match c.ToUsMsat with
-                    | Some ms -> LNMoney.MilliSatoshis(ms)
+                    | Some ms -> int64 ms |> LNMoney.MilliSatoshis
                     | None -> failwith "no to_us_msat in response"
                   yield
                     {
@@ -162,12 +165,12 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
                         | None -> failwith "no channel id in response."
                       Cap =
                         match c.TotalMsat with
-                        | Some ms -> LNMoney.MilliSatoshis(ms).ToMoney()
+                        | Some ms -> LNMoney.MilliSatoshis(int64 ms).ToMoney()
                         | None -> failwith "no total_msat in response."
                       LocalBalance =
                         let ourReserve =
                           match c.OurReserveMsat with
-                          | Some ms -> LNMoney.MilliSatoshis(ms)
+                          | Some ms -> LNMoney.MilliSatoshis(int64 ms)
                           | None -> failwith "no our_reserve_msat in response"
                         if ourReserve < toUs then
                           (toUs - ourReserve).ToMoney()
@@ -177,17 +180,17 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
                         let inbound =
                           match c.TotalMsat with
                           | Some ms ->
-                            LNMoney.Satoshis(ms) - toUs
+                            LNMoney.Satoshis(int64 ms) - toUs
                           | None -> failwith "no total_msat in response"
                         let theirReserve =
                           match c.TheirReserveMsat with
-                          | Some ms -> LNMoney.Satoshis ms
+                          | Some ms -> LNMoney.Satoshis(int64 ms)
                           | None -> failwith "no their_reserve_msat"
                         if  theirReserve < inbound then
                           (inbound - theirReserve).ToMoney()
                         else
                           inbound.ToMoney()
-                      NodeId = p.Id.Value |> PubKey
+                      NodeId = p.Id
                     }
           ]
       }
@@ -215,28 +218,6 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
           }
           cli.PayAsync(r, ct = ct)
         return Ok()
-      }
-
-    member this.OpenChannel(request, ct) =
-      backgroundTask {
-        let ct = defaultArg ct CancellationToken.None
-        let! resp =
-          let reqP: obj array = [|
-            request.NodeId.ToHex()
-            request.Amount.Satoshi
-            null // feerate
-            not (request.Private |> Option.defaultValue true) // announce
-            null // minconf
-            null // utxos
-            null // push_msat
-            request.CloseAddress // close_to
-          |]
-          cli.SendCommandAsync<CLightningDTOs.fundchannel.Fundchannel>("fundchannel", reqP, cancellation = ct)
-
-        let outpoint = OutPoint()
-        outpoint.Hash <- resp.Txid.ToString() |> uint256
-        outpoint.N <- resp.Outnum.ToString() |> UInt32.Parse
-        return Ok outpoint
       }
 
     member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =

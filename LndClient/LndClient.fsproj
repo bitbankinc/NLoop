@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="types.fs" />
     <Compile Include="LndGrpcClient.fs" />
+    <Compile Include="NLoopCLightningClient.fs" />
   </ItemGroup>
 
   <ItemGroup>
