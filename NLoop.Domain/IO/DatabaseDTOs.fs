@@ -117,7 +117,7 @@ type LoopOut = {
   member this.PossibleLockupAddress =
     seq [
       this.RedeemScript.WitHash.GetAddress(this.BaseAssetNetwork)
-      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.BaseAssetNetwork)
+      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.BaseAssetNetwork) |> unbox
     ]
 
   member this.AcceptZeroConf =
@@ -196,7 +196,7 @@ type LoopIn = {
     | SwapAddressType.P2WSH ->
       this.RedeemScript.WitHash.GetAddress(this.QuoteAssetNetwork)
     | SwapAddressType.P2SH_P2WSH ->
-      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.QuoteAssetNetwork)
+      this.RedeemScript.WitHash.ScriptPubKey.Hash.GetAddress(this.QuoteAssetNetwork) |> unbox
     | x -> failwith $"Unreachable! Unknown address type: {x}"
 
   member this.PaymentRequest =

@@ -705,7 +705,7 @@ module Swap =
                       t.Outputs
                       |> Seq.exists(fun o ->
                         let addr = o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork)
-                        addresses|> Seq.contains addr
+                        addresses|> Seq.contains (addr |> unbox)
                       )
                   block.Transactions |> Seq.tryFind isAddressMatch
 
@@ -850,7 +850,7 @@ module Swap =
                       // the spend tx is our refund tx.
                       let refundTxFee =
                         swapTx.Outputs.AsCoins()
-                        |> Seq.cast
+                        |> Seq.cast<ICoin>
                         |> Seq.toArray
                         |> spendTx.GetFee
                       [
