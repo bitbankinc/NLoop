@@ -4,6 +4,7 @@ open System
 open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.Security.Cryptography.X509Certificates
+open DotNetLightning.ClnRpc
 open FSharp.Control
 open Macaroons
 open NBitcoin.DataEncoders
@@ -174,7 +175,7 @@ type IncomingInvoiceSubscription = {
   InvoiceState: IncomingInvoiceStateUnion
   AmountPayed: LNMoney
 }
-type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse>
+type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse option>
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -214,7 +215,7 @@ type INLoopLightningClient =
   /// Subscription for outgoing payment. used for loopout
   abstract member TrackPayment: invoiceHash: PaymentHash * ?c: CancellationToken ->
     AsyncSeq<OutgoingInvoiceSubscription>
-  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
+  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse option>
 
 open FSharp.Control.Tasks
 
@@ -266,7 +267,16 @@ type LightningClientExtensions =
   [<Extension>]
   static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
     let ct = defaultArg ct CancellationToken.None
-    let! c = this.GetChannelInfo(channelId, ct)
-    return c.ToRouteHints(channelId)
+    match! this.GetChannelInfo(channelId, ct) with
+    | Some c ->
+      return c.ToRouteHints(channelId)
+    | None ->
+      return failwith "todo"
   }
 
+
+type NLoopLightningClientError =
+  | Lnd of Grpc.Core.RpcException
+  | Cln of CLightningRPCException
+
+exception NLoopLightningClientException of NLoopLightningClientError
