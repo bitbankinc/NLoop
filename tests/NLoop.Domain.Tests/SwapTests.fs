@@ -182,6 +182,7 @@ type SwapDomainTests() =
 
   let getChangeAddress = GetAddress(fun _cryptoCode ->
       (new Key()).PubKey.WitHash.GetAddress(Network.RegTest)
+      :> BitcoinAddress
       |> Ok
       |> Task.FromResult
     )

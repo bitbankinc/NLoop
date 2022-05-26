@@ -733,7 +733,7 @@ module Swap =
                       t.Outputs
                       |> Seq.exists(fun o ->
                         let addr = o.ScriptPubKey.GetDestinationAddress(loopOut.BaseAssetNetwork)
-                        addresses|> Seq.contains (addr |> unbox)
+                        addresses |> Seq.contains (addr |> unbox)
                       )
                   block.Transactions |> Seq.tryFind isAddressMatch
 
