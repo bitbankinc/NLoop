@@ -31,7 +31,7 @@ type BoltzClient([<O;D(null)>]httpClient: HttpClient) =
   let httpClient = Option.ofObj httpClient |> Option.defaultValue (new HttpClient())
   let jsonOpts = JsonSerializerOptions()
   do
-    jsonOpts.AddNLoopJsonConverters(Network.RegTest)
+    jsonOpts.AddNLoopJsonConverters()
     jsonOpts.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
 
   new (uri: Uri) =

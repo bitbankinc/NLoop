@@ -176,6 +176,11 @@ type IncomingInvoiceSubscription = {
   AmountPayed: LNMoney
 }
 type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse option>
+
+type SubscribeSingleInvoiceRequest = {
+  Hash: PaymentHash
+  Label: string
+}
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
   abstract member GetHodlInvoice:
@@ -207,7 +212,7 @@ type INLoopLightningClient =
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
 
   /// Subscription for incoming payment. used for loopin
-  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken ->
+  abstract member SubscribeSingleInvoice: request: SubscribeSingleInvoiceRequest * ?c: CancellationToken ->
     AsyncSeq<IncomingInvoiceSubscription>
   /// Subscription for outgoing payment. used for loopout
   abstract member TrackPayment: invoiceHash: PaymentHash * ?c: CancellationToken ->

@@ -9,6 +9,8 @@ open DotNetLightning.ClnRpc
 open DotNetLightning.ClnRpc.Requests
 open DotNetLightning.Payment
 open DotNetLightning.Utils
+open FSharp.Control
+open Microsoft.Extensions.Logging
 open NBitcoin
 open NBitcoin.DataEncoders
 
@@ -16,13 +18,11 @@ open NBitcoin.DataEncoders
 module private CLightningHelpers =
   let hex = HexEncoder()
 
-type NLoopCLightningClient(uri: Uri, network: Network) =
+type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLightningClient>) =
   let cli =  ClnClient(network, uri)
 
-  new(uri: Uri) = NLoopCLightningClient(uri, Network.RegTest)
-
   interface INLoopLightningClient with
-    member this.ConnectPeer(nodeId, host, ct) =
+    member this.ConnectPeer(_nodeId, _host, _ct) =
       backgroundTask {
         raise <| NotSupportedException()
       } :> Task
@@ -55,16 +55,16 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
         if peers.Peers.Length = 0 then return None else
         assert (peers.Peers.Length = 1)
 
-        let p, c =
+        let c =
           peers.Peers
           |> Seq.head
           |> fun p ->
             p.Channels
             |> Seq.pick(fun c ->
-              c.ChannelId |> Option.bind(fun cId -> if cId.ToString() = channelId.ToString() then Some (p, c) else None)
+              c.ChannelId |> Option.bind(fun cId -> if cId.ToString() = channelId.ToString() then Some c else None)
             )
 
-        let convertNodePolicy (p: Responses.ListpeersPeers) (channel: Responses.ListpeersPeersChannels) (node1: bool) = {
+        let convertNodePolicy (channel: Responses.ListpeersPeersChannels) (node1: bool) = {
           NodePolicy.Disabled = listChannelChannel.Active |> not
           Id =
             if node1 then listChannelChannel.Source
@@ -91,9 +91,9 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
               |> int64
               |> fun c -> LNMoney.MilliSatoshis(c).ToMoney()
             Node1Policy =
-              convertNodePolicy p c true
+              convertNodePolicy c true
             Node2Policy =
-              convertNodePolicy p c false
+              convertNodePolicy c false
           }
       }
     member this.GetDepositAddress(ct) =
@@ -109,11 +109,11 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
         | None -> return failwith "No Address in response."
       }
 
-    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
+    member this.GetHodlInvoice(_paymentHash, _value, _expiry, _routeHints, _memo, _ct) =
       backgroundTask {
-        let ct = defaultArg ct CancellationToken.None
         return raise <| NotImplementedException()
       }
+
     member this.GetInfo(ct) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
@@ -198,7 +198,7 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
 
-        let! t =
+        let! resp =
           let r = {
             PayRequest.Bolt11 = req.Invoice.ToString()
             Msatoshi = None
@@ -217,10 +217,13 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
             Description = None
           }
           cli.PayAsync(r, ct = ct)
-        return Ok()
+        if resp.Status = Responses.PayStatus.COMPLETE then
+          return Ok()
+        else
+          return Error($"Failed to pay status: {resp.Status}")
       }
 
-    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
+    member this.QueryRoutes(nodeId, amount, _maybeOutgoingChanId, ct) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
         let! resp =
@@ -275,12 +278,68 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
         else
           return Error $"Failed SendPay ({resp})"
       }
-    member this.SubscribeSingleInvoice(invoiceHash, c) =
+    member this.SubscribeSingleInvoice({ Label = label }, ct) =
       backgroundTask {
-        return failwith "todo"
-      }
-    member this.TrackPayment(invoiceHash, c) =
+        let ct = defaultArg ct CancellationToken.None
+        let! resp =
+          let req = {
+            WaitinvoiceRequest.Label = label
+          }
+          cli.WaitInvoiceAsync(req, ct)
+
+        return
+          {
+            PaymentRequest = resp.Bolt11.ToString() |> PaymentRequest.Parse |> ResultUtils.Result.deref
+            InvoiceState =
+              if resp.Status = Responses.WaitinvoiceStatus.PAID then
+                IncomingInvoiceStateUnion.Settled
+              else if resp.Status = Responses.WaitinvoiceStatus.EXPIRED then
+                IncomingInvoiceStateUnion.Canceled
+              else
+                IncomingInvoiceStateUnion.Unknown
+            AmountPayed =
+              if resp.Status = Responses.WaitinvoiceStatus.PAID then
+                match resp.AmountReceivedMsat with
+                | Some s -> s |> int64 |> LNMoney.MilliSatoshis
+                | None -> failwith "unreachable! invoice is paied but amount is unknown"
+              else
+                LNMoney.Zero
+          }
+      } |> Async.AwaitTask  |> List.singleton |> AsyncSeq.ofSeqAsync
+
+    member this.TrackPayment(invoiceHash, ct) =
       backgroundTask {
-        return failwith "todo"
-      }
+        let ct = defaultArg ct CancellationToken.None
+        let! resp =
+          let req = {
+            WaitsendpayRequest.PaymentHash = invoiceHash.Value
+            Timeout = None
+            Partid = None
+            Groupid = None
+          }
+          cli.WaitSendPayAsync(req, ct)
+
+        let translateStatus s =
+          match s with
+          | Responses.WaitsendpayStatus.COMPLETE -> OutgoingInvoiceStateUnion.Succeeded
+          | _ -> OutgoingInvoiceStateUnion.Unknown
+
+        let amountDelivered =
+          match resp.AmountMsat with
+          | Some s -> s
+          | None ->
+            let msg = "amount_msat is not included in waitsendpay response. This might end up showing fee lower than expected"
+            logger.LogWarning msg
+            resp.AmountSentMsat
+        return {
+          OutgoingInvoiceSubscription.InvoiceState = resp.Status |> translateStatus
+          Fee = (resp.AmountSentMsat - amountDelivered) |> int64 |> LNMoney.MilliSatoshis
+          PaymentRequest =
+            match resp.Bolt11 with
+            | Some bolt11 ->
+              bolt11 |> PaymentRequest.Parse |> ResultUtils.Result.deref
+            | None -> failwith "bolt11 not found in waitsendpay response"
+          AmountPayed = amountDelivered |> int64 |> LNMoney.MilliSatoshis
+        }
+      } |> Async.AwaitTask |> List.singleton |> AsyncSeq.ofSeqAsync
 

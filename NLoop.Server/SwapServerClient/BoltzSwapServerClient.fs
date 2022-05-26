@@ -160,7 +160,7 @@ type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOp
               let n = opts.Value.GetNetwork(onChainAsset)
               Scripts.dummySwapScriptV1.WitHash.GetAddress(n)
             let wallet = getWallet(onChainAsset)
-            let dest = seq [(dummyP2SHAddr, request.Amount)] |> dict
+            let dest = seq [(dummyP2SHAddr :> BitcoinAddress, request.Amount)] |> dict
             wallet.GetSendingTxFee(dest, request.HtlcConfTarget, ct)
           match fee with
           | Error e -> return Error <| e.ToString()

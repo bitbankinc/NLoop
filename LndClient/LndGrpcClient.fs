@@ -300,7 +300,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       return m |> box
     }
 
-  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
+  member this.SubscribeSingleInvoice({ Hash = invoiceHash }, ct) =
     let ct = defaultArg ct CancellationToken.None
     let resp =
       let req = SubscribeSingleInvoiceRequest()
@@ -325,8 +325,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
       }
     )
-  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
-    this.SubscribeSingleInvoice(invoiceHash, Some ct)
+  member this.SubscribeSingleInvoice(req, ct) =
+    this.SubscribeSingleInvoice(req, Some ct)
 
   member this.TrackPayment(invoiceHash: Primitives.PaymentHash, ct) =
     let ct = defaultArg ct CancellationToken.None
