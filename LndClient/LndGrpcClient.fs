@@ -541,19 +541,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         |> Seq.toList
         |> Route.Route
     }
-  member this.SubscribeChannelChange(ct) =
-    let ct = defaultArg ct CancellationToken.None
-    let req = ChannelEventSubscription()
-    // we need to set longer deadline for grpc itself too.
-    // since we don't know how long it will take, we just set null.
-    let deadline = Nullable()
-    client
-      .SubscribeChannelEvents(req, this.DefaultHeaders, deadline, ct)
-      .ResponseStream
-      .ReadAllAsync(ct)
-    |> AsyncSeq.ofAsyncEnum
-    |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
-
   member this.GetChannelInfo(channelId: ShortChannelId, ct: CancellationToken option) = task {
     let ct = defaultArg ct CancellationToken.None
     let! resp =
@@ -701,12 +688,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
       try
         this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct)
-      with
-      | :? RpcException as e ->
-        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
-    member this.SubscribeChannelChange(ct) =
-      try
-        this.SubscribeChannelChange(ct)
       with
       | :? RpcException as e ->
         raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)

@@ -205,7 +205,6 @@ type INLoopLightningClient =
     Task<Route>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
-  abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
 
   /// Subscription for incoming payment. used for loopin
   abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken ->

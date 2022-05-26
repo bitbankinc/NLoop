@@ -224,19 +224,24 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
         let! resp =
-          let req: obj array  = [|
-            nodeId.ToHex();
-            amount.MilliSatoshi
-            1 // risk factor
-          |]
-          cli.SendCommandAsync<CLightningDTOs.getroute.Route[]>("getroute", req, cancellation = ct)
+          let req = {
+            GetrouteRequest.Id = nodeId
+            Msatoshi = amount.MilliSatoshi |> unbox
+            Riskfactor = 1UL
+            Cltv = None
+            Fromid = None
+            Fuzzpercent = None
+            Exclude = None
+            Maxhops = None
+          }
+          cli.GetRouteAsync(req, ct)
         let hop =
-          resp
+          resp.Route
           |> Seq.map(fun r -> {
-            RouteHop.Fee = r.Amount_msat.AsLNMoney()
-            PubKey = r.Id.AsPubKey()
-            ShortChannelId = r.Channel.ToString() |> ShortChannelId.ParseUnsafe
-            CLTVExpiryDelta = r.Delay.ToString() |> uint32
+            RouteHop.Fee = r.AmountMsat |> int64 |> LNMoney.MilliSatoshis
+            PubKey = r.Id
+            ShortChannelId = r.Channel
+            CLTVExpiryDelta = r.Delay
           })
           |> Seq.toList
         return Route.Route(hop)
@@ -245,20 +250,30 @@ type NLoopCLightningClient(uri: Uri, network: Network) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
         if req.Invoice.AmountValue.IsNone then return raise <| InvalidDataException $"Invoice has no amount specified" else
-        let maxFeePercent = req.Invoice.AmountValue.Value / req.MaxFee
+        let maxFeePercent = req.Invoice.AmountValue.Value.Satoshi / req.MaxFee.Satoshi
         let! resp =
-          cli.SendCommandAsync<CLightningDTOs.pay.Pay>("pay", [| req.Invoice.ToString() |], cancellation = ct)
-        if resp.Status = CLightningDTOs.pay.PayStatus.Complete then
+          let r  = {
+            PayRequest.Bolt11 = req.Invoice.ToString()
+            Msatoshi = req.Invoice.AmountValue.Value.MilliSatoshi |> unbox
+            Label = None
+            Riskfactor = None
+            Maxfeepercent = Some maxFeePercent
+            RetryFor = None
+            Maxdelay = None
+            Exemptfee = None
+            Localofferid = None
+            Exclude = None
+            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox
+            Description = None
+          }
+          cli.PayAsync(r, ct)
+        if resp.Status = Responses.PayStatus.COMPLETE then
           return Ok {
-            PaymentResult.Fee = resp.Amount_sent_msat.AsLNMoney() - resp.Amount_msat.AsLNMoney()
-            PaymentPreimage = resp.Payment_preimage.ToString() |> hex.DecodeData |> PaymentPreimage.Create
+            PaymentResult.Fee = (resp.AmountSentMsat - resp.AmountMsat) |> int64 |> LNMoney.MilliSatoshis
+            PaymentPreimage = resp.PaymentPreimage.ToString() |> hex.DecodeData |> PaymentPreimage.Create
           }
         else
           return Error $"Failed SendPay ({resp})"
-      }
-    member this.SubscribeChannelChange(ct) =
-      backgroundTask {
-        return failwith "todo"
       }
     member this.SubscribeSingleInvoice(invoiceHash, c) =
       backgroundTask {
