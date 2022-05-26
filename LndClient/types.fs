@@ -203,8 +203,6 @@ type INLoopLightningClient =
   abstract member GetInfo: ?ct: CancellationToken -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken ->
     Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken ->
-    Task<Result<OutPoint, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
   abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>

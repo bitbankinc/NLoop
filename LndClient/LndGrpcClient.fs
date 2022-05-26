@@ -698,12 +698,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       with
       | :? RpcException as e ->
         raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
-    member this.OpenChannel(request, ct) =
-      try
-        this.OpenChannel(request, ct)
-      with
-      | :? RpcException as e ->
-        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
     member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
       try
         this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct)
