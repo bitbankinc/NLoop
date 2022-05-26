@@ -117,8 +117,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  GetHodlInvoice: PaymentHash -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
+  SubscribeSingleInvoice: SubscribeSingleInvoiceRequest -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
@@ -134,7 +133,6 @@ type DummyLnClientParameters = {
       |> ResultUtils.Result.deref
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
     GetChannelInfo = fun _cId -> failwith "todo"
-    GetHodlInvoice = fun _ _ _ _ _ -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -223,14 +221,6 @@ type TestHelpers =
       member this.GetDepositAddress(?ct) =
         TestHelpersMod.lndAddress |> unbox
         |> Task.FromResult
-      member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
-                                 value: LNMoney,
-                                 expiry: TimeSpan,
-                                 routeHints: RouteHint[],
-                                 memo: string,
-                                 ?ct: CancellationToken) =
-          parameters.GetHodlInvoice paymentHash value expiry memo routeHints
-          |> Task.FromResult
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,
@@ -261,8 +251,8 @@ type TestHelpers =
         Task.FromResult parameters.ListChannels
       member this.TrackPayment(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<OutgoingInvoiceSubscription> =
         failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
-        parameters.SubscribeSingleInvoice invoiceHash
+      member this.SubscribeSingleInvoice(req, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
+        parameters.SubscribeSingleInvoice req
       member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse option> =
         {
           Capacity = Money.Satoshis(10000m)

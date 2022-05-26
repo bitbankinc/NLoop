@@ -109,11 +109,6 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
         | None -> return failwith "No Address in response."
       }
 
-    member this.GetHodlInvoice(_paymentHash, _value, _expiry, _routeHints, _memo, _ct) =
-      backgroundTask {
-        return raise <| NotImplementedException()
-      }
-
     member this.GetInfo(ct) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None

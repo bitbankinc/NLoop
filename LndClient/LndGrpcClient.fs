@@ -267,31 +267,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     }
 
   member this.GetDepositAddress(ct) = this.GetDepositAddress(Some ct)
-  member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash, value: LNMoney, ?expiry: TimeSpan, ?routeHints, ?memo, ?ct) =
-    task {
-      let ct = defaultArg ct CancellationToken.None
-      let req = AddHoldInvoiceRequest()
-      req.Hash <-
-        paymentHash.ToBytes()
-        |> ByteString.CopyFrom
-      req.Value <- value.Satoshi
-      expiry |> Option.iter(fun e ->
-        req.Expiry <- e.Seconds |> int64
-      )
-      routeHints |> Option.iter(fun routeHintsValue ->
-        for r in routeHintsValue do
-          let lnRouteHint = RouteHint()
-          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-          req.RouteHints.Add(lnRouteHint)
-      )
-      match memo with
-      | Some m ->
-        req.Memo <- m
-      | None ->
-        req.Memo <- "hodl_invoice_requested_by_LndGrpcClient"
-      let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
-      return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
-    }
   member this.GetInfo(ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
@@ -634,14 +609,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       with
       | :? RpcException as e ->
         raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
-    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
-      let ct = defaultArg ct CancellationToken.None
 
-      try
-        this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct)
-      with
-      | :? RpcException as e ->
-        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
     member this.GetInfo(ct) =
       try
         this.GetInfo ct

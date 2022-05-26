@@ -183,14 +183,6 @@ type SubscribeSingleInvoiceRequest = {
 }
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
-  abstract member GetHodlInvoice:
-    paymentHash: Primitives.PaymentHash *
-    value: LNMoney *
-    expiry: TimeSpan *
-    routeHints: RouteHint[] *
-    memo: string *
-    ?ct: CancellationToken
-      -> Task<PaymentRequest>
   abstract member GetInvoice:
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
