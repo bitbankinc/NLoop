@@ -46,7 +46,11 @@ type IntegrationTests() =
         cli.Server.Boltz.CreateSwapAsync(req, cts.Token)
 
       let invoiceSubscription =
-        cli.User.BitcoinLnd.SubscribeSingleInvoice(inv.PaymentHash, cts.Token)
+        let req = {
+          Hash = inv.PaymentHash
+          Label = "test"
+        }
+        cli.User.BitcoinLnd.SubscribeSingleInvoice(req, cts.Token)
 
       let feeRate =
         NLoop.Server.Constants.FallbackFeeSatsPerByte |> decimal |> FeeRate

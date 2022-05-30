@@ -267,31 +267,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     }
 
   member this.GetDepositAddress(ct) = this.GetDepositAddress(Some ct)
-  member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash, value: LNMoney, ?expiry: TimeSpan, ?routeHints, ?memo, ?ct) =
-    task {
-      let ct = defaultArg ct CancellationToken.None
-      let req = AddHoldInvoiceRequest()
-      req.Hash <-
-        paymentHash.ToBytes()
-        |> ByteString.CopyFrom
-      req.Value <- value.Satoshi
-      expiry |> Option.iter(fun e ->
-        req.Expiry <- e.Seconds |> int64
-      )
-      routeHints |> Option.iter(fun routeHintsValue ->
-        for r in routeHintsValue do
-          let lnRouteHint = RouteHint()
-          lnRouteHint.HopHints.AddRange(r.Hops |> Array.map(fun h -> h.ToGrpcType()))
-          req.RouteHints.Add(lnRouteHint)
-      )
-      match memo with
-      | Some m ->
-        req.Memo <- m
-      | None ->
-        req.Memo <- "hodl_invoice_requested_by_LndGrpcClient"
-      let! m = invoiceClient.AddHoldInvoiceAsync(req, this.DefaultHeaders, this.Deadline, ct)
-      return m.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
-    }
   member this.GetInfo(ct) =
     task {
       let ct = defaultArg ct CancellationToken.None
@@ -300,7 +275,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       return m |> box
     }
 
-  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
+  member this.SubscribeSingleInvoice({ Hash = invoiceHash }, ct) =
     let ct = defaultArg ct CancellationToken.None
     let resp =
       let req = SubscribeSingleInvoiceRequest()
@@ -325,8 +300,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
       }
     )
-  member this.SubscribeSingleInvoice(invoiceHash: Primitives.PaymentHash, ct) =
-    this.SubscribeSingleInvoice(invoiceHash, Some ct)
+  member this.SubscribeSingleInvoice(req, ct) =
+    this.SubscribeSingleInvoice(req, Some ct)
 
   member this.TrackPayment(invoiceHash: Primitives.PaymentHash, ct) =
     let ct = defaultArg ct CancellationToken.None
@@ -541,25 +516,14 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
         |> Seq.toList
         |> Route.Route
     }
-  member this.SubscribeChannelChange(ct) =
-    let ct = defaultArg ct CancellationToken.None
-    let req = ChannelEventSubscription()
-    // we need to set longer deadline for grpc itself too.
-    // since we don't know how long it will take, we just set null.
-    let deadline = Nullable()
-    client
-      .SubscribeChannelEvents(req, this.DefaultHeaders, deadline, ct)
-      .ResponseStream
-      .ReadAllAsync(ct)
-    |> AsyncSeq.ofAsyncEnum
-    |> AsyncSeq.map(LndClient.ChannelEventUpdate.FromGrpcType)
-
   member this.GetChannelInfo(channelId: ShortChannelId, ct: CancellationToken option) = task {
     let ct = defaultArg ct CancellationToken.None
     let! resp =
       let req = ChanInfoRequest()
       req.ChanId <- channelId.ToUInt64()
       client.GetChanInfoAsync(req, this.DefaultHeaders, this.Deadline, ct).ResponseAsync
+
+    if resp |> isNull then return None else
     let convertNodePolicy (nodeIdStr: string) (p: RoutingPolicy) = {
       NodePolicy.Disabled = p.Disabled
       Id = nodeIdStr |> PubKey
@@ -574,7 +538,7 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       GetChannelInfoResponse.Capacity = resp.Capacity |> Money.Satoshis
       Node1Policy = resp.Node1Policy |> convertNodePolicy resp.Node1Pub
       Node2Policy = resp.Node2Policy |> convertNodePolicy resp.Node2Pub
-    }
+    } |> Some
   }
 
   member this.SettleInvoice(preimage: PaymentPreimage, ct) =
@@ -633,21 +597,71 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
       }
 
   interface INLoopLightningClient with
-    member this.ConnectPeer(nodeId, host, ct) = this.ConnectPeer(nodeId, host, ct)
-    member this.GetDepositAddress(ct) = this.GetDepositAddress(ct)
-    member this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct) =
-      let ct = defaultArg ct CancellationToken.None
-      this.GetHodlInvoice(paymentHash, value, expiry, routeHints, memo, ct)
-    member this.GetInfo(ct) = this.GetInfo ct
-    member this.SubscribeSingleInvoice(invoiceHash, ct) = this.SubscribeSingleInvoice(invoiceHash, ct)
-    member this.TrackPayment(invoiceHash, ct) = this.TrackPayment(invoiceHash, ct)
+    member this.ConnectPeer(nodeId, host, ct) =
+      try
+        this.ConnectPeer(nodeId, host, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.GetDepositAddress(ct) =
+      try
+        this.GetDepositAddress(ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+
+    member this.GetInfo(ct) =
+      try
+        this.GetInfo ct
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.SubscribeSingleInvoice(invoiceHash, ct) =
+      try
+        this.SubscribeSingleInvoice(invoiceHash, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.TrackPayment(invoiceHash, ct) =
+      try
+        this.TrackPayment(invoiceHash, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
     member this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct) =
       let ct = defaultArg ct CancellationToken.None
-      this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct)
-    member this.ListChannels(ct) = this.ListChannels ct
-    member this.SendPayment(param, ct) = this.SendPayment (param, ct)
-    member this.Offer(param, ct) = this.Offer(param, ct)
-    member this.OpenChannel(request, ct) =  this.OpenChannel(request, ct)
-    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) = this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct)
-    member this.SubscribeChannelChange(ct) = this.SubscribeChannelChange(ct)
-    member this.GetChannelInfo(channelId: ShortChannelId, ?ct: CancellationToken) = this.GetChannelInfo(channelId, ct)
+      try
+        this.GetInvoice(paymentPreimage, amount, expiry, routeHints, memo, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.ListChannels(ct) =
+      try
+        this.ListChannels ct
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.SendPayment(param, ct) =
+      try
+        this.SendPayment (param, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.Offer(param, ct) =
+      try
+        this.Offer(param, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
+      try
+        this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)
+    member this.GetChannelInfo(channelId: ShortChannelId, ?ct: CancellationToken) =
+      try
+        this.GetChannelInfo(channelId, ct)
+      with
+      | :? RpcException as e ->
+        raise <| NLoopLightningClientException(NLoopLightningClientError.Lnd e)

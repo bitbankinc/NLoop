@@ -374,7 +374,7 @@ type ServerAPITest() =
 
     let opts =
       let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-      o.AddNLoopJsonConverters(Network.RegTest)
+      o.AddNLoopJsonConverters()
       o
     let client = server.CreateClient()
     use e =
@@ -491,7 +491,7 @@ type ServerAPITest() =
 
       let opts =
         let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-        o.AddNLoopJsonConverters(Network.RegTest)
+        o.AddNLoopJsonConverters()
         o
       let client = server.CreateClient()
       use e =
@@ -579,7 +579,7 @@ type ServerAPITest() =
       let! resp =
         let opts =
           let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-          o.AddNLoopJsonConverters(Network.RegTest)
+          o.AddNLoopJsonConverters()
           o
         let content = JsonContent.Create(req, Unchecked.defaultof<_>, opts)
         client.PostAsync("/v1/liquidity/params", content)

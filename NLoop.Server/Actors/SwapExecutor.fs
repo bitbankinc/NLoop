@@ -176,7 +176,7 @@ type SwapExecutor(
         let! swapTxFee =
           // we use p2sh-p2wsh to estimate the worst case fee.
           let addr = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey.Hash.GetAddress(onChainNetwork)
-          let d = Dictionary<_,_>()
+          let d = Dictionary<BitcoinAddress, _>()
           d.Add(addr, loopIn.Amount)
           wallet.GetSendingTxFee(d, htlcConfTarget)
           |> TaskResult.mapError(fun walletError -> walletError.ToString())
@@ -225,11 +225,15 @@ type SwapExecutor(
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
+          let label =
+            loopIn.Label
+            |> Option.defaultValue String.Empty
+            |> fun s -> s + $"(id: {(Guid().ToString())})"
           invoiceProvider.GetAndListenToInvoice(
             group.OffChainAsset,
             preimage,
             amt,
-            loopIn.Label |> Option.defaultValue String.Empty,
+            label,
             maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 

@@ -8,13 +8,15 @@ bitcoin() {
   # prepare coinbase txes.
   ./docker-bitcoin-cli.sh getnewaddress "" bech32 | xargs  -IXX ./docker-bitcoin-cli.sh generatetoaddress 120 XX
 
-  # Connect peers
-  ./docker-lncli-user.sh getinfo | jq ".uris[0]" | xargs -IXX ./docker-lncli-server_btc.sh connect XX  
-
   # send on-chain funds to both sides.
   ./docker-lncli-user.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
   ./docker-lncli-server_btc.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
+  ./docker-lightning-cli-user.sh newaddr | jq -r ".bech32" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
   ./docker-bitcoin-cli.sh generatetoaddress 6 bcrt1qjwfqxekdas249pr9fgcpxzuhmndv6dqlulh44m # Just for confirmation
+
+  # Connect peers
+  ./docker-lncli-user.sh getinfo | jq ".uris[0]" | xargs -IXX ./docker-lncli-server_btc.sh connect XX  
+  ./docker-lightning-cli-user.sh getinfo | jq -r ".id" | xargs -IXX ./docker-lncli-server_btc.sh connect XX@clightning_user
 }
 
 litecoin() {

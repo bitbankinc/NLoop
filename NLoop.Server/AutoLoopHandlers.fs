@@ -70,7 +70,7 @@ let getLiquidityParams (offChainAsset: SupportedCryptoCode) : HttpHandler =
     return! json resp next ctx
   }
 
-let private dtoToFeeLimit
+let dtoToFeeLimit
   (offChain: CryptoCodeDefaultOffChainParams, onChain: CryptoCodeDefaultOnChainParams)
   (r: LiquidityParameters): Result<IFeeLimit, _> =
   let isFeePPM = r.FeePPM.IsSome

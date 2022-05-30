@@ -39,6 +39,7 @@ open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
 open NReco.Logging.File
+open DotNetLightning.ClnRpc.Plugin
 module App =
   let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
@@ -172,9 +173,7 @@ type Startup(_conf: IConfiguration, env: IHostEnvironment) =
 
 module Main =
 
-  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
-      builder.AddConsole() |> ignore
-
+  let configureFileLogging (ctx: HostBuilderContext) (builder : ILoggingBuilder) =
       let isProduction = ctx.HostingEnvironment.IsProduction()
       if isProduction |> not then
         builder.AddDebug() |> ignore
@@ -196,6 +195,14 @@ module Main =
         .SetMinimumLevel(LogLevel.Debug)
         |> ignore
 
+  let configureLogging(ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+      builder.AddConsole() |> ignore
+      configureFileLogging ctx builder
+
+  let configureJsonRpcLogging(ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+    builder.AddPluginLogger() |> ignore
+    configureFileLogging ctx builder
+
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.AddInMemoryCollection(Constants.DefaultLoggingSettings) |> ignore
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
@@ -211,42 +218,58 @@ module Main =
     ()
 
   let configureHostBuilder  (hostBuilder: IHostBuilder) =
-    hostBuilder.ConfigureAppConfiguration(configureConfig)
-      .ConfigureWebHostDefaults(
-        fun webHostBuilder ->
-          webHostBuilder
-            .UseStartup<Startup>()
-            .UseUrls()
-            .UseKestrel(fun kestrelOpts ->
-              let opts = kestrelOpts.ApplicationServices.GetRequiredService<IOptions<NLoopOptions>>().Value
-              let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
 
-              logger.LogInformation $"Starting {Constants.AppName}. version: {Constants.AssemblyVersion}"
+    let hostBuilder = hostBuilder.ConfigureAppConfiguration(configureConfig)
 
-              let ipAddresses = ResizeArray<_>()
-              match opts.RPCHost |> IPAddress.TryParse with
-              | true, ip ->
-                ipAddresses.Add(ip)
-              | false, _ when opts.RPCHost = Constants.DefaultRPCHost ->
-                ipAddresses.Add(IPAddress.IPv6Loopback)
-                ipAddresses.Add(IPAddress.Loopback)
-              | _ ->
-                ipAddresses.Add(IPAddress.IPv6Any)
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
 
-              if opts.NoHttps then
-                for ip in ipAddresses do
-                  logger.LogInformation($"Binding to http://{ip}")
-                  kestrelOpts.Listen(ip, port = opts.RPCPort, configure=fun (s: ListenOptions) -> s.UseConnectionLogging() |> ignore)
-              else
-                for ip in ipAddresses do
-                  logger.LogInformation($"Binding to https://{ip}")
-                  let cert = new X509Certificate2(opts.HttpsCert, opts.HttpsCertPass)
-                  kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
-                    s.UseConnectionLogging().UseHttps(cert) |> ignore))
-              )
-            .ConfigureLogging(configureLogging)
+    if isPluginMode then
+      hostBuilder
+        .ConfigureLogging(configureJsonRpcLogging)
+        .ConfigureServices(App.configureServicesTest)
+        .ConfigureServices(fun serviceCollection ->
+          serviceCollection
+            .AddSingleton<PluginServerBase, NLoopJsonRpcServer>()
+            .AddSingleton<NLoopJsonRpcServer>()
             |> ignore
-      )
+        )
+    else
+      hostBuilder
+        .ConfigureLogging(configureLogging)
+        .ConfigureWebHostDefaults(
+          fun webHostBuilder ->
+            webHostBuilder
+              .UseStartup<Startup>()
+              .UseUrls()
+              .UseKestrel(fun kestrelOpts ->
+                let opts = kestrelOpts.ApplicationServices.GetRequiredService<IOptions<NLoopOptions>>().Value
+                let logger = kestrelOpts.ApplicationServices.GetRequiredService<ILoggerFactory>().CreateLogger<Startup>()
+
+                logger.LogInformation $"Starting {Constants.AppName}. version: {Constants.AssemblyVersion}"
+
+                let ipAddresses = ResizeArray<_>()
+                match opts.RPCHost |> IPAddress.TryParse with
+                | true, ip ->
+                  ipAddresses.Add(ip)
+                | false, _ when opts.RPCHost = Constants.DefaultRPCHost ->
+                  ipAddresses.Add(IPAddress.IPv6Loopback)
+                  ipAddresses.Add(IPAddress.Loopback)
+                | _ ->
+                  ipAddresses.Add(IPAddress.IPv6Any)
+
+                if opts.NoHttps then
+                  for ip in ipAddresses do
+                    logger.LogInformation($"Binding to http://{ip}")
+                    kestrelOpts.Listen(ip, port = opts.RPCPort, configure=fun (s: ListenOptions) -> s.UseConnectionLogging() |> ignore)
+                else
+                  for ip in ipAddresses do
+                    logger.LogInformation($"Binding to https://{ip}")
+                    let cert = new X509Certificate2(opts.HttpsCert, opts.HttpsCertPass)
+                    kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
+                      s.UseConnectionLogging().UseHttps(cert) |> ignore))
+                )
+              |> ignore
+        )
 
   /// Mostly the same with `CommandLineBuilder.UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
@@ -272,6 +295,13 @@ module Main =
     use host = hostBuilder.Build();
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
     do! next.Invoke(ctx)
+
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    if isPluginMode then
+      let sp = host.Services
+      let server = sp.GetRequiredService<NLoopJsonRpcServer>()
+      let! _ = server.StartAsync()
+      ()
     do! host.RunAsync();
   })
 

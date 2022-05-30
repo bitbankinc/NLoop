@@ -142,4 +142,4 @@ type NLoopOptions() =
         | Ok x -> x
         | Error e -> failwith $"Invalid Lnd config: {e}"
 
-
+type GetOptions = unit -> NLoopOptions

@@ -1,0 +1,46 @@
+version: "3"
+
+services:
+  clightning_user:
+    restart: unless-stopped
+    image: nloop/lightningd:v0.10.1
+    build:
+      context: ../../
+      dockerfile: tests/NLoop.Server.Tests/Dockerfiles/lightning
+      args:
+        LIGHTNINGD_VERSION: "v0.10.1"
+      cache_from:
+        - nloop/lightningd:v0.10.1
+    environment:
+      EXPOSE_TCP: "true"
+      LIGHTNINGD_NETWORK: regtest
+      LIGHTNINGD_CHAIN: btc
+      LIGHTNINGD_PORT: 9735
+      LIGHTNINGD_RPC_PORT: 9835
+      LIGHTNINGD_ANNOUNCEADDR: clightning_user
+      LIGHTNINGD_DATA: /root/.lightning
+    command:
+      - "--network=regtest"
+      - "--lightning-dir=/root/.lightning"
+      - "--allow-deprecated-apis=false"
+      - "--bitcoin-datadir=/deps/.bitcoin"
+      - "--bitcoin-rpcuser=johndoe"
+      - "--bitcoin-rpcpassword=unsafepassword"
+      - "--bitcoin-rpcconnect=bitcoind"
+      - "--bitcoin-rpcport=43782"
+      # - "--plugin-dir=/plugins"
+      # - "--plugin=/root/.lightning/plugins/summary"
+      # - "--plugin=/opt/lightningd/plugins/summary"
+    depends_on:
+      - bitcoind
+    volumes:
+      - "clightning_user:/root/.lightning"
+      - "./data/bitcoin:/deps/.bitcoin"
+    expose:
+      - "9735"
+    ports:
+      - "9835:9835"
+
+volumes:
+  clightning_user:
+

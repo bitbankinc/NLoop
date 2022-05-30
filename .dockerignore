@@ -23,4 +23,5 @@
 **/secrets.dev.yaml
 **/values.dev.yaml
 tests/
+!./tests/NLoop.Server.Tests/Dockerfiles/*.sh
 README.md

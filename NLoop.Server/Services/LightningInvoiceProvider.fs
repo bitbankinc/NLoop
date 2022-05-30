@@ -22,7 +22,13 @@ type LightningInvoiceProvider(lightningClientProvider: ILightningClientProvider)
       try
         let! invoice =
           client.GetInvoice(preimage, amt, TimeSpan.FromHours(25.), routeHints, $"This is an invoice for LoopIn by NLoop (label: \"{label}\")")
-        let invoiceEvent = client.SubscribeSingleInvoice(invoice.PaymentHash, ct)
+
+        let invoiceEvent =
+          let req = {
+            Hash = invoice.PaymentHash
+            Label = label
+          }
+          client.SubscribeSingleInvoice(req, ct)
         invoiceEvent
         |> AsyncSeq.iterAsync(fun s -> async {
           if s.InvoiceState = IncomingInvoiceStateUnion.Settled then

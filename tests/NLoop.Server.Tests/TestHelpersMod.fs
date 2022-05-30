@@ -117,8 +117,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  GetHodlInvoice: PaymentHash -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
+  SubscribeSingleInvoice: SubscribeSingleInvoiceRequest -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
@@ -134,7 +133,6 @@ type DummyLnClientParameters = {
       |> ResultUtils.Result.deref
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
     GetChannelInfo = fun _cId -> failwith "todo"
-    GetHodlInvoice = fun _ _ _ _ _ -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -210,7 +208,7 @@ type DummyWalletClientParameters = {
   static member Default =
     {
       FundToAddress = fun (_,_,_) -> failwith "todo"
-      GetDepositAddress = fun () -> TestHelpersMod.walletAddress
+      GetDepositAddress = fun () -> TestHelpersMod.walletAddress |> unbox
       GetSendingTxFee = fun _ _ -> failwith "todo"
     }
 
@@ -221,16 +219,8 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        TestHelpersMod.lndAddress
+        TestHelpersMod.lndAddress |> unbox
         |> Task.FromResult
-      member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
-                                 value: LNMoney,
-                                 expiry: TimeSpan,
-                                 routeHints: RouteHint[],
-                                 memo: string,
-                                 ?ct: CancellationToken) =
-          parameters.GetHodlInvoice paymentHash value expiry memo routeHints
-          |> Task.FromResult
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,
@@ -255,21 +245,15 @@ type TestHelpers =
       member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?chanId: ShortChannelId, ?ct: CancellationToken): Task<Route> =
         parameters.QueryRoutes nodeId amount chanId
         |> Task.FromResult
-
-      member this.OpenChannel(request: LndOpenChannelRequest, ?ct: CancellationToken): Task<Result<OutPoint, LndOpenChannelError>> =
-        failwith "todo"
       member this.ConnectPeer(nodeId: PubKey, host: string, ?ct: CancellationToken): Task =
         Task.FromResult() :> Task
       member this.ListChannels(?ct: CancellationToken): Task<ListChannelResponse list> =
         Task.FromResult parameters.ListChannels
-      member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
-        failwith "todo"
-
       member this.TrackPayment(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<OutgoingInvoiceSubscription> =
         failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
-        parameters.SubscribeSingleInvoice invoiceHash
-      member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
+      member this.SubscribeSingleInvoice(req, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
+        parameters.SubscribeSingleInvoice req
+      member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse option> =
         {
           Capacity = Money.Satoshis(10000m)
           Node1Policy = {
@@ -289,6 +273,7 @@ type TestHelpers =
             Disabled = false
           }
         }
+        |> Some
         |> Task.FromResult
     }
 
@@ -446,7 +431,6 @@ type TestHelpers =
         configBuilder.AddJsonFile("appsettings.test.json") |> ignore
         )
       .UseStartup<TestHelpersMod.TestStartup>()
-      .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
         TestHelpers.ConfigureTestServices(services, configureServices)
       )
