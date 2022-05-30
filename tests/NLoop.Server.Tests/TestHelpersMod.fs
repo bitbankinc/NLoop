@@ -431,7 +431,6 @@ type TestHelpers =
         configBuilder.AddJsonFile("appsettings.test.json") |> ignore
         )
       .UseStartup<TestHelpersMod.TestStartup>()
-      .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
         TestHelpers.ConfigureTestServices(services, configureServices)
       )

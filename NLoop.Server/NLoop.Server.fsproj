@@ -12,6 +12,7 @@
     <ProjectReference Include="..\BoltzClient\BoltzClient.fsproj" />
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
     <ProjectReference Include="..\LndClient\LndClient.fsproj" />
+    <ProjectReference Include="..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AspNetCore.HealthChecks.EventStore" Version="5.0.1" />
@@ -67,6 +68,7 @@
     <Compile Include="AutoLoopHandlers.fs" />
     <Compile Include="QueryHandlers.fs" />
     <Compile Include="CommandLine.fs" />
+    <Compile Include="JsonRpcServer.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

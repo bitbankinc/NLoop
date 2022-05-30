@@ -269,7 +269,6 @@ type Clients = {
         .UseContentRoot(dataPath)
         .UseStartup<Startup>()
         .ConfigureAppConfiguration(fun _b ->())
-        .ConfigureLogging(Main.configureLogging)
         .ConfigureTestServices(fun s ->
           let cliOpts: ParseResult =
             let p =
@@ -305,6 +304,7 @@ type Clients = {
             s.AddSingleton<ILoggerFactory, NullLoggerFactory>() |> ignore
         )
         |> fun b -> new TestServer(b)
+
     let userNLoop =
       let httpClient = testHost.CreateClient()
       let nloopClient = httpClient |> NLoopClient
