@@ -8,6 +8,14 @@
 
 Note that this requires .NET SDK with compatible version installed.
 
+You also have to enable [docker buildkit](https://docs.docker.com/develop/develop-images/build_enhancements/), by setting
+
+```bash
+DOCKER_BUILDKIT=1
+COMPOSE_DOCKER_CLI_BUILD=1
+```
+
+
 ```sh
 # --- prepare dependent services ---
 cd tests/NLoop.Server.Tests
@@ -56,3 +64,14 @@ git checkout -- data
 For tests those which have a trait "Docker=On", you should first run `docker-compose up` in the background,
 These tests are too heavy that it won't run in the CI, but it is necessary to assure the health of the app.
 
+### testing the behaviour for running nloopd as a c-lightning plugin.
+
+clightning requires its plugin to live in the same docker image since it communicates with each other with
+stdin/out, thus, we must first build `nloopd` docker image and inherit clightning image from it.
+We do this by using [dockerfile-plus](https://github.com/edrevo/dockerfile-plus).
+
+We also have a separate docker-compose file, so to run clightning image which contains nloop, run
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.clightning.yml up clightning_user
+```
