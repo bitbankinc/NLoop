@@ -83,6 +83,7 @@ services:
       - "43783:43783" # RPC
     volumes:
       - "./data/litecoin:/data"
+
   lnd_user:
     restart: unless-stopped
     image: nloop/lnd:v0.14.2-beta
@@ -313,5 +314,4 @@ services:
       - --enable-atom-pub-over-http
     volumes:
       - "./data/esdb:/etc/eventstore"
-
 
