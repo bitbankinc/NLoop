@@ -46,6 +46,14 @@ module private JsonRpcServerHelpers =
 
 
 module PluginOptions =
+
+  [<Literal>]
+  let opPrefix = "nloop-"
+  let addPrefix n = $"{opPrefix}{n}"
+  let removePrefix (n: string) =
+    let n = if n.StartsWith "--" then n.TrimStart("--".ToCharArray()) else n
+    n.TrimStart(opPrefix.ToCharArray())
+
   let fromRootCLIOption(op: System.CommandLine.Option) =
     let ty =
       if op.Argument.ArgumentType.IsGenericType then
@@ -53,10 +61,10 @@ module PluginOptions =
       else
         op.Argument.ArgumentType
     {
-      Name = op.Name
+      Name = addPrefix op.Name
       Default =
         if op.Argument.HasDefaultValue then op.Argument.GetDefaultValue() else
-        Activator.CreateInstance(ty)
+        if ty.IsValueType then Activator.CreateInstance(ty) else null
       Description =
         op.Description
       OptionType =
@@ -115,15 +123,58 @@ type NLoopJsonRpcServer
   override this.Options =
     NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptions.fromRootCLIOption)
 
+  member val NLoopOptions = NLoopOptions()
+
   override this.InitCore(configuration, options) =
     let _client =
       ClnClient(opts.Value.GetNetwork(SupportedCryptoCode.BTC), Uri($"unix://{configuration.RpcFile}"))
 
-    for _op in options do
-      ()
-    failwith "todo"
+    let optsProperties =
+      this.NLoopOptions.GetType().GetProperties()
+      |> Seq.map(fun p -> p.Name.ToLowerInvariant(), p)
+      |> Map.ofSeq
+    for op in options do
+      let name = op.Key
+      optsProperties
+      |> Map.tryFind((PluginOptions.removePrefix name).ToLowerInvariant())
+      |> Option.iter(fun p ->
+        p.SetValue(this.NLoopOptions, op.Value)
+      )
 
-  [<PluginJsonRpcMethod("loopout", "initiate loopout swap", "initiate loop out swap")>]
+    // -- handle redundant option values those which defined in both c-lightning and nloop.
+    let pairs =
+      seq [
+        ("network", "network")
+        ("bitcoin-rpcuser", "btc.rpcuser")
+        ("bitcoin-rpcpassword", "btc.rpcpassword")
+        ("bitcoin-rpcconnect", "btc.rpchost")
+        ("bitcoin-rpcport", "btc.rpcport")
+      ]
+    for lnName, nloopName in pairs do
+      let valueForCln =
+        match options.TryGetValue(PluginOptions.addPrefix lnName) with
+        | true, p -> Some p
+        | false, _ -> None
+      let valueForNloop =
+        optsProperties
+        |> Map.find(nloopName.ToLowerInvariant())
+        |> fun p -> p.GetValue(this.NLoopOptions)
+        |> Option.ofObj
+
+      valueForCln
+        |>
+        Option.iter(fun v ->
+          if valueForNloop.IsNone then
+            let prop = optsProperties |> Map.find(nloopName.ToLowerInvariant())
+            prop.SetValue(this.NLoopOptions, v)
+        )
+      if valueForCln <> valueForNloop then
+        let msg = $"mismatch in option. {lnName} and {nloopName} must have a same value. Or set {lnName} one only."
+        logger.LogWarning(msg)
+        failwith msg
+    ()
+
+  [<PluginJsonRpcMethod("nloop_loopout", "initiate loopout swap", "initiate loop out swap")>]
   member this.LoopOut(req: NLoopClient.LoopOutRequest): Task<NLoopClient.LoopOutResponse> =
     backgroundTask {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
@@ -136,7 +187,7 @@ type NLoopJsonRpcServer
         return raise <| exn e
     }
 
-  [<PluginJsonRpcMethod("loopin", "initiate loop in swap", "initiate loop in swap")>]
+  [<PluginJsonRpcMethod("nloop_loopin", "initiate loop in swap", "initiate loop in swap")>]
   member this.LoopIn(req: NLoopClient.LoopInRequest) : Task<NLoopClient.LoopInResponse> =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
@@ -151,7 +202,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "swaphistory",
+    "nloop_swaphistory",
     "Get the full history of swaps.",
     "Get the full history of swaps. This might take long if you have a lots of entries in a database."
   )>]
@@ -162,7 +213,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "ongoingswaps",
+    "nloop_ongoingswaps",
     "Get the list of ongoing swaps.",
     "Get the list of ongoing swaps."
   )>]
@@ -173,7 +224,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "swapcostsummary",
+    "nloop_swapcostsummary",
     "Get the summary of the cost we paid for swaps.",
     "Get the summary of the cost we paid for swaps."
   )>]
@@ -184,7 +235,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "suggestswaps",
+    "nloop_suggestswaps",
     "Get suggestion for the swap based on autoloop settings.",
     "Get suggestion for the swaps. You must set liquidity parameters for autoloop before "
       + "getting the suggestion, this endpoint is usually useful when you set `autoloop=false` "
@@ -197,7 +248,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "get_liquidityparams",
+    "nloop_get_liquidityparams",
     "",
     ""
     )>]
@@ -258,7 +309,7 @@ type NLoopJsonRpcServer
     }
 
   [<PluginJsonRpcMethod(
-    "set_liquidityparams",
+    "nloop_set_liquidityparams",
     "",
     ""
   )>]
