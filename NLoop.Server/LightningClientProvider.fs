@@ -17,13 +17,13 @@ open LndClient
 open NLoop.Domain
 
 type LightningClientProvider(logger: ILogger<LightningClientProvider>,
-                             opts: IOptions<NLoopOptions>,
+                             opts: GetOptions,
                              getNetwork: GetNetwork
                              ) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
-  let settings = opts.Value.GetLndGrpcSettings()
+  let settings = opts().GetLndGrpcSettings()
   do
-    for c in opts.Value.OffChainCrypto do
+    for c in opts().OffChainCrypto do
       let cli =
         NLoopLndGrpcClient(settings, getNetwork(c))
         :> INLoopLightningClient

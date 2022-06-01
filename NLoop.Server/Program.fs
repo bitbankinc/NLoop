@@ -137,7 +137,7 @@ module App =
       .UseAuthentication()
       .UseGiraffe(webApp)
 
-  let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
+  let configureServices coldStart (env: IHostEnvironment option) (services : IServiceCollection) =
       // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters()
@@ -145,7 +145,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(test)
+      services.AddNLoopServices(coldStart)
 
       if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -231,6 +231,7 @@ module Main =
           serviceCollection
             .AddSingleton<PluginServerBase, NLoopJsonRpcServer>()
             .AddSingleton<NLoopJsonRpcServer>()
+            .AddSingleton<INLoopOptionsHolder, NLoopJsonRpcServer>()
             |> ignore
         )
     else
@@ -298,8 +299,7 @@ module Main =
 
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
     if isPluginMode then
-      let sp = host.Services
-      let server = sp.GetRequiredService<NLoopJsonRpcServer>()
+      let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
       let! _ = server.StartAsync()
       ()
     do! host.RunAsync();

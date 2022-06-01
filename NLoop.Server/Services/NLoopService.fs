@@ -6,6 +6,7 @@ open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading
 open System.Threading.Tasks
+open DotNetLightning.ClnRpc.Plugin
 open ExchangeSharp
 open FSharp.Control.Tasks
 open BoltzClient
@@ -31,12 +32,14 @@ open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections
 
+type GetEventStoreConnection = unit -> IEventStoreConnection
+
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
 
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
-      let test = defaultArg test false
+  static member AddNLoopServices(this: IServiceCollection, ?coldStart: bool) =
+      let coldStart = defaultArg coldStart false
       this
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
@@ -67,7 +70,7 @@ type NLoopExtensions() =
         |> ignore
 
       this
-        .AddSingleton<IEventStoreConnection>(fun sp ->
+        .AddSingleton<GetEventStoreConnection>(Func<IServiceProvider, _> (fun sp () ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
           let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
           let connSettings =
@@ -88,7 +91,14 @@ type NLoopExtensions() =
           )
           do conn.ConnectAsync().GetAwaiter().GetResult()
           conn
-        )
+        ))
+        .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
+          let plugin = sp.GetService<PluginServerBase>()
+          if plugin |> box |> isNull || plugin.InitializationStatus <> PluginInitializationStatus.InitializedSuccessfully then
+            sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+          else
+            sp.GetRequiredService<INLoopOptionsHolder>().NLoopOptions
+        ))
         |> ignore
 
 
@@ -100,7 +110,7 @@ type NLoopExtensions() =
         .AddSingleton<GetDBSubscription>(Func<IServiceProvider, _>(fun sp parameters ->
           let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
           let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
-          let conn = sp.GetRequiredService<IEventStoreConnection>()
+          let conn = sp.GetRequiredService<GetEventStoreConnection>()()
           EventStoreDBSubscription(
             { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
             parameters.Owner,
@@ -125,7 +135,7 @@ type NLoopExtensions() =
 
         )
         .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp since ct ->
-            let conn = sp.GetRequiredService<IEventStoreConnection>()
+            let conn = sp.GetRequiredService<GetEventStoreConnection>()()
             match since with
             | Some date ->
               conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
@@ -156,16 +166,16 @@ type NLoopExtensions() =
         .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
         |> ignore
       this
-        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp ->
-          sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient
+        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp cc ->
+          (sp.GetService<GetOptions>()()).GetBlockChainClient cc
         ))
         .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp cc ->
-          let opts = sp.GetService<IOptions<NLoopOptions>>()
-          if opts.Value.OffChainCrypto |> Array.contains cc then
+          let opts = sp.GetService<GetOptions>()()
+          if opts.OffChainCrypto |> Array.contains cc then
             sp.GetRequiredService<ILightningClientProvider>().GetClient(cc)
             :?> NLoopLndGrpcClient :> IWalletClient
           else
-            opts.Value.GetWalletClient cc
+            opts.GetWalletClient cc
           )
         )
         |> ignore
@@ -173,27 +183,27 @@ type NLoopExtensions() =
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
-          client.BaseAddress <- sp.GetRequiredService<IOptions<NLoopOptions>>().Value.BoltzUrl
+          client.BaseAddress <- (sp.GetRequiredService<GetOptions>()()).BoltzUrl
         )
         |> ignore
 
       this
         .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          opts.Value.GetNetwork(cc)
+          let opts = sp.GetRequiredService<GetOptions>()
+          opts().GetNetwork(cc)
           ))
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<GetAddress>(Func<IServiceProvider, GetAddress>(fun sp ->
-          let opts = sp.GetService<IOptions<NLoopOptions>>()
           GetAddress(fun cc ->
-            if opts.Value.OffChainCrypto |> Seq.contains cc then
+            let opts = sp.GetService<GetOptions>()()
+            if opts.OffChainCrypto |> Seq.contains cc then
               let getter = sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter()
               getter.Invoke cc
             else
               let walletClient = sp.GetService<GetWalletClient>()(cc)
-              let network = opts.Value.GetNetwork(cc)
+              let network = opts.GetNetwork(cc)
               task {
                 try
                   let! r = walletClient.GetDepositAddress(network)
@@ -213,7 +223,7 @@ type NLoopExtensions() =
         .AddHealthChecks()
         |> ignore
 
-      if (not <| test) then
+      if (not <| coldStart) then
         // it is important here that Startup order is
         // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
         // Since otherwise on startup it fails to re-register swaps on blockchain listeners.

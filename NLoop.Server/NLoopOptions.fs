@@ -142,4 +142,6 @@ type NLoopOptions() =
         | Ok x -> x
         | Error e -> failwith $"Invalid Lnd config: {e}"
 
+type INLoopOptionsHolder =
+  abstract member NLoopOptions: NLoopOptions
 type GetOptions = unit -> NLoopOptions

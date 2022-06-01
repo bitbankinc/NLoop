@@ -33,7 +33,7 @@ module private OnGoingSwapStateProjectionHelpers =
 /// when the catchup finishes. This is for other services such as <see cref="SwapProcessManager" />
 /// To make their own decision about doing side effects according to the latest swap state.
 type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
-                  opts: IOptions<NLoopOptions>,
+                  opts: GetOptions,
                   actor: ISwapActor,
                   eventAggregator: IEventAggregator,
                   getSubscription: GetDBSubscription
@@ -61,7 +61,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
               match r.Data with
               | Swap.Event.NewLoopOutAdded { LoopOut = { ChainName = c } }
               | Swap.Event.NewLoopInAdded { LoopIn = { ChainName = c } } ->
-                if String.Equals(c, opts.Value.Network, StringComparison.OrdinalIgnoreCase) && this.State |> Map.containsKey r.StreamId |> not then
+                if String.Equals(c, opts().Network, StringComparison.OrdinalIgnoreCase) && this.State |> Map.containsKey r.StreamId |> not then
                   this.State |> Map.add r.StreamId (BlockHeight(0u), actor.Aggregate.Zero)
                 else
                   this.State

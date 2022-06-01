@@ -23,7 +23,7 @@ type ExchangeRateHelpers =
     (this.Ask + this.Bid) / 2m
 
 type ExchangeName = string
-type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<ExchangeRateProvider>) =
+type ExchangeRateProvider(opts: GetOptions, logger: ILogger<ExchangeRateProvider>) =
   inherit BackgroundService()
   let exchangeRates = ConcurrentDictionary<PairId * ExchangeName, ExchangeRate>()
   let mutable _executingTask = null
@@ -31,11 +31,11 @@ type ExchangeRateProvider(opts: IOptions<NLoopOptions>, logger: ILogger<Exchange
 
   let checkClientsSupported(ct: CancellationToken) = unitTask {
     let pairs =
-      opts.Value.PairIds
+      opts().PairIds
       |> Seq.toArray
       |> Array.filter(fun p -> p.Base <> p.Quote)
     let! tasks =
-      opts.Value.Exchanges
+      opts().Exchanges
       |> Seq.map(fun exchange -> task {
         try
           try

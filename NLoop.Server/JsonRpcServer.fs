@@ -101,7 +101,6 @@ type NLoopJsonRpcServer
     swapExecutor: ISwapExecutor,
     eventAggregator: IEventAggregator,
     loggerFactory: ILoggerFactory,
-    opts: IOptions<NLoopOptions>,
     tryGetAutoLoopManager: TryGetAutoLoopManager
   ) as this =
   inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger())
@@ -125,14 +124,15 @@ type NLoopJsonRpcServer
 
   member val NLoopOptions = NLoopOptions()
 
-  override this.InitCore(configuration, options) =
-    let _client =
-      ClnClient(opts.Value.GetNetwork(SupportedCryptoCode.BTC), Uri($"unix://{configuration.RpcFile}"))
+  override this.InitCore(_configuration, options) =
 
     let optsProperties =
       this.NLoopOptions.GetType().GetProperties()
       |> Seq.map(fun p -> p.Name.ToLowerInvariant(), p)
       |> Map.ofSeq
+
+
+    // override this.NLoopOptions with the value we get from c-lightning.
     for op in options do
       let name = op.Key
       optsProperties
@@ -370,4 +370,8 @@ type NLoopJsonRpcServer
         | Error e ->
           return raise <| exn (e.ToString())
     } :> Task
+
+  interface INLoopOptionsHolder with
+    member this.NLoopOptions = this.NLoopOptions
+
 #endnowarn "3511"
