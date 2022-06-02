@@ -9,6 +9,7 @@ open System.IO
 open System.Net
 open System.Security.Cryptography.X509Certificates
 open System.Text.Json
+open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Routing
 open Microsoft.Extensions.Configuration
@@ -300,7 +301,9 @@ module Main =
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
     if isPluginMode then
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
-      let! _ = server.StartAsync()
+      let! _ =
+        let o = Console.OpenStandardOutput() |> Stream.Synchronized
+        server.StartAsync(o, Console.OpenStandardInput(), CancellationToken.None)
       ()
     do! host.RunAsync();
   })
