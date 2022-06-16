@@ -22,6 +22,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
 open LndClient
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin.DataEncoders
@@ -419,7 +420,7 @@ type TestHelpers =
   static member GetTestServiceProvider(?configureServices) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     let services = ServiceCollection()
-    App.configureServicesTest services
+    App.configureServicesWithColdStart services
     TestHelpers.ConfigureTestServices(services, configureServices)
     services.BuildServiceProvider()
 
@@ -435,3 +436,22 @@ type TestHelpers =
         TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
+
+  static member GetPluginTestHost( ?configureServices: IServiceCollection -> unit) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
+    let hb =
+      HostBuilder()
+        .UseContentRoot(Directory.GetCurrentDirectory())
+        .ConfigureAppConfiguration(fun configBuilder ->
+          configBuilder.AddJsonFile("appsettings.test.json") |> ignore
+          )
+        .ConfigureWebHost(fun wb ->
+          wb
+            .ConfigureTestServices(fun (services: IServiceCollection) ->
+              TestHelpers.ConfigureTestServices(services, configureServices)
+            )
+            .Configure(fun applicationBuilder -> ())
+            .UseTestServer()
+            |> ignore
+        )
+    hb.ConfigureAsPlugin().StartAsync()
