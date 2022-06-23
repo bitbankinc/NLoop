@@ -69,6 +69,7 @@
     <Compile Include="QueryHandlers.fs" />
     <Compile Include="CommandLine.fs" />
     <Compile Include="JsonRpcServer.fs" />
+    <Compile Include="PluginLogger.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

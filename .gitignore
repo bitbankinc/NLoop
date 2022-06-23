@@ -4,4 +4,6 @@ LndClient/openapi.json
 publish/
 .vscode
 nloop.log
-
+bin/
+obj/
+.idea/

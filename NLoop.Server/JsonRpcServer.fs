@@ -7,6 +7,7 @@ open System.Runtime.InteropServices
 open System.Threading.Tasks
 open DotNetLightning.ClnRpc
 open DotNetLightning.Utils.Primitives
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Domain.Utils
@@ -101,10 +102,12 @@ type NLoopJsonRpcServer
     swapExecutor: ISwapExecutor,
     eventAggregator: IEventAggregator,
     loggerFactory: ILoggerFactory,
-    tryGetAutoLoopManager: TryGetAutoLoopManager
+    tryGetAutoLoopManager: TryGetAutoLoopManager,
+    applicationLifetime: IHostApplicationLifetime
   ) as this =
-  inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger())
+  inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
   let logger: ILogger<NLoopJsonRpcServer> = loggerFactory.CreateLogger<_>()
+  
 
   let _subscription =
     eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()
@@ -118,6 +121,8 @@ type NLoopJsonRpcServer
           logger.LogError(ex, "Failed to send CLightning notification")
       })
     |> Observable.subscribe id
+  do
+    logger.LogDebug $"NLoopJsonRpcServer Initialized"
 
   override this.Options =
     NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptions.fromRootCLIOption)
@@ -173,6 +178,11 @@ type NLoopJsonRpcServer
         logger.LogWarning(msg)
         failwith msg
     ()
+    
+  [<PluginJsonRpcSubscription("shutdown")>]
+  member this.Shutdown() =
+    logger.LogError "shutdown"
+    applicationLifetime.StopApplication()
 
   [<PluginJsonRpcMethod("nloop_loopout", "initiate loopout swap", "initiate loop out swap")>]
   member this.LoopOut(req: NLoopClient.LoopOutRequest): Task<NLoopClient.LoopOutResponse> =

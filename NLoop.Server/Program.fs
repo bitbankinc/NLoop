@@ -233,9 +233,7 @@ type ConfigurationExtension =
       .ConfigureServices(fun serviceCollection ->
         serviceCollection
           .AddSingleton<ILogger, Logger<ConfigurationExtension>>() // for startup logging
-          .AddSingleton<PluginServerBase, NLoopJsonRpcServer>()
           .AddSingleton<NLoopJsonRpcServer>()
-          .AddSingleton<INLoopOptionsHolder, NLoopJsonRpcServer>()
           |> ignore
     )
 
@@ -314,27 +312,21 @@ module Main =
     do! next.Invoke(ctx)
 
     use logScope = host.Services.CreateScope()
-    let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
+    logger.LogInformation $"finished building..."
+    do! System.Threading.Tasks.Task.Delay(4000)
     if isPluginMode then
-      logger.LogInformation("Starting in plugin mode")
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
       let! _ =
-        let mo =
-          Console.OpenStandardOutput()
-          |> fun o -> new Nerdbank.Streams.MonitoringStream(o)
-        let utf8 = UTF8Encoding()
-        mo.DidWrite.Add(fun o -> logger.LogDebug($"STDOUT: write: {o.ToArray() |> utf8.GetString}"))
-        let mi =
-          Console.OpenStandardInput()
-          |> fun o -> new Nerdbank.Streams.MonitoringStream(o)
-        mi.DidRead.Add(fun o -> logger.LogDebug($"STDIN: read: {o.ToArray() |> utf8.GetString}"))
         let o =
-          mo
+          Console.OpenStandardOutput()
           |> Stream.Synchronized
-        server.StartAsync(o, mi, CancellationToken.None)
+        let i = Console.OpenStandardInput()
+        server.StartAsync(o, i, CancellationToken.None)
       logger.LogInformation("Plugin Started")
-      ()
+    logger.LogInformation $"finished Starting ..."
+    do! System.Threading.Tasks.Task.Delay(4000)
     do! host.RunAsync();
   })
 
