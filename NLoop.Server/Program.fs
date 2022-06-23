@@ -313,10 +313,8 @@ module Main =
 
     use logScope = host.Services.CreateScope()
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
-    let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
-    logger.LogInformation $"finished building..."
-    do! System.Threading.Tasks.Task.Delay(4000)
     if isPluginMode then
+      let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
       let! _ =
         let o =
@@ -324,9 +322,7 @@ module Main =
           |> Stream.Synchronized
         let i = Console.OpenStandardInput()
         server.StartAsync(o, i, CancellationToken.None)
-      logger.LogInformation("Plugin Started")
-    logger.LogInformation $"finished Starting ..."
-    do! System.Threading.Tasks.Task.Delay(4000)
+      logger.LogInformation "Plugin Started"
     do! host.RunAsync();
   })
 
