@@ -304,6 +304,7 @@ module Main =
       |> ignore
     )
       .UseInvocationLifetime(ctx)
+      .UseConsoleLifetime()
       |> ignore
     configureHostBuilder hostBuilder |> ignore
 
