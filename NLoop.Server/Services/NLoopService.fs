@@ -32,7 +32,7 @@ open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections
 
-type GetEventStoreConnection = unit -> IEventStoreConnection
+type GetEventStoreConnection = unit -> Task<IEventStoreConnection>
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
@@ -71,26 +71,28 @@ type NLoopExtensions() =
 
       this
         .AddSingleton<GetEventStoreConnection>(Func<IServiceProvider, _> (fun sp () ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
-          let connSettings =
-            ConnectionSettings.Create().DisableTls().Build()
-          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
-          conn.AuthenticationFailed.Add(fun args ->
-            logger.LogError $"connection to eventstore failed "
-            failwith $"reason: {args.Reason}"
-          )
-          conn.ErrorOccurred.Add(fun args ->
-            logger.LogError $"error in eventstore connection: {args.Exception}"
-          )
-          conn.Disconnected.Add(fun args ->
-            logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
-          )
-          conn.Reconnecting.Add(fun _args ->
-            logger.LogInformation $"Reconnecting to event store... {_args.ToStringInvariant()}"
-          )
-          do conn.ConnectAsync().GetAwaiter().GetResult()
-          conn
+          task {
+            let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+            let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
+            let connSettings =
+              ConnectionSettings.Create().DisableTls().Build()
+            let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
+            conn.AuthenticationFailed.Add(fun args ->
+              logger.LogError $"connection to eventstore failed "
+              failwith $"reason: {args.Reason}"
+            )
+            conn.ErrorOccurred.Add(fun args ->
+              logger.LogError $"error in eventstore connection: {args.Exception}"
+            )
+            conn.Disconnected.Add(fun args ->
+              logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
+            )
+            conn.Reconnecting.Add(fun _args ->
+              logger.LogInformation $"Reconnecting to event store... {_args.ToStringInvariant()}"
+            )
+            do! conn.ConnectAsync()
+            return conn
+          }
         ))
         .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
           let plugin = sp.GetService<PluginServerBase>()
@@ -108,19 +110,21 @@ type NLoopExtensions() =
           EventStore.eventStore(opts.Value.EventStoreUrl |> Uri)
         )
         .AddSingleton<GetDBSubscription>(Func<IServiceProvider, _>(fun sp parameters ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
-          let conn = sp.GetRequiredService<GetEventStoreConnection>()()
-          EventStoreDBSubscription(
-            { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-            parameters.Owner,
-            parameters.Target,
-            loggerFactory.CreateLogger(),
-            parameters.HandleEvent,
-            parameters.OnFinishCatchUp
-            |> Option.map(fun onFinishCatchup -> (fun re -> onFinishCatchup (re |> box))),
-            conn)
-          :> IDatabaseSubscription
+          task {
+            let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+            let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
+            let! conn = sp.GetRequiredService<GetEventStoreConnection>()()
+            return EventStoreDBSubscription(
+              { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
+              parameters.Owner,
+              parameters.Target,
+              loggerFactory.CreateLogger(),
+              parameters.HandleEvent,
+              parameters.OnFinishCatchUp
+              |> Option.map(fun onFinishCatchup -> (fun re -> onFinishCatchup (re |> box))),
+              conn)
+            :> IDatabaseSubscription
+          }
         ))
         .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
@@ -135,12 +139,15 @@ type NLoopExtensions() =
 
         )
         .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp since ct ->
-            let conn = sp.GetRequiredService<GetEventStoreConnection>()()
-            match since with
-            | Some date ->
-              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
-            | None ->
-              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+            task {
+              let! conn = sp.GetRequiredService<GetEventStoreConnection>()()
+              return!
+                match since with
+                | Some date ->
+                  conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
+                | None ->
+                  conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+            }
           )
         )
         |> ignore

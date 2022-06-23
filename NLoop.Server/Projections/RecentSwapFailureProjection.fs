@@ -90,7 +90,7 @@ type RecentSwapFailureProjection(opts: GetOptions,
       with
       | ex -> log.LogCritical $"{ex}"
   }
-  let subscription =
+  let subscriptionT =
     {
       SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
       Target =
@@ -144,6 +144,7 @@ type RecentSwapFailureProjection(opts: GetOptions,
       |> ValueOption.defaultValue Checkpoint.StreamStart
     log.LogDebug($"Starting {nameof(RecentSwapFailureProjection)} from checkpoint {checkpoint}")
     try
+      let! subscription = subscriptionT
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with
     | ex ->

@@ -102,7 +102,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     catchupCompletion.SetResult()
     ()
 
-  let subscription =
+  let subscriptionT =
     let param = {
       SubscriptionParameter.Owner =
         nameof(OnGoingSwapStateProjection)
@@ -129,6 +129,7 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
       Checkpoint.StreamStart
     log.LogInformation $"Starting {nameof(OnGoingSwapStateProjection)} from checkpoint {checkpoint}..."
     try
+      let! subscription = subscriptionT
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with
     | ex ->
