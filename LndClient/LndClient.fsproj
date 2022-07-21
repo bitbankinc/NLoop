@@ -17,10 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LndGrpcClient\LndGrpcClient.csproj" />
-    <ProjectReference Include="..\DotNetLightning\src\DotNetLightning.Core\DotNetLightning.Core.fsproj" />
-    <ProjectReference Include="..\DotNetLightning\src\DotNetLightning.ClnRpc\DotNetLightning.ClnRpc.fsproj" />
-    <ProjectReference Include="..\DotNetLightning\src\Macaroons\Macaroons.csproj" />
-    <ProjectReference Include="..\DotNetLightning\src\ResultUtils\ResultUtils.fsproj" />
   </ItemGroup>
 
 </Project>

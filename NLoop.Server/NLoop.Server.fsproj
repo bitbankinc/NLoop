@@ -13,7 +13,6 @@
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
     <ProjectReference Include="..\LndClient\LndClient.fsproj" />
     <ProjectReference Include="..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
-    <ProjectReference Include="..\DotNetLightning\src\DotNetLightning.ClnRpc\DotNetLightning.ClnRpc.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AspNetCore.HealthChecks.EventStore" Version="5.0.1" />

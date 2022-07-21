@@ -136,11 +136,11 @@ type ShortChannelIdJsonConverter() =
     try
       let s = reader.GetString()
       match ShortChannelId.TryParse s with
-      | Result.Ok c -> c
+      | ResultUtils.Portability.Result.Ok c -> c
       | _ ->
         let parts = s.Split(":").[0]
         match ShortChannelId.TryParse parts with
-        | Result.Ok c -> c
+        | ResultUtils.Portability.Result.Ok c -> c
         | _ ->
         s
         |> uint64
