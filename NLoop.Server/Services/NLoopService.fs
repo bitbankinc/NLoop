@@ -75,11 +75,16 @@ type NLoopExtensions() =
             let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
             let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
             let connSettings =
-              ConnectionSettings.Create().DisableTls().Build()
+              ConnectionSettings
+                .Create()
+                .DisableTls()
+                .LimitReconnectionsTo(10)
+                .LimitAttemptsForOperationTo(10)
+                .LimitRetriesForOperationTo(10)
+                .Build()
             let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
             conn.AuthenticationFailed.Add(fun args ->
-              logger.LogError $"connection to eventstore failed "
-              failwith $"reason: {args.Reason}"
+              logger.LogError $"connection to eventstore failed: {args.Reason}"
             )
             conn.ErrorOccurred.Add(fun args ->
               logger.LogError $"error in eventstore connection: {args.Exception}"

@@ -302,9 +302,12 @@ module Main =
         .AddTransient<_>(fun _ -> ctx.InvocationResult)
         .AddTransient<_>(fun _ -> ctx.ParseResult)
       |> ignore
-    )
-      .UseInvocationLifetime(ctx)
-      .UseConsoleLifetime()
+    ) |> ignore
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    hostBuilder
+      .UseInvocationLifetime(ctx, fun o -> if isPluginMode then o.SuppressStatusMessages <- true)
+      // override `InvocationLifetime` which does not handle SIGTERM/SIGINT.
+      .UseConsoleLifetime(fun o -> if isPluginMode then o.SuppressStatusMessages <- true) 
       |> ignore
     configureHostBuilder hostBuilder |> ignore
 
@@ -312,10 +315,10 @@ module Main =
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
     do! next.Invoke(ctx)
 
-    use logScope = host.Services.CreateScope()
-    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
     if isPluginMode then
+      use logScope = host.Services.CreateScope()
       let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
+        
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
       let! _ =
         let o =
@@ -323,8 +326,14 @@ module Main =
           |> Stream.Synchronized
         let i = Console.OpenStandardInput()
         server.StartAsync(o, i, CancellationToken.None)
-      logger.LogInformation "Plugin Started"
-    do! host.RunAsync();
+      logger.LogInformation $"started {server.InitializationStatus}"
+      if server.InitializationStatus = PluginInitializationStatus.Failed then
+        ()
+      if (server.InitializationStatus = PluginInitializationStatus.InitializedSuccessfully) then
+        logger.LogInformation "Plugin Started"
+        do! host.RunAsync()
+    else
+      do! host.RunAsync()
   })
 
   [<EntryPoint>]
