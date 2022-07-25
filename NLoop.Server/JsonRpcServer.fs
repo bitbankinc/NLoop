@@ -1,8 +1,10 @@
 namespace NLoop.Server
 
 open System
+open System.Collections.Generic
 open System.CommandLine
 open System.IO
+open System.IO.Pipelines
 open System.Runtime.InteropServices
 open System.Threading.Tasks
 open DotNetLightning.ClnRpc
@@ -22,6 +24,7 @@ open DotNetLightning.ClnRpc.Plugin
 open NLoop.Domain
 open NLoop.Domain.IO
 open FSharp.Control.Reactive
+open StreamJsonRpc
 
 // "state machine is not statically compilable" error.
 // The performance does not really matters on the top level of the json-rpc. So ignore.
@@ -91,7 +94,8 @@ module PluginOptions =
           PluginOptType.Flag
         else
           failwith $"Unsupported commandline argument type for c-lightning: {ty}"
-      Multi = op.Argument.Arity = ArgumentArity.OneOrMore || op.Argument.Arity = ArgumentArity.ZeroOrMore
+      Multi =
+        op.Argument.Arity.MaximumNumberOfValues > 1
       Deprecated = false
     }
 
@@ -129,6 +133,13 @@ type NLoopJsonRpcServer
 
   member val NLoopOptions = NLoopOptions()
 
+  member private this.SetArrayedProperty<'T>(p: Reflection.PropertyInfo, values, ?next) =
+    try
+      p.SetValue(this.NLoopOptions, values |> Seq.cast<'T> |> Seq.toArray)
+    with
+    | :? InvalidCastException when next.IsSome ->
+      next.Value()
+      
   override this.InitCore(_configuration, options) =
 
     let optsProperties =
@@ -137,13 +148,25 @@ type NLoopJsonRpcServer
       |> Map.ofSeq
 
 
+    
     // override this.NLoopOptions with the value we get from c-lightning.
     for op in options do
       let name = op.Key
       optsProperties
       |> Map.tryFind((PluginOptions.removePrefix name).ToLowerInvariant())
       |> Option.iter(fun p ->
-        p.SetValue(this.NLoopOptions, op.Value)
+        if p.PropertyType.IsArray then
+          let values = (op.Value :?> IEnumerable<_>) |> Seq.map(fun v -> Convert.ChangeType(v, p.PropertyType.GetElementType()))
+          
+          this.SetArrayedProperty<int>(p, values,
+            fun () -> this.SetArrayedProperty<int64>(p, values,
+              fun () -> this.SetArrayedProperty<string>(p, values,
+                fun () -> this.SetArrayedProperty<int16>(p, values)
+              )
+            )
+          )
+        else
+          p.SetValue(this.NLoopOptions, Convert.ChangeType(op.Value, p.PropertyType))
       )
 
     // -- handle redundant option values those which defined in both c-lightning and nloop.
@@ -161,11 +184,11 @@ type NLoopJsonRpcServer
         | true, p -> Some p
         | false, _ -> None
       let valueForNloop =
-        optsProperties
-        |> Map.find(nloopName.ToLowerInvariant())
-        |> fun p -> p.GetValue(this.NLoopOptions)
-        |> Option.ofObj
+        match options.TryGetValue(PluginOptions.addPrefix nloopName) with
+        | true, v -> Some v
+        | false, _ -> None
 
+      // override the value for nloop option iff user has passed the cln option.
       valueForCln
         |>
         Option.iter(fun v ->
@@ -173,10 +196,16 @@ type NLoopJsonRpcServer
             let prop = optsProperties |> Map.find(nloopName.ToLowerInvariant())
             prop.SetValue(this.NLoopOptions, v)
         )
-      if valueForCln <> valueForNloop then
-        let msg = $"mismatch in option. {lnName} and {nloopName} must have a same value. Or set {lnName} one only."
+        
+      // abort if there are conflicting options
+      match valueForCln, valueForNloop with
+      | Some cln, Some nloop when cln <> nloop ->
+        let msg =
+          $"mismatch in option. value for --{lnName} ({cln}) and {nloopName} ({nloop}) must have a same value. " +
+          $" Or set {lnName} one only."
         logger.LogWarning(msg)
         failwith msg
+      | _ -> ()
     ()
     
   [<PluginJsonRpcSubscription("shutdown")>]
