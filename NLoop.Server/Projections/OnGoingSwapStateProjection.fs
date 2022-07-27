@@ -102,18 +102,6 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
     catchupCompletion.SetResult()
     ()
 
-  let subscriptionT =
-    let param = {
-      SubscriptionParameter.Owner =
-        nameof(OnGoingSwapStateProjection)
-      Target = SubscriptionTarget.All
-      HandleEvent =
-        handleEvent eventAggregator
-      OnFinishCatchUp =
-        Some onFinishCatchup
-    }
-    getSubscription(param)
-
   member this.State
     with get(): Map<_, StartHeight * Swap.State> = _state
     and set v =
@@ -129,7 +117,18 @@ type OnGoingSwapStateProjection(loggerFactory: ILoggerFactory,
       Checkpoint.StreamStart
     log.LogInformation $"Starting {nameof(OnGoingSwapStateProjection)} from checkpoint {checkpoint}..."
     try
-      let! subscription = subscriptionT
+      let! subscription =
+        let param = {
+          SubscriptionParameter.Owner =
+            nameof(OnGoingSwapStateProjection)
+          Target = SubscriptionTarget.All
+          HandleEvent =
+            handleEvent eventAggregator
+          OnFinishCatchUp =
+            Some onFinishCatchup
+        }
+        getSubscription(param)
+
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with
     | ex ->

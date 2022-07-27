@@ -411,6 +411,9 @@ type TestHelpers =
       .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
         cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
       ))
+      .AddSingleton<GetStore>(Func<IServiceProvider, _>(fun sp () ->
+        failwith "dummy"
+      ))
       .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp _cc ->
         sp.GetRequiredService<IWalletClient>()
       ))

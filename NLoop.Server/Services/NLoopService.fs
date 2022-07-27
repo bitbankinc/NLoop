@@ -72,7 +72,7 @@ type NLoopExtensions() =
       this
         .AddSingleton<GetEventStoreConnection>(Func<IServiceProvider, _> (fun sp () ->
           task {
-            let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+            let opts = sp.GetRequiredService<GetOptions>()()
             let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
             let connSettings =
               ConnectionSettings
@@ -82,9 +82,9 @@ type NLoopExtensions() =
                 .LimitAttemptsForOperationTo(10)
                 .LimitRetriesForOperationTo(10)
                 .Build()
-            let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
+            let conn = EventStoreConnection.Create(connSettings, opts.EventStoreUrl |> Uri)
             conn.AuthenticationFailed.Add(fun args ->
-              logger.LogError $"connection to eventstore failed: {args.Reason}"
+              logger.LogError $"connection to eventstore ({opts.EventStoreUrl}) failed: {args.Reason}"
             )
             conn.ErrorOccurred.Add(fun args ->
               logger.LogError $"error in eventstore connection: {args.Exception}"
@@ -93,34 +93,38 @@ type NLoopExtensions() =
               logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
             )
             conn.Reconnecting.Add(fun _args ->
-              logger.LogInformation $"Reconnecting to event store... {_args.ToStringInvariant()}"
+              logger.LogInformation $"Reconnecting to event store ({opts.EventStoreUrl})... "
             )
             do! conn.ConnectAsync()
             return conn
           }
         ))
         .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
-          let plugin = sp.GetService<PluginServerBase>()
-          if plugin |> box |> isNull || plugin.InitializationStatus <> PluginInitializationStatus.InitializedSuccessfully then
-            sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+          let jsonRpc = sp.GetService<NLoopJsonRpcServer>()
+          if jsonRpc |> box |> isNull |> not && jsonRpc.IsReady then
+            Console.Error.WriteLine($"GetOptions: returning IOptionsHolder {jsonRpc.NLoopOptions.EventStoreUrl}")
+            jsonRpc.NLoopOptions
           else
-            sp.GetRequiredService<INLoopOptionsHolder>().NLoopOptions
+            let v = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+            Console.Error.WriteLine($"GetOptions: returning IOptions {v.EventStoreUrl}")
+            v
         ))
         |> ignore
 
 
       this
-        .AddSingleton<NLoop.Domain.Utils.Store>(fun sp ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          EventStore.eventStore(opts.Value.EventStoreUrl |> Uri)
+        .AddSingleton<GetStore>(Func<IServiceProvider, GetStore>(fun sp () ->
+          let opts = sp.GetRequiredService<GetOptions>()()
+          EventStore.eventStore(opts.EventStoreUrl |> Uri)
+          )
         )
         .AddSingleton<GetDBSubscription>(Func<IServiceProvider, _>(fun sp parameters ->
           task {
-            let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
+            let opts = sp.GetRequiredService<GetOptions>()()
             let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
             let! conn = sp.GetRequiredService<GetEventStoreConnection>()()
             return EventStoreDBSubscription(
-              { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
+              { EventStoreConfig.Uri = opts.EventStoreUrl |> Uri },
               parameters.Owner,
               parameters.Target,
               loggerFactory.CreateLogger(),

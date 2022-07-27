@@ -90,16 +90,6 @@ type RecentSwapFailureProjection(opts: GetOptions,
       with
       | ex -> log.LogCritical $"{ex}"
   }
-  let subscriptionT =
-    {
-      SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
-      Target =
-        SubscriptionTarget.All
-      HandleEvent = handleEvent
-      OnFinishCatchUp = None
-    }
-    |> getDBSubscription
-
 
   let mutable failedLoopOutSwapState = Map.empty<_, struct(ShortChannelId[] *  UnixDateTime voption)>
   let mutable failedLoopInSwapState = Map.empty<_, struct(NodeId * UnixDateTime voption)>
@@ -144,7 +134,16 @@ type RecentSwapFailureProjection(opts: GetOptions,
       |> ValueOption.defaultValue Checkpoint.StreamStart
     log.LogDebug($"Starting {nameof(RecentSwapFailureProjection)} from checkpoint {checkpoint}")
     try
-      let! subscription = subscriptionT
+      let! subscription =
+        {
+          SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
+          Target =
+            SubscriptionTarget.All
+          HandleEvent = handleEvent
+          OnFinishCatchUp = None
+        }
+        |> getDBSubscription
+
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with
     | ex ->

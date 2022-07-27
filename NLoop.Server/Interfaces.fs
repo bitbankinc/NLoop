@@ -115,3 +115,6 @@ type TryGetExchangeRate = PairId * CancellationToken -> Task<ExchangeRate option
 
 type GetAllEvents<'T> =
   DateTime option -> CancellationToken -> Task<Result<RecordedEvent<'T> list, StoreError>>
+
+type GetStore =
+  unit -> Store
