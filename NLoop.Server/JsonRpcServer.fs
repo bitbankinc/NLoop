@@ -107,7 +107,8 @@ type NLoopJsonRpcServer
     eventAggregator: IEventAggregator,
     loggerFactory: ILoggerFactory,
     tryGetAutoLoopManager: TryGetAutoLoopManager,
-    applicationLifetime: IHostApplicationLifetime
+    applicationLifetime: IHostApplicationLifetime,
+    optionsHolder: NLoopOptionsHolder
   ) as this =
   inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
   let logger: ILogger<NLoopJsonRpcServer> = loggerFactory.CreateLogger<_>()
@@ -146,7 +147,6 @@ type NLoopJsonRpcServer
       this.NLoopOptions.GetType().GetProperties()
       |> Seq.map(fun p -> p.Name.ToLowerInvariant(), p)
       |> Map.ofSeq
-
 
     
     // override this.NLoopOptions with the value we get from c-lightning.
@@ -206,6 +206,8 @@ type NLoopJsonRpcServer
         logger.LogWarning(msg)
         failwith msg
       | _ -> ()
+      
+    optionsHolder.NLoopOptions <- Some this.NLoopOptions
     ()
     
   [<PluginJsonRpcSubscription("shutdown")>]
@@ -409,8 +411,5 @@ type NLoopJsonRpcServer
         | Error e ->
           return raise <| exn (e.ToString())
     } :> Task
-
-  interface INLoopOptionsHolder with
-    member this.NLoopOptions = this.NLoopOptions
 
 #endnowarn "3511"

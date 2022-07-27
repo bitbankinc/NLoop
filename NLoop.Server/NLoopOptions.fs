@@ -142,6 +142,6 @@ type NLoopOptions() =
         | Ok x -> x
         | Error e -> failwith $"Invalid Lnd config: {e}"
 
-type INLoopOptionsHolder =
-  abstract member NLoopOptions: NLoopOptions
+type NLoopOptionsHolder() =
+  member val NLoopOptions: NLoopOptions option = None with get, set
 type GetOptions = unit -> NLoopOptions

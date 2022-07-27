@@ -234,6 +234,12 @@ type ConfigurationExtension =
         serviceCollection
           .AddSingleton<ILogger, Logger<ConfigurationExtension>>() // for startup logging
           .AddSingleton<NLoopJsonRpcServer>()
+          .AddSingleton<NLoopOptionsHolder>()
+          (*
+          .AddSingleton<PluginServerBase>(fun sp ->
+            sp.GetRequiredService<NLoopJsonRpcServer>() :> PluginServerBase
+          )
+          *)
           |> ignore
     )
 
