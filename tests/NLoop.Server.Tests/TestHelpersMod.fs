@@ -412,7 +412,7 @@ type TestHelpers =
         cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
       ))
       .AddSingleton<GetStore>(Func<IServiceProvider, _>(fun sp () ->
-        failwith "dummy"
+        NLoop.Domain.Utils.InMemoryStore.getEventStore()
       ))
       .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp _cc ->
         sp.GetRequiredService<IWalletClient>()

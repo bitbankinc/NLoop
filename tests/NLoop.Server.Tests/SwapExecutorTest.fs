@@ -24,8 +24,9 @@ type SwapExecutorTest() =
         TestHelpers.GetTestServiceProvider(fun (sp: IServiceCollection) ->
           sp.AddLogging()
           |> ignore
-          sp.AddSingleton<NLoop.Domain.Utils.Store>(
-            if useInMemoryDB then InMemoryStore.getEventStore() else (EventStore.eventStore(TestHelpersMod.eventStoreUrl |> Uri))
+          sp.AddSingleton<GetStore>(Func<IServiceProvider, _>(fun _ () ->
+              if useInMemoryDB then InMemoryStore.getEventStore() else EventStore.eventStore(TestHelpersMod.eventStoreUrl |> Uri)
+            )
           )
           |> ignore
           ()

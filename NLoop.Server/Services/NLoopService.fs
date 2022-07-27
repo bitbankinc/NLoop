@@ -100,10 +100,11 @@ type NLoopExtensions() =
           }
         ))
         .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
-          let jsonRpc = sp.GetService<NLoopJsonRpcServer>()
-          if jsonRpc |> box |> isNull |> not && jsonRpc.IsReady then
-            Console.Error.WriteLine($"GetOptions: returning IOptionsHolder {jsonRpc.NLoopOptions.EventStoreUrl}")
-            jsonRpc.NLoopOptions
+          let jsonRpc = sp.GetService<PluginServerBase>()
+          if jsonRpc |> box |> isNull |> not && jsonRpc.InitializationStatus = PluginInitializationStatus.InitializedSuccessfully then
+            let opts = sp.GetRequiredService<INLoopOptionsHolder>().NLoopOptions
+            Console.Error.WriteLine($"GetOptions: returning IOptionsHolder {opts.EventStoreUrl}")
+            opts
           else
             let v = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
             Console.Error.WriteLine($"GetOptions: returning IOptions {v.EventStoreUrl}")
