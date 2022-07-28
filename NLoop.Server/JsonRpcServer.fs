@@ -58,6 +58,11 @@ module PluginOptions =
     let n = if n.StartsWith "--" then n.TrimStart("--".ToCharArray()) else n
     n.TrimStart(opPrefix.ToCharArray())
 
+  let unnecessaryCliOptions =
+    seq [
+      "network"
+    ]
+    
   let fromRootCLIOption(op: System.CommandLine.Option) =
     let ty =
       if op.Argument.ArgumentType.IsGenericType then
@@ -130,26 +135,27 @@ type NLoopJsonRpcServer
     logger.LogDebug $"NLoopJsonRpcServer Initialized"
 
   override this.Options =
-    NLoopServerCommandLine.getOptions() |> Seq.map(PluginOptions.fromRootCLIOption)
+    NLoopServerCommandLine.getOptions()
+    |> Seq.filter(fun o -> PluginOptions.unnecessaryCliOptions |> Seq.contains o.Name |> not )
+    |> Seq.map(PluginOptions.fromRootCLIOption)
 
-  member val NLoopOptions = NLoopOptions()
-
-  member private this.SetArrayedProperty<'T>(p: Reflection.PropertyInfo, values, ?next) =
+  member private this.SetArrayedProperty<'T>(opts: NLoopOptions, p: Reflection.PropertyInfo, values, ?next) =
     try
-      p.SetValue(this.NLoopOptions, values |> Seq.cast<'T> |> Seq.toArray)
+      p.SetValue(opts, values |> Seq.cast<'T> |> Seq.toArray)
     with
     | :? InvalidCastException when next.IsSome ->
       next.Value()
       
   override this.InitCore(_configuration, options) =
+    
+    let opts = NLoopOptions()
 
     let optsProperties =
-      this.NLoopOptions.GetType().GetProperties()
+      opts.GetType().GetProperties()
       |> Seq.map(fun p -> p.Name.ToLowerInvariant(), p)
       |> Map.ofSeq
-
     
-    // override this.NLoopOptions with the value we get from c-lightning.
+    // -- override NLoopOptions fields with the value we get from c-lightning.
     for op in options do
       let name = op.Key
       optsProperties
@@ -158,57 +164,30 @@ type NLoopJsonRpcServer
         if p.PropertyType.IsArray then
           let values = (op.Value :?> IEnumerable<_>) |> Seq.map(fun v -> Convert.ChangeType(v, p.PropertyType.GetElementType()))
           
-          this.SetArrayedProperty<int>(p, values,
-            fun () -> this.SetArrayedProperty<int64>(p, values,
-              fun () -> this.SetArrayedProperty<string>(p, values,
-                fun () -> this.SetArrayedProperty<int16>(p, values)
+          this.SetArrayedProperty<int>(opts, p, values,
+            fun () -> this.SetArrayedProperty<int64>(opts, p, values,
+              fun () -> this.SetArrayedProperty<string>(opts, p, values,
+                fun () -> this.SetArrayedProperty<int16>(opts, p, values)
               )
             )
           )
         else
-          p.SetValue(this.NLoopOptions, Convert.ChangeType(op.Value, p.PropertyType))
+          p.SetValue(opts, Convert.ChangeType(op.Value, p.PropertyType))
       )
-
-    // -- handle redundant option values those which defined in both c-lightning and nloop.
-    let pairs =
-      seq [
-        ("network", "network")
-        ("bitcoin-rpcuser", "btc.rpcuser")
-        ("bitcoin-rpcpassword", "btc.rpcpassword")
-        ("bitcoin-rpcconnect", "btc.rpchost")
-        ("bitcoin-rpcport", "btc.rpcport")
-      ]
-    for lnName, nloopName in pairs do
-      let valueForCln =
-        match options.TryGetValue(PluginOptions.addPrefix lnName) with
-        | true, p -> Some p
-        | false, _ -> None
-      let valueForNloop =
-        match options.TryGetValue(PluginOptions.addPrefix nloopName) with
-        | true, v -> Some v
-        | false, _ -> None
-
-      // override the value for nloop option iff user has passed the cln option.
-      valueForCln
-        |>
-        Option.iter(fun v ->
-          if valueForNloop.IsNone then
-            let prop = optsProperties |> Map.find(nloopName.ToLowerInvariant())
-            prop.SetValue(this.NLoopOptions, v)
-        )
-        
-      // abort if there are conflicting options
-      match valueForCln, valueForNloop with
-      | Some cln, Some nloop when cln <> nloop ->
-        let msg =
-          $"mismatch in option. value for --{lnName} ({cln}) and {nloopName} ({nloop}) must have a same value. " +
-          $" Or set {lnName} one only."
-        logger.LogWarning(msg)
-        failwith msg
-      | _ -> ()
+    
+    opts.Network <- _configuration.Network
       
-    optionsHolder.NLoopOptions <- Some this.NLoopOptions
-    ()
+    // -- bind ChainOptions
+    let getOptionFromKeyName =
+      fun (_cc: SupportedCryptoCode) (name: string) ->
+        let key = PluginOptions.addPrefix($"{_cc.ToString().ToLowerInvariant()}.{name}").ToLowerInvariant()
+        options.TryGetValue key |> snd
+    opts.BindChainOptions(
+      getOptionFromKeyName,
+      (fun _ _ -> ())
+    )
+    
+    optionsHolder.NLoopOptions <- Some opts
     
   [<PluginJsonRpcSubscription("shutdown")>]
   member this.Shutdown() =

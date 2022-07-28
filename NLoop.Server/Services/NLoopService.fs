@@ -36,6 +36,34 @@ type GetEventStoreConnection = unit -> Task<IEventStoreConnection>
 
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
+  
+  [<Extension>]
+  static member BindChainOptions(opts: NLoopOptions,
+                                 getOptionFromKeyName: SupportedCryptoCode -> string -> obj,
+                                 additionalBinding: SupportedCryptoCode -> IChainOptions -> unit) =
+    for c in Enum.GetValues<SupportedCryptoCode>() do
+      let cOpts =
+        let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
+        c.GetDefaultOptions(network)
+      cOpts.CryptoCode <- c
+      for p in typeof<IChainOptions>.GetProperties() do
+        let op =
+          getOptionFromKeyName c (p.Name.ToLowerInvariant())
+        let tyDefault =
+          if p.PropertyType = typeof<String> then
+            String.Empty |> box
+          else
+            Activator.CreateInstance(p.PropertyType)
+        if op <> null && op <> tyDefault then
+          try
+            let t = Convert.ChangeType(op, p.PropertyType)
+            if t <> tyDefault then
+              p.SetValue(cOpts, t)
+          with
+          | :? InvalidCastException ->
+            ()
+        additionalBinding c cOpts
+        opts.ChainOptions.AddOrReplace(c, cOpts)
 
   [<Extension>]
   static member AddNLoopServices(this: IServiceCollection, ?coldStart: bool) =
@@ -52,20 +80,11 @@ type NLoopExtensions() =
           let config = serviceProvider.GetService<IConfiguration>()
           if config |> isNull then () else
           let bindingContext = serviceProvider.GetService<BindingContext>()
-          for c in Enum.GetValues<SupportedCryptoCode>() do
-            let cOpts =
-              let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
-              c.GetDefaultOptions(network)
-            cOpts.CryptoCode <- c
-            for p in typeof<IChainOptions>.GetProperties() do
-              let op =
-                let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
-                bindingContext.ParseResult.ValueForOption(optsString)
-              let tyDefault = if p.PropertyType = typeof<String> then String.Empty |> box else Activator.CreateInstance(p.PropertyType)
-              if op <> null && op <> tyDefault && op.GetType() = p.PropertyType then
-                p.SetValue(cOpts, op)
-            config.GetSection(c.ToString()).Bind(cOpts)
-            opts.ChainOptions.Add(c, cOpts)
+          
+          opts.BindChainOptions(
+            (fun c p -> getChainOptionString c (p.ToLowerInvariant()) |> bindingContext.ParseResult.ValueForOption),
+            fun c -> config.GetSection(c.ToString()).Bind
+            )
           )
         |> ignore
 
@@ -100,9 +119,9 @@ type NLoopExtensions() =
           }
         ))
         .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
-          let _holder = sp.GetRequiredService<NLoopOptionsHolder>()
-          if _holder |> box |> isNull |> not && _holder.NLoopOptions.IsSome then
-            _holder.NLoopOptions.Value
+          let holder = sp.GetService<NLoopOptionsHolder>()
+          if holder |> box |> isNull |> not && holder.NLoopOptions.IsSome then
+            holder.NLoopOptions.Value
           else
             let v = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
             v
