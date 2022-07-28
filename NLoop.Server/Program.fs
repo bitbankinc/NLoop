@@ -204,8 +204,8 @@ module Configurations =
       builder.AddConsole() |> ignore
       configureFileLogging ctx builder
 
-  let configureJsonRpcLogging(ctx: HostBuilderContext) (builder: ILoggingBuilder) =
-    builder.AddPluginLogger() |> ignore
+  let configureJsonRpcLogging (outputStream: Stream) (ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+    builder.AddPluginLogger(outputStream) |> ignore
     configureFileLogging ctx builder
 
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
@@ -226,9 +226,9 @@ module Configurations =
 type ConfigurationExtension =
 
   [<Extension>]
-  static member ConfigureAsPlugin(hostBuilder: IHostBuilder) =
+  static member ConfigureAsPlugin(hostBuilder: IHostBuilder, outputStream) =
     hostBuilder
-      .ConfigureLogging(configureJsonRpcLogging)
+      .ConfigureLogging(configureJsonRpcLogging outputStream)
       .ConfigureServices(App.configureServices false None)
       .ConfigureServices(fun serviceCollection ->
         serviceCollection
@@ -284,11 +284,11 @@ type ConfigurationExtension =
 
 module Main =
 
-  let configureHostBuilder  (hostBuilder: IHostBuilder) =
+  let configureHostBuilder (outputStream: Stream) (hostBuilder: IHostBuilder) =
     let hostBuilder = hostBuilder.ConfigureAppConfiguration(configureConfig)
     let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
     if isPluginMode then
-      hostBuilder.ConfigureAsPlugin()
+      hostBuilder.ConfigureAsPlugin(outputStream)
     else
       hostBuilder.ConfigureAsWebServer()
 
@@ -315,7 +315,11 @@ module Main =
       // override `InvocationLifetime` which does not handle SIGTERM/SIGINT.
       .UseConsoleLifetime(fun o -> if isPluginMode then o.SuppressStatusMessages <- true) 
       |> ignore
-    configureHostBuilder hostBuilder |> ignore
+      
+    let o =
+      Console.OpenStandardOutput()
+      |> Stream.Synchronized
+    configureHostBuilder o hostBuilder |> ignore
 
     use host = hostBuilder.Build();
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
@@ -327,9 +331,6 @@ module Main =
         
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
       let! _ =
-        let o =
-          Console.OpenStandardOutput()
-          |> Stream.Synchronized
         let i = Console.OpenStandardInput()
         server.StartAsync(o, i, CancellationToken.None)
       logger.LogInformation $"started {server.InitializationStatus}"

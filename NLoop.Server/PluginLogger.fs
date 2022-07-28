@@ -2,6 +2,7 @@ namespace NLoop.Server
 
 open System
 open System.Collections.Generic
+open System.IO
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
 open NBitcoin.Logging
@@ -18,7 +19,8 @@ type PluginLogger
         name: string,
         filter: Func<string, LogLevel, bool>,
         scopeProvider: IExternalScopeProvider,
-        opts: PluginLoggerOptions
+        opts: PluginLoggerOptions,
+        outputStream: Stream
     ) =
     let filter = if filter |> isNull then Func<_,_,_>(fun (_: string) (_: LogLevel) -> true)  else filter
     do if name |> isNull then raise <| ArgumentNullException(nameof(name))
@@ -40,6 +42,8 @@ type PluginLogger
     member private this.WriteMsg(logLevel: LogLevel, logName: string, msg: string, ex: exn) =
         let json = JsonSerializer.Create(opts.JsonSettings)
         
+        let textWriter = new StreamWriter(outputStream)
+        let jsonWriter = new JsonTextWriter(textWriter)
         for line in msg.Split(Environment.NewLine) do
             let msg = $"{logName}: {line}"
             let req = JsonRpcRequest()
@@ -54,8 +58,8 @@ type PluginLogger
                     do
                     d.Add(item)
                 d
-            json.Serialize(Console.Out, req)
-            Console.Out.WriteLine()
+                
+            json.Serialize(jsonWriter, req)
             
         if ex |> isNull |> not then
             let code =
@@ -86,8 +90,7 @@ type PluginLogger
                         d.Add(item)
                     d
                 r
-            json.Serialize(Console.Out, req)
-            Console.Out.WriteLine()
+            json.Serialize(jsonWriter, req)
             
         match logLevel with
         | LogLevel.Critical
@@ -96,7 +99,9 @@ type PluginLogger
             ()
         | _ -> ()
             
-        Console.Out.Flush()
+        jsonWriter.Flush()
+        textWriter.Flush()
+        outputStream.Flush()
         ()
     
     interface ILogger with
@@ -115,22 +120,22 @@ type PluginLogger
             else
                 ()
     
-type PluginLoggerProvider(configure: Action<PluginLoggerOptions>) =
+type PluginLoggerProvider(configure: Action<PluginLoggerOptions>, outputStream: Stream) =
    let opts = PluginLoggerOptions()
    do
        if configure |> isNull then raise <| ArgumentNullException(nameof(configure))
        configure.Invoke opts
    interface ILoggerProvider with
        member this.CreateLogger(categoryName) =
-           PluginLogger(categoryName, Func<string, LogLevel, bool>(fun _ _ -> true), null, opts)
+           PluginLogger(categoryName, Func<string, LogLevel, bool>(fun _ _ -> true), null, opts, outputStream)
        member this.Dispose() = ()
        
 open Microsoft.Extensions.DependencyInjection.Extensions
 [<AutoOpen>]
 module PluginLoggerExtensions =
     type ILoggingBuilder with
-        member this.AddPluginLogger(configure: Action<PluginLoggerOptions>) =
-            this.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, PluginLoggerProvider>(fun _ -> new PluginLoggerProvider(configure)))
+        member this.AddPluginLogger(configure: Action<PluginLoggerOptions>, outputStream: Stream) =
+            this.Services.TryAddEnumerable(ServiceDescriptor.Singleton<ILoggerProvider, PluginLoggerProvider>(fun _ -> new PluginLoggerProvider(configure, outputStream)))
             this
-        member this.AddPluginLogger() =
-            this.AddPluginLogger(fun _ -> ())
+        member this.AddPluginLogger(outputStream: Stream) =
+            this.AddPluginLogger(ignore, outputStream)
