@@ -333,7 +333,6 @@ module Main =
       let! _ =
         let i = Console.OpenStandardInput()
         server.StartAsync(o, i, CancellationToken.None)
-      logger.LogInformation $"started {server.InitializationStatus}"
       if server.InitializationStatus = PluginInitializationStatus.Failed then
         ()
       if (server.InitializationStatus = PluginInitializationStatus.InitializedSuccessfully) then
