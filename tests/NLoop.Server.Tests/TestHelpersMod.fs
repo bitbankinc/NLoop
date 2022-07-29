@@ -457,4 +457,4 @@ type TestHelpers =
             .UseTestServer()
             |> ignore
         )
-    hb.ConfigureAsPlugin(outStream).StartAsync()
+    hb.ConfigureAsPlugin(outStream, coldStart = true).StartAsync()

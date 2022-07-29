@@ -1,5 +1,6 @@
 namespace NLoop.Server.Tests
 
+open System
 open System.Collections.Generic
 open System.IO
 open System.Text
@@ -14,6 +15,8 @@ open Xunit
 type JsonRpcTests() =
   let utf8 = UTF8Encoding.UTF8
 
+  do
+    Environment.SetEnvironmentVariable("LIGHTNINGD_PLUGIN", "1")
   let flatten(s: string) =
       s |> JsonSerializer.Deserialize<JsonDocument> |> JsonSerializer.Serialize
 
@@ -52,40 +55,8 @@ type JsonRpcTests() =
     """
 
   let initB = initStr |> flatten |> utf8.GetBytes
-  [<Fact(Skip="tmp")>]
-  member this.InitCoreTests() =
-    use server =
-      new TestServer(TestHelpers.GetTestHost(fun builder ->
-        builder.AddSingleton<NLoopJsonRpcServer>() |> ignore
-      ))
-    let rpcServer = server.Services.GetRequiredService<NLoopJsonRpcServer>()
-    let config = {
-      LightningInitConfigurationDTO.Network = "testnet"
-      LightningDir = "/path/to/ln_dir"
-      RpcFile = "lightning-rpc"
-      Startup = true
-      FeatureSet = {
-        Init = None
-        Node = None
-        Channel = None
-        Invoice = None
-      }
-      Proxy = {
-        ProxyDTO.Address = "foobar"
-        Ty = "ipv4"
-        Port = 1000
-      }
-      TorV3Enabled = false
-      AlwaysUseProxy = false
-    }
-    let opts = Dictionary<string, obj>()
-    // test server is run in regtest. So it must throw an error.
-    opts.Add("network", "testnet")
-    let e = Assert.ThrowsAny(fun () -> rpcServer.InitCore(config, opts))
-    Assert.Contains("mismatch in option", e.Message)
-    ()
 
-  [<Fact(Skip="tmp")>]
+  [<Fact>]
   member this.PluginModeTest() =
     task {
       use outStream = new MemoryStream(Array.zeroCreate (65535 * 16))
@@ -100,6 +71,5 @@ type JsonRpcTests() =
       use inStream = new MemoryStream(buf)
       let! _ =
         server.StartAsync(outStream, inStream, cts.Token)
-      ()
       ()
     }
