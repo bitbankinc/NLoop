@@ -52,7 +52,7 @@
     <Compile Include="BlockChainListeners\ZmqBlockchainListener.fs" />
     <Compile Include="BlockChainListeners\RPCLongPollingBlockchainListener.fs" />
     <Compile Include="BlockChainListeners\BlockchainListeners.fs" />
-    <Compile Include="LightningClientProvider.fs" />
+    <Compile Include="LndClientProvider.fs" />
     <Compile Include="ClnLightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Actors\SwapExecutor.fs" />

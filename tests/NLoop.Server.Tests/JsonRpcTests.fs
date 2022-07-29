@@ -88,13 +88,13 @@ type JsonRpcTests() =
   [<Fact(Skip="tmp")>]
   member this.PluginModeTest() =
     task {
+      use outStream = new MemoryStream(Array.zeroCreate (65535 * 16))
       use! host =
-        TestHelpers.GetPluginTestHost()
+        TestHelpers.GetPluginTestHost(outStream)
 
       use cts = new CancellationTokenSource()
       cts.CancelAfter(2000)
       let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
-      use outStream = new MemoryStream(Array.zeroCreate (65535 * 16))
 
       let buf = Array.concat [| initB |]
       use inStream = new MemoryStream(buf)

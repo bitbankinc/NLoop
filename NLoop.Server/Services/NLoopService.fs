@@ -155,7 +155,7 @@ type NLoopExtensions() =
         .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
-        .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+        .AddSingleton<ILightningClientProvider, LndClientProvider>()
         .AddSingleton<BoltzListener>()
         .AddSingleton<ISwapEventListener, BoltzListener>(fun sp -> sp.GetRequiredService<BoltzListener>())
         .AddSingleton<GetSwapKey>(Func<IServiceProvider, GetSwapKey>(fun _ () -> new Key() |> Task.FromResult))
@@ -276,7 +276,7 @@ type NLoopExtensions() =
           )
           .AddSingleton<IHostedService>(fun p ->
             match p.GetRequiredService<ILightningClientProvider>() with
-            | :? LightningClientProvider as p -> p :> IHostedService
+            | :? LndClientProvider as p -> p :> IHostedService
             | :? ClnLightningClientProvider as p -> p :> IHostedService
             | _ -> failwith "no lightning client registered"
           )

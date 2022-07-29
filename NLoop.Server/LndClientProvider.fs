@@ -16,10 +16,10 @@ open FSharp.Control.Tasks
 open LndClient
 open NLoop.Domain
 
-type LightningClientProvider(logger: ILogger<LightningClientProvider>,
-                             opts: GetOptions,
-                             getNetwork: GetNetwork
-                             ) =
+type LndClientProvider(logger: ILogger<LndClientProvider>,
+                       opts: GetOptions,
+                       getNetwork: GetNetwork
+                       ) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
   let settings = opts().GetLndGrpcSettings()
   do

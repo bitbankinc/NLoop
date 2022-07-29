@@ -440,7 +440,7 @@ type TestHelpers =
       )
       .UseTestServer()
 
-  static member GetPluginTestHost( ?configureServices: IServiceCollection -> unit) =
+  static member GetPluginTestHost(outStream, ?configureServices: IServiceCollection -> unit) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     let hb =
       HostBuilder()
@@ -457,4 +457,4 @@ type TestHelpers =
             .UseTestServer()
             |> ignore
         )
-    hb.ConfigureAsPlugin().StartAsync()
+    hb.ConfigureAsPlugin(outStream).StartAsync()
