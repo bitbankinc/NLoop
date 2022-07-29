@@ -275,7 +275,10 @@ type NLoopExtensions() =
             p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+            match p.GetRequiredService<ILightningClientProvider>() with
+            | :? LightningClientProvider as p -> p :> IHostedService
+            | :? ClnLightningClientProvider as p -> p :> IHostedService
+            | _ -> failwith "no lightning client registered"
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManagers>() :> IHostedService

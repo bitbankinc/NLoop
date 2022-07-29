@@ -235,6 +235,7 @@ type ConfigurationExtension =
           .AddSingleton<ILogger, Logger<ConfigurationExtension>>() // for startup logging
           .AddSingleton<NLoopJsonRpcServer>()
           .AddSingleton<NLoopOptionsHolder>()
+          .AddSingleton<ILightningClientProvider, ClnLightningClientProvider>()
           (*
           .AddSingleton<PluginServerBase>(fun sp ->
             sp.GetRequiredService<NLoopJsonRpcServer>() :> PluginServerBase

@@ -146,7 +146,7 @@ type NLoopJsonRpcServer
     | :? InvalidCastException when next.IsSome ->
       next.Value()
       
-  override this.InitCore(_configuration, options) =
+  override this.InitCore(configuration, options) =
     
     let opts = NLoopOptions()
 
@@ -175,7 +175,9 @@ type NLoopJsonRpcServer
           p.SetValue(opts, Convert.ChangeType(op.Value, p.PropertyType))
       )
     
-    opts.Network <- _configuration.Network
+    // -- bind options from `configuration` field
+    opts.Network <- configuration.Network
+    opts.ClnRpcFile <- Path.Join(configuration.LightningDir, configuration.RpcFile)
       
     // -- bind ChainOptions
     let getOptionFromKeyName =

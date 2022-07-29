@@ -3,6 +3,7 @@ namespace NLoop.Server
 open System
 open System.Collections.Generic
 open System.IO
+open DotNetLightning.ClnRpc
 open LndClient
 open NBitcoin
 open NLoop.Domain
@@ -129,6 +130,8 @@ type NLoopOptions() =
 
   member val TargetIncomingLiquidityRatio = 50s<percent> with get, set
 
+  member val ClnRpcFile: string = null with get, set
+  
   member this.GetLndGrpcSettings() =
     LndGrpcSettings.Create(
       this.LndGrpcServer,

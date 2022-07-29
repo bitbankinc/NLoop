@@ -53,6 +53,7 @@
     <Compile Include="BlockChainListeners\RPCLongPollingBlockchainListener.fs" />
     <Compile Include="BlockChainListeners\BlockchainListeners.fs" />
     <Compile Include="LightningClientProvider.fs" />
+    <Compile Include="ClnLightningClientProvider.fs" />
     <Compile Include="Actors\SwapActor.fs" />
     <Compile Include="Actors\SwapExecutor.fs" />
     <Compile Include="ProcessManagers\SwapProcessManager.fs" />
