@@ -222,6 +222,21 @@ type NLoopJsonRpcServer
       | Error e ->
         return raise <| exn e
     }
+    
+  [<PluginJsonRpcMethod(
+    "nloop_getinfo",
+    "get nloop specific info",
+    "get nloop specific info"
+    )>]
+  member this.GetInfo(): Task<NLoopClient.GetInfoResponse> =
+    task {
+      use! _releaser = this.AsyncSemaphore.EnterAsync()
+      return {
+        GetInfoResponse.Version = Constants.AssemblyVersion
+        SupportedCoins = { OnChain = [SupportedCryptoCode.BTC; SupportedCryptoCode.LTC]
+                           OffChain = [SupportedCryptoCode.BTC] }
+      } |> convertDTOToJsonRPCStyle
+    }
 
   [<PluginJsonRpcMethod(
     "nloop_swaphistory",
