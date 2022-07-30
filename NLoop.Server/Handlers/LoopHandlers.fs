@@ -1,31 +1,11 @@
 module NLoop.Server.Handlers.LoopHandlers
 
-open System
-open System.Linq
-open System.Threading.Tasks
-open DotNetLightning.Utils.Primitives
-open FSharp.Control.Reactive
-
 open FsToolkit.ErrorHandling
-open Microsoft.Extensions.Options
-open NBitcoin
-open NBitcoin.Crypto
-open NLoop.Domain
-open NLoop.Domain
-open NLoop.Domain.IO
-open NLoop.Domain.Utils
 open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
 open NLoop.Server.Handlers
-open NLoop.Server.Services
-open System.Reactive.Linq
-
-open DotNetLightning.Utils
-
 open Microsoft.AspNetCore.Http
-open FSharp.Control.Tasks
-open Giraffe
 
 let private validateLoopOutRequest (opts: NLoopOptions) (req: LoopOutRequest) =
   req.Validate(opts.GetNetwork) |> Result.mapError(HandlerError.InvalidRequest)
@@ -34,9 +14,9 @@ let handleLoopOut
   (getOpts: GetOptions)
   (getClient: GetBlockchainClient)
   (lnClientProvider: ILightningClientProvider)
-  (swapServerClient)
+  swapServerClient
   (swapExecutor: ISwapExecutor)
-  (logger)
+  logger
   (req: LoopOutRequest) =
   taskResult {
     let opts = getOpts()

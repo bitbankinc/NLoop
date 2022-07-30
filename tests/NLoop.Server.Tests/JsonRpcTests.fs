@@ -59,7 +59,7 @@ type JsonRpcTests() =
   [<Fact>]
   member this.PluginModeTest() =
     task {
-      use outStream = new MemoryStream(Array.zeroCreate (65535 * 16))
+      use outStream = new MemoryStream(Array.zeroCreate 65535)
       use! host =
         TestHelpers.GetPluginTestHost(outStream)
 

@@ -11,10 +11,12 @@ open DotNetLightning.ClnRpc
 open DotNetLightning.Utils.Primitives
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
+open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Options
 open NLoop.Domain.Utils
 open NLoop.Server.Actors
 open NLoop.Server.DTOs
+open NLoop.Server.Handlers
 open NLoop.Server.Options
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
@@ -25,6 +27,7 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open FSharp.Control.Reactive
 open StreamJsonRpc
+open StreamJsonRpc.Protocol
 
 // "state machine is not statically compilable" error.
 // The performance does not really matters on the top level of the json-rpc. So ignore.
@@ -48,7 +51,24 @@ module private JsonRpcServerHelpers =
     let deserializeSettings = JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
     JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
 
+  type HandlerError with
+    member this.AsJsonRpcErrorCode =
+      match this with
+      | HandlerError.InvalidRequest _ ->
+        JsonRpcErrorCode.InvalidParams
+      | HandlerError.InternalError _ ->
+        JsonRpcErrorCode.InternalError
+      | HandlerError.ServiceUnAvailable _ ->
+        JsonRpcErrorCode.InternalError
 
+[<RequireQualifiedAccess>]
+module private Result =
+  let internal unwrap (r: Result<_, HandlerError>) =
+    match r with
+    | Ok ok -> ok
+    | Error e ->
+      raise <| LocalRpcException(message = e.Message, ErrorCode = int e.AsJsonRpcErrorCode)
+    
 module PluginOptions =
 
   [<Literal>]
@@ -107,13 +127,11 @@ module PluginOptions =
 
 type NLoopJsonRpcServer
   (
-    blockListener: IBlockChainListener,
-    swapExecutor: ISwapExecutor,
     eventAggregator: IEventAggregator,
     loggerFactory: ILoggerFactory,
-    tryGetAutoLoopManager: TryGetAutoLoopManager,
     applicationLifetime: IHostApplicationLifetime,
-    optionsHolder: NLoopOptionsHolder
+    optionsHolder: NLoopOptionsHolder,
+    sp: IServiceProvider
   ) as this =
   inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
   let logger: ILogger<NLoopJsonRpcServer> = loggerFactory.CreateLogger<_>()
@@ -201,12 +219,16 @@ type NLoopJsonRpcServer
     backgroundTask {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
       let req: LoopOutRequest = convertDTOToNLoopCompatibleStyle req
-      let height = blockListener.CurrentHeight(req.PairIdValue.Base)
-      match! swapExecutor.ExecNewLoopOut(req, height) with
-      | Ok resp ->
-        return resp |> convertDTOToJsonRPCStyle
-      | Error e ->
-        return raise <| exn e
+      let! r =
+        LoopHandlers.handleLoopOut
+          (sp.GetRequiredService<GetOptions>())
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          (loggerFactory.CreateLogger())
+          req
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod("nloop_loopin", "initiate loop in swap", "initiate loop in swap")>]
@@ -214,13 +236,13 @@ type NLoopJsonRpcServer
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
       let req: LoopInRequest = convertDTOToNLoopCompatibleStyle req
-      let height =
-        blockListener.CurrentHeight req.PairIdValue.Quote
-      match! swapExecutor.ExecNewLoopIn(req, height) with
-      | Ok resp ->
-        return resp |> convertDTOToJsonRPCStyle
-      | Error e ->
-        return raise <| exn e
+      let! r =
+        LoopHandlers.handleLoopIn
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          req
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
     
   [<PluginJsonRpcMethod(
@@ -231,11 +253,9 @@ type NLoopJsonRpcServer
   member this.GetInfo(): Task<NLoopClient.GetInfoResponse> =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      return {
-        GetInfoResponse.Version = Constants.AssemblyVersion
-        SupportedCoins = { OnChain = [SupportedCryptoCode.BTC; SupportedCryptoCode.LTC]
-                           OffChain = [SupportedCryptoCode.BTC] }
-      } |> convertDTOToJsonRPCStyle
+      return
+        QueryHandlers.handleGetInfo
+        |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod(
@@ -243,10 +263,14 @@ type NLoopJsonRpcServer
     "Get the full history of swaps.",
     "Get the full history of swaps. This might take long if you have a lots of entries in a database."
   )>]
-  member this.SwapHistory() =
+  member this.SwapHistory(since): Task<NLoopClient.GetSwapHistoryResponse>  =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      return ()
+      let! r =
+        QueryHandlers.handleGetSwapHistory
+          (sp.GetRequiredService<_>())
+          since
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod(
@@ -254,10 +278,13 @@ type NLoopJsonRpcServer
     "Get the list of ongoing swaps.",
     "Get the list of ongoing swaps."
   )>]
-  member this.OngoingSwaps() =
+  member this.OngoingSwaps(): Task<NLoopClient.GetOngoingSwapResponse>  =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      return ()
+      return
+        QueryHandlers.handleGetOngoingSwap
+          (sp.GetRequiredService<_>())
+        |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod(
@@ -265,23 +292,15 @@ type NLoopJsonRpcServer
     "Get the summary of the cost we paid for swaps.",
     "Get the summary of the cost we paid for swaps."
   )>]
-  member this.SwapCostSummary() =
+  member this.SwapCostSummary(since): Task<NLoopClient.GetCostSummaryResponse> =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      return ()
-    }
-
-  [<PluginJsonRpcMethod(
-    "nloop_suggestswaps",
-    "Get suggestion for the swap based on autoloop settings.",
-    "Get suggestion for the swaps. You must set liquidity parameters for autoloop before "
-      + "getting the suggestion, this endpoint is usually useful when you set `autoloop=false` "
-      + "to liquidity params. (that is, autoloop dry-run mode.). see `set_liquidityparams`"
-  )>]
-  member this.SuggestSwaps() =
-    task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
-      return ()
+      let! r =
+        QueryHandlers.handleGetCostSummary
+          since
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod(
@@ -292,57 +311,11 @@ type NLoopJsonRpcServer
   member this.Get_LiquidityParams(offChainAsset: NLoopClient.CryptoCode): Task<NLoopClient.LiquidityParameters> =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      let offChainAsset = convertDTOToNLoopCompatibleStyle offChainAsset
-      match tryGetAutoLoopManager offChainAsset with
-      | None ->
-        return raise <| Exception $"off chain asset {offChainAsset} not supported"
-      | Some man ->
-      match man.Parameters with
-      | None ->
-        return raise <| exn $"no parameter for {offChainAsset} has been set yet."
-      | Some p ->
-      let resp = {
-        LiquidityParameters.Rules = p.Rules.ToDTO()
-        FeePPM =
-          ValueNone
-        SweepFeeRateSatPerKVByte = ValueNone
-        MaxSwapFeePpm = ValueNone
-        MaxRoutingFeePpm = ValueNone
-        MaxPrepayRoutingFeePpm = ValueNone
-        MaxPrepay = ValueNone
-        MaxMinerFee = ValueNone
-        SweepConfTarget = p.SweepConfTarget.Value |> int
-        FailureBackoffSecond = p.FailureBackoff.TotalSeconds |> int
-        AutoLoop = p.AutoLoop
-        AutoMaxInFlight = p.MaxAutoInFlight
-        HTLCConfTarget = p.HTLCConfTarget.Value |> int |> Some
-        MinSwapAmountLoopOut = p.ClientRestrictions.OutMinimum
-        MaxSwapAmountLoopOut = p.ClientRestrictions.OutMaximum
-        MinSwapAmountLoopIn = p.ClientRestrictions.InMinimum
-        MaxSwapAmountLoopIn = p.ClientRestrictions.InMaximum
-        OnChainAsset = p.OnChainAsset |> ValueSome
-      }
-      let resp =
-        match p.FeeLimit with
-        | :? FeePortion as f ->
-          {
-            resp
-              with
-                FeePPM = f.PartsPerMillion |> ValueSome
-          }
-        | :? FeeCategoryLimit as f ->
-          {
-            resp
-              with
-              SweepFeeRateSatPerKVByte = f.SweepFeeRateLimit.FeePerK |> ValueSome
-              MaxMinerFee = f.MaximumMinerFee |> ValueSome
-              MaxSwapFeePpm = f.MaximumSwapFeePPM |> ValueSome
-              MaxRoutingFeePpm = f.MaximumRoutingFeePPM |> ValueSome
-              MaxPrepayRoutingFeePpm = f.MaximumPrepayRoutingFeePPM |> ValueSome
-              MaxPrepay = f.MaximumPrepay |> ValueSome
-          }
-        | x -> failwith $"unknown type of FeeLimit {x}"
-      return convertDTOToJsonRPCStyle resp
+      let! r =
+        AutoLoopHandlers.handleGetLiquidityParams
+          (sp.GetRequiredService<_>())
+          (convertDTOToNLoopCompatibleStyle offChainAsset)
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
 
   [<PluginJsonRpcMethod(
@@ -357,11 +330,32 @@ type NLoopJsonRpcServer
     ): Task =
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
-      let { Parameters = req }: SetLiquidityParametersRequest  = convertDTOToNLoopCompatibleStyle liquidityParameters
-      let _onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
-      let _offchainAsset: SupportedCryptoCode = convertDTOToNLoopCompatibleStyle offchainAsset
-      
-      failwith "todo"
+      let req: SetLiquidityParametersRequest  = convertDTOToNLoopCompatibleStyle liquidityParameters
+      let! r =
+        AutoLoopHandlers.handleSetLiquidityParams
+          (sp.GetRequiredService<_>())
+          (sp.GetRequiredService<_>())
+          req
+          (offchainAsset |> convertDTOToNLoopCompatibleStyle |> Some)
+      return r |> Result.unwrap
     } :> Task
+    
+  [<PluginJsonRpcMethod(
+    "nloop_suggestswaps",
+    "Get suggestion for the swap based on autoloop settings.",
+    "Get suggestion for the swaps. You must set liquidity parameters for autoloop before "
+      + "getting the suggestion, this endpoint is usually useful when you set `autoloop=false` "
+      + "to liquidity params. (that is, autoloop dry-run mode.). see `set_liquidityparams`"
+  )>]
+  member this.SuggestSwaps([<O;DefaultParameterValue(NLoopClient.CryptoCode.BTC)>]cryptoCode: NLoopClient.CryptoCode):
+    Task<NLoopClient.SuggestSwapsResponse> =
+    task {
+      use! _releaser = this.AsyncSemaphore.EnterAsync()
+      let! r =
+        AutoLoopHandlers.handleSuggestSwaps
+          (sp.GetRequiredService<_>())
+          (cryptoCode |> convertDTOToNLoopCompatibleStyle)
+      return r |> Result.unwrap |> convertDTOToJsonRPCStyle
+    }
 
 #endnowarn "3511"

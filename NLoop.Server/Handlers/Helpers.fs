@@ -28,6 +28,12 @@ type HandlerError =
   with
   static member FromEventSourcingError(e: EventSourcingError<_>) =
     e.ToString() |> InternalError
+    
+  member this.Message =
+    match this with
+    | HandlerError.InvalidRequest e -> String.concat "; " e
+    | HandlerError.ServiceUnAvailable e -> e
+    | InternalError e -> e
   
 [<AutoOpen>]
 module HandlerHelpers =

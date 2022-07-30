@@ -1,20 +1,11 @@
 namespace NLoop.Server.Pipelines
 
 open System
-open System.Threading.Tasks
 open FsToolkit.ErrorHandling
-open DotNetLightning.Utils
 open Giraffe
 open Microsoft.AspNetCore.Http
 open FSharp.Control.Tasks.Affine
-open Microsoft.Extensions.Logging
-open NBitcoin
-open NLoop.Domain
-open NLoop.Server
 open NLoop.Server.Handlers
-open NLoop.Server.Options
-open NLoop.Server.DTOs
-open NLoop.Server.SwapServerClient
 
 [<AutoOpen>]
 module CustomHandlers =
