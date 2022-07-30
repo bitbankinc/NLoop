@@ -193,7 +193,7 @@ type NLoopJsonRpcServer
     
   [<PluginJsonRpcSubscription("shutdown")>]
   member this.Shutdown() =
-    logger.LogError "shutdown"
+    logger.LogInformation "shutting down ..."
     applicationLifetime.StopApplication()
 
   [<PluginJsonRpcMethod("nloop_loopout", "initiate loopout swap", "initiate loop out swap")>]
@@ -358,54 +358,10 @@ type NLoopJsonRpcServer
     task {
       use! _releaser = this.AsyncSemaphore.EnterAsync()
       let { Parameters = req }: SetLiquidityParametersRequest  = convertDTOToNLoopCompatibleStyle liquidityParameters
-      let onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
-      let offchainAsset: SupportedCryptoCode = convertDTOToNLoopCompatibleStyle offchainAsset
-      match tryGetAutoLoopManager(offchainAsset) with
-      | None ->
-        raise <| Exception $"No AutoLoopManager for offchain asset {offchainAsset}"
-      | Some man ->
-
-      match req.Rules |> Seq.map(fun r -> r.Validate()) |> Seq.toList |> List.sequenceResultA with
-      | Error errs ->
-        raise <| Exception (errs.ToString())
-      | Ok _ ->
-      match AutoLoopHandlers.dtoToFeeLimit (offchainAsset.DefaultParams.OffChain, onChainAsset.DefaultParams.OnChain) req with
-      | Error e ->
-        raise <| exn e
-      | Ok feeLimit ->
-        let p = {
-          Parameters.Rules =
-            Rules.FromDTOs(req.Rules)
-          MaxAutoInFlight =
-            req.AutoMaxInFlight
-          FailureBackoff =
-            req.FailureBackoffSecond |> float |> TimeSpan.FromSeconds
-          SweepConfTarget =
-            req.SweepConfTarget |> uint |> BlockHeightOffset32
-          FeeLimit = feeLimit
-          ClientRestrictions = {
-            OutMinimum = req.MinSwapAmountLoopOut
-            OutMaximum = req.MaxSwapAmountLoopOut
-            InMinimum = req.MinSwapAmountLoopIn
-            InMaximum = req.MaxSwapAmountLoopIn
-          }
-          HTLCConfTarget =
-            req.HTLCConfTarget
-            |> Option.map(uint >> BlockHeightOffset32)
-            |> Option.defaultValue onChainAsset.DefaultParams.OnChain.HTLCConfTarget
-          AutoLoop = req.AutoLoop
-          OnChainAsset =
-            onChainAsset
-        }
-        match! man.SetParameters p with
-        | Ok () ->
-          if req.AutoMaxInFlight > 2 then
-            let msg = "autoloop is experimental, usually it is not good idea to set auto_max_inflight larger than 2"
-            raise <| exn msg
-          else
-            return ()
-        | Error e ->
-          return raise <| exn (e.ToString())
+      let _onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
+      let _offchainAsset: SupportedCryptoCode = convertDTOToNLoopCompatibleStyle offchainAsset
+      
+      failwith "todo"
     } :> Task
 
 #endnowarn "3511"

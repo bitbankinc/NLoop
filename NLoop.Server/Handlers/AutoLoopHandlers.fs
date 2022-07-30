@@ -1,30 +1,34 @@
-module NLoop.Server.AutoLoopHandlers
+module NLoop.Server.Handlers.AutoLoopHandlers
 
 open System
-open System.Threading.Tasks
-open DotNetLightning.Utils
-open FSharp.Control.Tasks
-open Microsoft.AspNetCore.Http
-open Giraffe
-open Giraffe.Core
-open Microsoft.Extensions.Options
+open DotNetLightning.Utils.Primitives
+open FsToolkit.ErrorHandling
 open NBitcoin
 open NLoop.Domain
-open NLoop.Domain.IO
-open NLoop.Domain.Utils
-open NLoop.Server.Actors
-open NLoop.Server.RPCDTOs
-open FsToolkit.ErrorHandling
+
+open NLoop.Server
+open NLoop.Server.Handlers
 open NLoop.Server.Options
+open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
-open NLoop.Server.SwapServerClient
-let getLiquidityParams (offChainAsset: SupportedCryptoCode) : HttpHandler =
-  fun (next: HttpFunc) (ctx: HttpContext) -> task {
-    match ctx.GetService<TryGetAutoLoopManager>() offChainAsset with
-    | None -> return! errorBadRequest [$"off chain asset {offChainAsset} not supported"] next ctx
+
+
+let handleGetLiquidityParams
+  (tryGetAutoLoopManager: TryGetAutoLoopManager)
+  offChainAsset
+  =
+  task {
+    match tryGetAutoLoopManager offChainAsset with
+    | None ->
+      return
+        [$"off chain asset {offChainAsset} not supported"]
+        |> HandlerError.InvalidRequest |> Error
     | Some man ->
     match man.Parameters with
-    | None -> return! errorBadRequest [$"no parameter for {offChainAsset} has been set yet."] next ctx
+    | None ->
+      return
+        [$"no parameter for {offChainAsset} has been set yet."]
+        |> HandlerError.InvalidRequest |> Error
     | Some p ->
     let resp = {
       LiquidityParameters.Rules = p.Rules.ToDTO()
@@ -67,10 +71,10 @@ let getLiquidityParams (offChainAsset: SupportedCryptoCode) : HttpHandler =
             MaxPrepay = f.MaximumPrepay |> ValueSome
         }
       | x -> failwith $"unknown type of FeeLimit {x}"
-    return! json resp next ctx
+    return Ok resp
   }
-
-let dtoToFeeLimit
+  
+let private dtoToFeeLimit
   (offChain: CryptoCodeDefaultOffChainParams, onChain: CryptoCodeDefaultOnChainParams)
   (r: LiquidityParameters): Result<IFeeLimit, _> =
   let isFeePPM = r.FeePPM.IsSome
@@ -115,21 +119,31 @@ let dtoToFeeLimit
     Error "no fee categories set"
 
 let setLiquidityParamsCore
+  (tryGetAutoLoopManager: TryGetAutoLoopManager)
   (offchainAsset: SupportedCryptoCode)
-  { SetLiquidityParametersRequest.Parameters = req }: HttpHandler =
-  fun (next: HttpFunc) (ctx: HttpContext) -> task {
+  { SetLiquidityParametersRequest.Parameters = req } =
+  task {
     let onChainAsset = req.OnChainAsset |> ValueOption.defaultValue SupportedCryptoCode.BTC
-    match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
-    | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
+    match tryGetAutoLoopManager offchainAsset with
+    | None ->
+      return
+        [$"No AutoLoopManager for offchain asset {offchainAsset}"]
+        |> HandlerError.InvalidRequest
+        |> Error
     | Some man ->
     match req.Rules |> Seq.map(fun r -> r.Validate()) |> Seq.toList |> List.sequenceResultA with
     | Error errs ->
-      return! errorBadRequest errs next ctx
+      return
+        errs
+        |> HandlerError.InvalidRequest
+        |> Error
     | Ok _ ->
     match dtoToFeeLimit (offchainAsset.DefaultParams.OffChain, onChainAsset.DefaultParams.OnChain) req with
     | Error e ->
-      return!
-        errorBadRequest [e] next ctx
+      return
+        [e]
+        |> HandlerError.InvalidRequest
+        |> Error
     | Ok feeLimit ->
       let p = {
         Parameters.Rules =
@@ -155,58 +169,63 @@ let setLiquidityParamsCore
         OnChainAsset =
           onChainAsset
       }
-      match! man.SetParameters p with
-      | Ok () ->
-        if req.AutoMaxInFlight > 2 then
-          let msg = "autoloop is experimental, usually it is not good idea to set auto_max_inflight larger than 2"
-          return! json {| warn = msg |} next ctx
-        else
-          return! json {||} next ctx
-      | Error e ->
-        return!
-          errorBadRequest [e.Message] next ctx
+      return!
+        man.SetParameters p
+        |> TaskResult.mapError(fun e -> [e.Message] |> HandlerError.InvalidRequest)
   }
-let setLiquidityParams
+let handleSetLiquidityParams
+  lnClientProvider
+  tryGetAutoLoopManager
+  (req: SetLiquidityParametersRequest)
   (maybeOffChainAsset: SupportedCryptoCode option)
-  (req: SetLiquidityParametersRequest) : HttpHandler =
-  let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
-  let targets =
-    req.Parameters.Targets
-  (checkWeHaveChannel offchainAsset targets.Channels)
-    >=> setLiquidityParamsCore offchainAsset req
+  =
+  taskResult {
+    let offchainAsset = defaultArg maybeOffChainAsset SupportedCryptoCode.BTC
+    let targets =
+      req.Parameters.Targets
+    do! checkWeHaveChannel offchainAsset targets.Channels lnClientProvider
+    return! setLiquidityParamsCore tryGetAutoLoopManager offchainAsset req
+  }
 
-let suggestSwaps (maybeOffchainAsset: SupportedCryptoCode option): HttpHandler =
-  fun (next: HttpFunc) (ctx: HttpContext) -> task {
+let handleSuggestSwaps
+  (tryGetAutoLoopManager: TryGetAutoLoopManager)
+  (maybeOffchainAsset: SupportedCryptoCode option) =
+  task {
     let offchainAsset = defaultArg maybeOffchainAsset SupportedCryptoCode.BTC
-    match ctx.GetService<TryGetAutoLoopManager>()(offchainAsset) with
-    | None -> return! errorBadRequest[$"No AutoLoopManager for offchain asset {offchainAsset}"] next ctx
+    match tryGetAutoLoopManager(offchainAsset) with
+    | None ->
+      return
+        [$"No AutoLoopManager for offchain asset {offchainAsset}"]
+        |> HandlerError.InvalidRequest
+        |> Error
     | Some man ->
     match! man.SuggestSwaps false with
     | Error e ->
-      return! error503 e next ctx
+      return
+        e.Message |> HandlerError.InternalError |> Error
     | Ok suggestion ->
-      let d =
-        let channelD =
-          suggestion.DisqualifiedChannels
-          |> Seq.map(fun kv -> {
-            Disqualified.Reason = kv.Value.Message
-            ChannelId = kv.Key |> ValueSome
-            PubKey = ValueNone })
-        let peerD =
-          suggestion.DisqualifiedPeers
-          |> Seq.map(fun kv -> {
-            Disqualified.Reason = kv.Value.Message
-            ChannelId = ValueNone
-            PubKey = kv.Key.Value |> ValueSome })
-        seq [ channelD; peerD ]
-        |> Seq.concat
-        |> Seq.toArray
-      let resp = {
-        SuggestSwapsResponse.Disqualified = d
-        LoopOut =
-          suggestion.OutSwaps |> List.toArray
-        LoopIn =
-          suggestion.InSwaps |> List.toArray
-      }
-      return! json resp next ctx
+      return
+        {
+          SuggestSwapsResponse.Disqualified =
+            let channelD =
+              suggestion.DisqualifiedChannels
+              |> Seq.map(fun kv -> {
+                Disqualified.Reason = kv.Value.Message
+                ChannelId = kv.Key |> ValueSome
+                PubKey = ValueNone })
+            let peerD =
+              suggestion.DisqualifiedPeers
+              |> Seq.map(fun kv -> {
+                Disqualified.Reason = kv.Value.Message
+                ChannelId = ValueNone
+                PubKey = kv.Key.Value |> ValueSome })
+            seq [ channelD; peerD ]
+            |> Seq.concat
+            |> Seq.toArray
+          LoopOut =
+            suggestion.OutSwaps |> List.toArray
+          LoopIn =
+            suggestion.InSwaps |> List.toArray
+        }
+        |> Ok
   }

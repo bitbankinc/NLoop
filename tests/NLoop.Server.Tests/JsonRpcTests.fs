@@ -73,3 +73,9 @@ type JsonRpcTests() =
         server.StartAsync(outStream, inStream, cts.Token)
       ()
     }
+
+  [<Fact>]
+  member this.GetTest() =
+    task {
+      ()
+    }

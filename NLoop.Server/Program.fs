@@ -35,9 +35,7 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
-open NLoop.Server.LoopHandlers
-open NLoop.Server.ProcessManagers
-open NLoop.Server.Projections
+open NLoop.Server.Pipelines
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
@@ -60,43 +58,43 @@ module App =
     choose [
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> QueryHandlers.handleGetInfo
+          route "/info" >=> QueryPipelines.getInfoPipeline
           route "/version" >=> json Constants.AssemblyVersion
         subRoute "/loop" (choose [
           POST >=>
-            route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
-            route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> handleLoopIn
+            route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> LoopPipelines.loopOutPipeline
+            route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> LoopPipelines.loopInPipeline
         ])
         subRoute "/swaps" (choose [
           GET >=>
-            route "/history" >=> QueryHandlers.handleGetSwapHistory
-            route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
-            routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+            route "/history" >=> QueryPipelines.getSwapHistoryPipeline
+            route "/ongoing" >=> QueryPipelines.getOngoingSwapPipeline
+            routef "/%s" (SwapId.SwapId >> QueryPipelines.getSwapPipeline)
         ])
         subRoute "/cost" (choose [
           GET >=>
-            route "/summary" >=> QueryHandlers.handleGetCostSummary
+            route "/summary" >=> QueryPipelines.getCostSummaryPipeline
         ])
         subRoute "/auto" (choose [
           GET >=>
-            route "/suggest" >=> (AutoLoopHandlers.suggestSwaps None)
-            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopHandlers.suggestSwaps)
+            route "/suggest" >=> (AutoLoopPipelines.suggestSwapsPipeline None)
+            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopPipelines.suggestSwapsPipeline)
         ])
         subRoute "/liquidity" (choose [
           route "/params" >=> choose [
-            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
-            GET >=> AutoLoopHandlers.getLiquidityParams SupportedCryptoCode.BTC
+            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopPipelines.setLiquidityParamsPipeline None)
+            GET >=> AutoLoopPipelines.getLiquidityParamsPipeline SupportedCryptoCode.BTC
           ]
           GET >=> routef "/params/%s" (fun s ->
             s.ToUpperInvariant()
             |> SupportedCryptoCode.Parse
-            |> AutoLoopHandlers.getLiquidityParams
+            |> AutoLoopPipelines.getLiquidityParamsPipeline
           )
           POST >=> routef "/params/%s" (fun offChain ->
             offChain.ToUpperInvariant()
             |> SupportedCryptoCode.Parse
             |> Some
-            |> AutoLoopHandlers.setLiquidityParams
+            |> AutoLoopPipelines.setLiquidityParamsPipeline
             |> bindJson<SetLiquidityParametersRequest>
           )
         ])
@@ -226,21 +224,17 @@ module Configurations =
 type ConfigurationExtension =
 
   [<Extension>]
-  static member ConfigureAsPlugin(hostBuilder: IHostBuilder, outputStream) =
+  static member ConfigureAsPlugin(hostBuilder: IHostBuilder, outputStream, ?coldStart) =
+    let coldStart = defaultArg coldStart false
     hostBuilder
       .ConfigureLogging(configureJsonRpcLogging outputStream)
-      .ConfigureServices(App.configureServices false None)
+      .ConfigureServices(App.configureServices coldStart None)
       .ConfigureServices(fun serviceCollection ->
         serviceCollection
           .AddSingleton<ILogger, Logger<ConfigurationExtension>>() // for startup logging
           .AddSingleton<NLoopJsonRpcServer>()
           .AddSingleton<NLoopOptionsHolder>()
           .AddSingleton<ILightningClientProvider, ClnLightningClientProvider>()
-          (*
-          .AddSingleton<PluginServerBase>(fun sp ->
-            sp.GetRequiredService<NLoopJsonRpcServer>() :> PluginServerBase
-          )
-          *)
           |> ignore
     )
 
