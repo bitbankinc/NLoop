@@ -1,20 +1,12 @@
 namespace NLoop.Server.Tests
 
 open System
-open System.Threading
-open System.Threading.Tasks
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
-open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Hosting
-open Microsoft.Extensions.Logging
-open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
-open NBitcoin.DataEncoders
 open NLoop.Domain
 open NLoop.Server
-open NLoop.Server.Services
 open Xunit
 
 [<AutoOpen>]

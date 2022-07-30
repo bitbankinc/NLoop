@@ -21,7 +21,6 @@ open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NLoop.Server
 open NLoop.Server.SwapServerClient
-open NLoop.Server.SwapServerClient
 open Xunit
 
 open NLoop.Domain

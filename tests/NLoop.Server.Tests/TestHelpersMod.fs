@@ -3,17 +3,13 @@ namespace NLoop.Server.Tests
 open System
 open System.Collections.Generic
 open System.CommandLine.Parsing
-open System.Net
 open System.Net.Http
-open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open System.IO
 open System.Security.Cryptography
 open System.Security.Cryptography.X509Certificates
 open System.CommandLine.Binding
-open System.CommandLine.Builder
-open System.CommandLine.Parsing
 
 open BoltzClient
 open EventStore.ClientAPI
@@ -33,14 +29,11 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 
-open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.SwapServerClient
-open NLoop.Server.Projections
-
 
 module TestHelpersMod =
   let getLocalBoltzClient() =

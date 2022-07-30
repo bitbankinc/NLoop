@@ -4,9 +4,7 @@ open System
 open System.Threading
 open System.Threading.Tasks
 open DotNetLightning.Utils
-open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Logging
 open NBitcoin
 open NLoop.Domain
 open NLoop.Domain.Utils
@@ -34,7 +32,7 @@ type SwapExecutorTest() =
       let swapExecutor =
         provider.GetRequiredService<ISwapActor>()
 
-      let swapId = SwapId(if useInMemoryDB then "test-swap-id" else (Guid.NewGuid().ToString()))
+      let swapId = SwapId(if useInMemoryDB then "test-swap-id" else Guid.NewGuid().ToString())
       let b =
         { Height = BlockHeight.Zero
           Block =
