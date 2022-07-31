@@ -337,7 +337,12 @@ type NLoopJsonRpcServer
           (sp.GetRequiredService<_>())
           req
           (offchainAsset |> convertDTOToNLoopCompatibleStyle |> Some)
-      return r |> Result.unwrap
+      do r |> Result.unwrap
+      return
+        if req.Parameters.AutoMaxInFlight > 2 then
+          "autoloop is experimental, usually it is not a good idea to set auto_max_inflight larger than 2"
+        else
+          null
     } :> Task
     
   [<PluginJsonRpcMethod(

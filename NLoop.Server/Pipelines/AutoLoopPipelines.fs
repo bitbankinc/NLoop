@@ -30,12 +30,12 @@ let setLiquidityParamsPipeline
       match r with
       | Ok() ->
         if req.Parameters.AutoMaxInFlight > 2 then
-          let msg = "autoloop is experimental, usually it is not good idea to set auto_max_inflight larger than 2"
+          let msg = "autoloop is experimental, usually it is not a good idea to set auto_max_inflight larger than 2"
           return! json {| warn = msg |} next ctx
         else
           return! json {||} next ctx
-      | Error e ->
-        return! handleHandlerError next ctx (Error e)
+      | e ->
+        return! handleHandlerError next ctx e
     }
 
 let suggestSwapsPipeline (maybeOffchainAsset: SupportedCryptoCode option): HttpHandler =
