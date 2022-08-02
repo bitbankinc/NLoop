@@ -218,31 +218,60 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
           return Error($"Failed to pay status: {resp.Status}")
       }
 
-    member this.QueryRoutes(nodeId, amount, _maybeOutgoingChanId, ct) =
+    member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
-        let! resp =
+        
+        let! channels =
           let req = {
-            GetrouteRequest.Id = nodeId
-            Msatoshi = amount.MilliSatoshi |> unbox
-            Riskfactor = 1UL
-            Cltv = None
-            Fromid = None
-            Fuzzpercent = None
-            Exclude = None
-            Maxhops = None
+            ShortChannelId =
+              maybeOutgoingChanId
+            Source = None
+            ListchannelsRequest.Destination =
+              // we cannot specify both channel id and destination id
+              if maybeOutgoingChanId.IsNone then 
+                Some nodeId
+              else
+                None
           }
-          cli.GetRouteAsync(req, ct)
-        let hop =
-          resp.Route
-          |> Seq.map(fun r -> {
-            RouteHop.Fee = r.AmountMsat |> int64 |> LNMoney.MilliSatoshis
-            PubKey = r.Id
-            ShortChannelId = r.Channel
-            CLTVExpiryDelta = r.Delay
-          })
-          |> Seq.toList
-        return Route.Route(hop)
+          cli.ListChannelsAsync(req, ct)
+          
+        match channels.Channels |> Seq.tryExactlyOne with
+        | Some channel when channel.Active ->
+          return
+            [{
+              PubKey = channel.Source
+              ShortChannelId = channel.ShortChannelId
+              RouteHop.Fee =
+                let baseFee = channel.BaseFeeMillisatoshi |> LNMoney.MilliSatoshis
+                let proportionalFee = (channel.FeePerMillionth |> LNMoney.MilliSatoshis) * amount
+                (baseFee + proportionalFee)
+              CLTVExpiryDelta = channel.Delay
+            }]
+            |> Route.Route
+        | _ ->
+          let! resp =
+            let req = {
+              GetrouteRequest.Id = nodeId
+              Msatoshi = amount.MilliSatoshi |> unbox
+              Riskfactor = 1UL
+              Cltv = None
+              Fromid = None
+              Fuzzpercent = None
+              Exclude = None
+              Maxhops = None
+            }
+            cli.GetRouteAsync(req, ct)
+          let hop =
+            resp.Route
+            |> Seq.map(fun r -> {
+              RouteHop.Fee = r.AmountMsat |> int64 |> LNMoney.MilliSatoshis
+              PubKey = r.Id
+              ShortChannelId = r.Channel
+              CLTVExpiryDelta = r.Delay
+            })
+            |> Seq.toList
+          return Route.Route(hop)
       }
     member this.SendPayment(req, ct) =
       backgroundTask {
