@@ -6,8 +6,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DotNetLightning" Version="1.1.2-date20220801-0306-git-0b8df06" />
-    <PackageReference Include="DotNetLightning.ClnRpc" Version="1.1.2-date20220801-0307-git-0b8df06" />
+    <PackageReference Include="DotNetLightning" Version="1.1.2-date20220802-0848-git-627234c" />
+    <PackageReference Include="DotNetLightning.ClnRpc" Version="1.1.2-date20220802-0849-git-627234c" />
     <PackageReference Include="FsToolKit.ErrorHandling" Version="2.1.2" />
     <PackageReference Include="FsToolKit.ErrorHandling.TaskResult" Version="2.1.2" />
     <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.0.3" />
