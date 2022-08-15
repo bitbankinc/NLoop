@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Threading
 open System.Threading.Tasks
+open DotNetLightning.ClnRpc.Responses
 open DotNetLightning.Utils.Primitives
 open DotNetLightning.ClnRpc
 open DotNetLightning.ClnRpc.Requests
@@ -18,7 +19,11 @@ open NBitcoin.DataEncoders
 module private CLightningHelpers =
   let hex = HexEncoder()
 
-type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLightningClient>) =
+type NLoopCLightningClient(
+    uri: Uri,
+    network: Network,
+    logger: ILogger<NLoopCLightningClient>
+  ) =
   let cli =  ClnClient(network, uri)
 
   interface INLoopLightningClient with
@@ -71,7 +76,7 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
             else listChannelChannel.Destination
           TimeLockDelta =
             // cltv_expiry_delta must be `u16` according to the [bolt07](https://github.com/lightning/bolts/blob/master/07-routing-gossip.md)
-            channel.OurToSelfDelay
+            channel.TheirToSelfDelay
             |> Option.defaultWith(fun _ -> failwith "bogus listpeers. channel has no our_to_self_delay")
             |> uint16 |> BlockHeightOffset16
           MinHTLC =
@@ -189,18 +194,158 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
                     }
           ]
       }
-    member this.Offer(req, ct) =
+    member this.Offer(req, _ct) =
       backgroundTask {
-        let ct = defaultArg ct CancellationToken.None
-
-        let! resp =
+        let _ct = defaultArg _ct CancellationToken.None
+        use cts = CancellationTokenSource.CreateLinkedTokenSource(_ct)
+        cts.CancelAfter(TimeSpan.FromSeconds (float (req.TimeoutSeconds + 10)))
+        
+        let amountMsat =
+          match req.Invoice.AmountValue with
+          | Some a -> a.MilliSatoshi |> unbox
+          | None -> failwith "Unreachable: amount value not specified"
+        let partId = 0us
+        let now = DateTime.Now.ToString("yyyyMMdd_HHmmss")
+        let getRoute() =
+          task {
+            let req =
+              {
+                GetrouteRequest.Id = req.Invoice.NodeIdValue.Value
+                Msatoshi = amountMsat
+                Riskfactor = 10UL // no big reason for this value
+                Cltv = None // req.Invoice.MinFinalCLTVExpiryDelta.Value |> int64 |> Some
+                Fromid = None
+                Fuzzpercent = None
+                Exclude = None
+                Maxhops = None
+              }
+            
+            let! resp =
+              cli.GetRouteAsync(req, ct = cts.Token)
+            return
+              resp.Route
+              |> Array.map(fun r ->
+                {
+                  SendpayRoute.Channel = r.Channel
+                  Msatoshi = r.AmountMsat
+                  Id = r.Id
+                  Delay = r.Delay |> uint16
+                }
+              )
+          }
+        let sendpay (route: Requests.SendpayRoute[]) =
+          logger.LogInformation $"Offer.Sendpay: route: {route.[0]}"
+          let r =
+            {
+              Route = route
+              PaymentHash = req.Invoice.PaymentHash.Value.ToBytes(false) |> uint256
+              Label =
+                match req.Invoice.Description with
+                | Choice1Of2 i ->
+                  // c-lightning does not allow us to use same label twice.
+                  (i + $"-NLoop_Offer-{now}-{Guid.NewGuid()}") |> Some
+                | _ -> 
+                  None
+              Msatoshi = amountMsat |> Some
+              SendpayRequest.Bolt11 = req.Invoice.ToString() |> Some
+              PaymentSecret =
+                req.Invoice.PaymentSecret
+                |> Option.map(fun h -> new Key(h.ToBytes()))
+              // we are not running mpp, so this seems optional.
+              // but without it, c-lightning does not use mpp-specific packets,
+              // and since lnd does not accept the packet which is not mpp compatible,
+              // this is necessary when paying to lnd
+              Partid = partId |> Some
+              Localofferid = None
+              Groupid = None
+            }
+          logger.LogInformation $"Offer.Sendpay: payment_secret {req.Invoice.PaymentSecret}"
+          cli.SendPayAsync(r, ct = cts.Token)
+          
+        // getroute rpc is too coarse that we may not be able get
+        // the response for a direct payment.
+        let getDirectRoute() =
+          task {
+            let! listPeersResp =
+              let req = {
+                ListpeersRequest.Id = None
+                Level = None
+              }
+              cli.ListPeersAsync(req, ct = cts.Token)
+              
+            let peerId = req.Invoice.NodeIdValue.Value
+            let maybePeer =
+              listPeersResp.Peers
+              |> Array.tryFind(fun resp -> resp.Id = peerId)
+              
+            match maybePeer with
+            | None -> return [||]
+            | Some peer ->
+              let maybePossibleChannels =
+                peer.Channels
+                |> Array.filter(fun c ->
+                  c.State = ListpeersPeersChannelsState.CHANNELD_NORMAL
+                  && c.SpendableMsat.Value > amountMsat
+                )
+              match maybePossibleChannels |> Seq.tryHead with
+              | None ->
+                return [||]
+              | Some c ->
+                match c.ShortChannelId with
+                | None -> return raise <| exn "no short channel id in listpeers response"
+                | Some scid ->
+                  match c.TheirToSelfDelay with
+                  | None -> return raise <| exn "No their_to_self_delay field in listpeers response"
+                  | Some delay ->
+                    let resp = {
+                      Msatoshi = amountMsat
+                      Id = peer.Id
+                      Delay = delay |> uint16
+                      SendpayRoute.Channel = scid
+                    }
+                    logger.LogDebug $"Offer: direct pay route {resp}"
+                    return [| resp |]
+          }
+          
+        let _sendpay_attempt(): Task<SendpayResponse> = task {
+          logger.LogDebug $"Offer: attempting payment for {req.Invoice.ToString()}"
+          let mutable result = None
+          let mutable i = 0
+          let! directRoute = getDirectRoute()
+          if directRoute |> Seq.isEmpty |> not then
+            let! resp = sendpay(directRoute)
+            result <- Some resp
+          while result.IsNone do
+            i <- i + 1
+            cts.Token.ThrowIfCancellationRequested()
+            try
+              let! route = getRoute()
+              if route |> Seq.isEmpty then
+                ()
+              else
+                let! resp =
+                  sendpay(route)
+                result <- Some resp
+            with
+            | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.ROUTE_NOT_FOUND && i < 10 ->
+              // getroute involves a randomness, so it might succeed with a different parameter.
+              logger.LogInformation $"Offer: Failed to find route, trying again..."
+              
+          return result.Value
+        }
+        
+        let pay () =
+          logger.LogDebug $"Offer: attempting payment for {req.Invoice.ToString()}"
           let r = {
             PayRequest.Bolt11 = req.Invoice.ToString()
             Msatoshi = None
             Label =
               match req.Invoice.Description with
-              | Choice1Of2 i -> i |> Some
-              | _ -> None
+              | Choice1Of2 i ->
+                // c-lightning does not allow us to use same label twice.
+                (i + $"-NLoop_Offer-{now}-{Guid.NewGuid()}") |> Some
+              | _ -> 
+                None
             Riskfactor = None
             Maxfeepercent = None
             RetryFor = None
@@ -208,14 +353,33 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
             Exemptfee = None
             Localofferid = None
             Exclude = None
-            Maxfee = None
+            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox<int64<msat>> |> Some
             Description = None
           }
-          cli.PayAsync(r, ct = ct)
-        if resp.Status = Responses.PayStatus.COMPLETE then
-          return Ok()
+          cli.PayAsync(r, ct = cts.Token)
+        let _sendPayResponse =
+          pay()
+          //sendpay_attempt()
+        (*
+        cts.Token.ThrowIfCancellationRequested()
+        if sendPayResponse.Status = PayStatus.COMPLETE then
+          return Ok ()
         else
-          return Error($"Failed to pay status: {resp.Status}")
+        *)
+        try
+          let _waitSendpayResp =
+            let req = {
+              PaymentHash = req.Invoice.PaymentHash.Value.ToBytes(false) |> uint256
+              Timeout = req.TimeoutSeconds |> uint32 |> Some
+              Partid = partId |> uint64 |> Some
+              WaitsendpayRequest.Groupid = None
+            }
+            cli.WaitSendPayAsync(req, ct = cts.Token)
+          // logger.LogDebug $"Offer: waitsendpay for {_waitSendpayResp.Bolt11} finished successfully"
+          return Ok()
+        with
+        | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.WAIT_TIMEOUT ->
+          return Error($"Failed to pay: {e}")
       }
 
     member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
@@ -277,11 +441,13 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
         if req.Invoice.AmountValue.IsNone then return raise <| InvalidDataException $"Invoice has no amount specified" else
+        let amountMsat = 
+          req.Invoice.AmountValue.Value.MilliSatoshi |> unbox
         let maxFeePercent = req.Invoice.AmountValue.Value.Satoshi / req.MaxFee.Satoshi
         let! resp =
           let r  = {
             PayRequest.Bolt11 = req.Invoice.ToString()
-            Msatoshi = req.Invoice.AmountValue.Value.MilliSatoshi |> unbox
+            Msatoshi = amountMsat
             Label = None
             Riskfactor = None
             Maxfeepercent = Some maxFeePercent
@@ -290,7 +456,7 @@ type NLoopCLightningClient(uri: Uri, network: Network, logger: ILogger<NLoopCLig
             Exemptfee = None
             Localofferid = None
             Exclude = None
-            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox
+            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox |> Some
             Description = None
           }
           cli.PayAsync(r, ct)

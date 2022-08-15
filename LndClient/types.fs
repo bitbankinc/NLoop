@@ -195,7 +195,7 @@ type INLoopLightningClient =
   /// Send payment to the counterparty, expect to finish immediately.
   abstract member SendPayment: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
 
-  /// Make an payment offer to the counterparty, do not expect immediately.
+  /// Make an payment offer to the counterparty, do not expect to finish immediately.
   abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<OfferResult, string>>
   abstract member GetInfo: ?ct: CancellationToken -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken ->

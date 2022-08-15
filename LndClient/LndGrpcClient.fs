@@ -430,7 +430,8 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
   member this.Offer(param, ct) = task {
     let ct = defaultArg ct CancellationToken.None
     let responseStream =
-      let req = SendPaymentRequest()
+      let req =
+        SendPaymentRequest()
       req.PaymentRequest <- param.Invoice.ToString()
       req.OutgoingChanIds.AddRange(param.OutgoingChannelIds |> Seq.map(fun c -> c.ToUInt64()))
       req.FeeLimitSat <- param.MaxFee.Satoshi
