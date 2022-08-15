@@ -55,7 +55,7 @@ paths:
   /v1/swaps/history:
     get:
       description:
-        Get the full history of swas. This might take long if you have a lots of entries in a database.
+        Get the full history of swaps. This might take long if you have a lots of entries in a database.
       tags:
         - swap
       parameters:
