@@ -133,7 +133,7 @@ type NLoopJsonRpcServer
     optionsHolder: NLoopOptionsHolder,
     sp: IServiceProvider
   ) as this =
-  inherit PluginServerBase(Swap.AllTagEvents, false, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
+  inherit PluginServerBase(Swap.AllTagEvents, true, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
   let logger: ILogger<NLoopJsonRpcServer> = loggerFactory.CreateLogger<_>()
   
 
@@ -142,8 +142,8 @@ type NLoopJsonRpcServer
     |> Observable.flatmapTask(fun re ->
       backgroundTask {
         try
-          use! _releaser = this.AsyncSemaphore.EnterAsync()
           do! this.SendNotification(re.Data.Type, [|re|])
+          ()
         with
         | ex ->
           logger.LogError(ex, "Failed to send CLightning notification")
@@ -217,7 +217,7 @@ type NLoopJsonRpcServer
   [<PluginJsonRpcMethod("nloop_loopout", "initiate loopout swap", "initiate loop out swap")>]
   member this.LoopOut(req: NLoopClient.LoopOutRequest): Task<NLoopClient.LoopOutResponse> =
     backgroundTask {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
+      logger.LogInformation $""
       let req: LoopOutRequest = convertDTOToNLoopCompatibleStyle req
       let! r =
         LoopHandlers.handleLoopOut
@@ -234,7 +234,6 @@ type NLoopJsonRpcServer
   [<PluginJsonRpcMethod("nloop_loopin", "initiate loop in swap", "initiate loop in swap")>]
   member this.LoopIn(req: NLoopClient.LoopInRequest) : Task<NLoopClient.LoopInResponse> =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let req: LoopInRequest = convertDTOToNLoopCompatibleStyle req
       let! r =
         LoopHandlers.handleLoopIn
@@ -252,7 +251,6 @@ type NLoopJsonRpcServer
     )>]
   member this.GetInfo(): Task<NLoopClient.GetInfoResponse> =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       return
         QueryHandlers.handleGetInfo
         |> convertDTOToJsonRPCStyle
@@ -265,7 +263,6 @@ type NLoopJsonRpcServer
   )>]
   member this.SwapHistory(since): Task<NLoopClient.GetSwapHistoryResponse>  =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let! r =
         QueryHandlers.handleGetSwapHistory
           (sp.GetRequiredService<_>())
@@ -280,7 +277,6 @@ type NLoopJsonRpcServer
   )>]
   member this.OngoingSwaps(): Task<NLoopClient.GetOngoingSwapResponse>  =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       return
         QueryHandlers.handleGetOngoingSwap
           (sp.GetRequiredService<_>())
@@ -294,7 +290,6 @@ type NLoopJsonRpcServer
   )>]
   member this.SwapCostSummary(since): Task<NLoopClient.GetCostSummaryResponse> =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let! r =
         QueryHandlers.handleGetCostSummary
           since
@@ -310,7 +305,6 @@ type NLoopJsonRpcServer
     )>]
   member this.Get_LiquidityParams(offChainAsset: NLoopClient.CryptoCode): Task<NLoopClient.LiquidityParameters> =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let! r =
         AutoLoopHandlers.handleGetLiquidityParams
           (sp.GetRequiredService<_>())
@@ -329,7 +323,6 @@ type NLoopJsonRpcServer
       [<O;DefaultParameterValue(NLoopClient.CryptoCode.BTC)>]offchainAsset: NLoopClient.CryptoCode
     ): Task =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let req: SetLiquidityParametersRequest  = convertDTOToNLoopCompatibleStyle liquidityParameters
       let! r =
         AutoLoopHandlers.handleSetLiquidityParams
@@ -355,7 +348,6 @@ type NLoopJsonRpcServer
   member this.SuggestSwaps([<O;DefaultParameterValue(NLoopClient.CryptoCode.BTC)>]cryptoCode: NLoopClient.CryptoCode):
     Task<NLoopClient.SuggestSwapsResponse> =
     task {
-      use! _releaser = this.AsyncSemaphore.EnterAsync()
       let! r =
         AutoLoopHandlers.handleSuggestSwaps
           (sp.GetRequiredService<_>())

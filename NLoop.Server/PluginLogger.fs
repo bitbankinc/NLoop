@@ -78,7 +78,8 @@ type PluginLogger
                         for item in [
                             ("code", code |> box)
                             ("message", msg)
-                            ("traceback", (if ex |> isNull then null else ex.StackTrace |> box))
+                            ("traceback",
+                             (if ex |> isNull then null else ex.StackTrace |> box))
                         ] do
                             d.Add(item)
                         d
