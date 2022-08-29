@@ -16,7 +16,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-18.04, windows-latest, macos-latest]
-        dotnet: ['6.0.200']
+        dotnet: ['6.0.400']
         include:
           - os: ubuntu-18.04
             RID: linux-x64
