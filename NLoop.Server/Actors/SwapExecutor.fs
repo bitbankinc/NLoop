@@ -228,7 +228,7 @@ type SwapExecutor(
           let label =
             loopIn.Label
             |> Option.defaultValue String.Empty
-            |> fun s -> s + $"(id: {(Guid().ToString())})"
+            |> fun s -> s + $"(id: {(Guid.NewGuid().ToString())})"
           invoiceProvider.GetAndListenToInvoice(
             group.OffChainAsset,
             preimage,

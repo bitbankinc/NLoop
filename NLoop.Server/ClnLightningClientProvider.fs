@@ -24,13 +24,15 @@ type ClnLightningClientProvider(
                     let rpc = opts.ClnRpcFile
                     if rpc |> isNull then failwith "cln rpc file not set." else
                     let uri = Uri($"unix://{rpc}")
-                    NLoopCLightningClient(uri, opts.GetNetwork(cc), loggerFactory.CreateLogger<_>())
+                    let chainRpc = opts.GetRPCClient(cc)
+                    NLoopCLightningClient(uri, opts.GetNetwork(cc), chainRpc, loggerFactory.CreateLogger<_>())
                     :> INLoopLightningClient
                 clients.Add(cc, cli)
             clients
         )
         
     interface ILightningClientProvider with
+        member this.Name = "c-lightning"
         member this.GetAllClients() =
             this.AllClients.Value.Values
             

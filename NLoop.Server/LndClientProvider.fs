@@ -51,6 +51,7 @@ type LndClientProvider(logger: ILogger<LndClientProvider>,
     }
 
   interface ILightningClientProvider with
+    member this.Name = "lnd"
     member this.TryGetClient(crypto: SupportedCryptoCode) =
       match clients.TryGetValue(crypto) with
       | true, v -> v |> Some

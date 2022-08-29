@@ -296,7 +296,6 @@ type NLoopLndGrpcClient(settings: LndGrpcSettings, network: Network) =
     |> AsyncSeq.ofAsyncEnum
     |> AsyncSeq.map(fun inv ->
       { IncomingInvoiceSubscription.InvoiceState = inv.State |> translateEnum
-        IncomingInvoiceSubscription.PaymentRequest = inv.PaymentRequest |> PaymentRequest.Parse |> ResultUtils.Result.deref
         IncomingInvoiceSubscription.AmountPayed = inv.ValueMsat |> LNMoney.MilliSatoshis
       }
     )

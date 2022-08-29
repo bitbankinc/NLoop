@@ -9,8 +9,23 @@ open System.Threading
 open DotNetLightning.ClnRpc.Plugin
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
+open NBitcoin
 open NLoop.Server
+open StreamJsonRpc
 open Xunit
+open DotNetLightning.ClnRpc.NewtonsoftJsonConverters
+
+[<AbstractClass>]
+type JsonRpcTestBase() =
+  member this.GetClientProxy<'T when 'T: not struct>(pipe: Stream) =
+    let handler =
+      let formatter = new JsonMessageFormatter()
+      formatter.JsonSerializer.Converters.AddDNLJsonConverters(Network.RegTest)
+      new NewLineDelimitedMessageHandler(pipe, pipe, formatter)
+    JsonRpc.Attach<'T>(handler)
+    
+  member this.CreateRpcServer<'T when 'T: not struct>(server: 'T, pipe: Stream) =
+    ()
 
 type JsonRpcTests() =
   let utf8 = UTF8Encoding.UTF8

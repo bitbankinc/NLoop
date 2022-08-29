@@ -132,17 +132,17 @@ type NLoopJsonRpcServer
     applicationLifetime: IHostApplicationLifetime,
     optionsHolder: NLoopOptionsHolder,
     sp: IServiceProvider
-  ) as this =
+  ) as _this =
   inherit PluginServerBase(Swap.AllTagEvents, true, loggerFactory.CreateLogger<PluginServerBase>().LogDebug)
   let logger: ILogger<NLoopJsonRpcServer> = loggerFactory.CreateLogger<_>()
   
 
   let _subscription =
     eventAggregator.GetObservable<RecordedEvent<Swap.Event>>()
-    |> Observable.flatmapTask(fun re ->
+    |> Observable.flatmapTask(fun _re ->
       backgroundTask {
         try
-          do! this.SendNotification(re.Data.Type, [|re|])
+          // do! this.SendNotification(re.Data.Type, [|re|])
           ()
         with
         | ex ->
@@ -250,11 +250,9 @@ type NLoopJsonRpcServer
     "get nloop specific info"
     )>]
   member this.GetInfo(): Task<NLoopClient.GetInfoResponse> =
-    task {
-      return
-        QueryHandlers.handleGetInfo
-        |> convertDTOToJsonRPCStyle
-    }
+      QueryHandlers.handleGetInfo
+      |> convertDTOToJsonRPCStyle
+      |> Task.FromResult
 
   [<PluginJsonRpcMethod(
     "nloop_swaphistory",

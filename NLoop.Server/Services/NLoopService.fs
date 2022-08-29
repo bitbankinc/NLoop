@@ -205,8 +205,10 @@ type NLoopExtensions() =
         .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp cc ->
           let opts = sp.GetService<GetOptions>()()
           if opts.OffChainCrypto |> Array.contains cc then
-            sp.GetRequiredService<ILightningClientProvider>().GetClient(cc)
-            :?> NLoopLndGrpcClient :> IWalletClient
+            match sp.GetRequiredService<ILightningClientProvider>().GetClient(cc) with
+            | :? NLoopLndGrpcClient as c -> c :> IWalletClient
+            | :? NLoopCLightningClient as c -> c :> IWalletClient
+            | _ -> failwith "unreachable"
           else
             opts.GetWalletClient cc
           )

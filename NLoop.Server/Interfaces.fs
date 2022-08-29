@@ -22,6 +22,7 @@ type ISwapEventListener =
   abstract member RemoveSwap: swapId: SwapId -> unit
 
 type ILightningClientProvider =
+  abstract member Name: string
   abstract member TryGetClient: crypto: SupportedCryptoCode -> INLoopLightningClient option
   abstract member GetAllClients: unit -> INLoopLightningClient seq
 

@@ -157,7 +157,6 @@ type SwapIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> SwapId.SwapId
 
-
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]

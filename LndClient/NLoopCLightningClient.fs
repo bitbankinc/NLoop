@@ -14,6 +14,7 @@ open FSharp.Control
 open Microsoft.Extensions.Logging
 open NBitcoin
 open NBitcoin.DataEncoders
+open NBitcoin.RPC
 
 [<AutoOpen>]
 module private CLightningHelpers =
@@ -22,6 +23,7 @@ module private CLightningHelpers =
 type NLoopCLightningClient(
     uri: Uri,
     network: Network,
+    bitcoin: RPCClient,
     logger: ILogger<NLoopCLightningClient>
   ) =
   let cli =  ClnClient(network, uri)
@@ -126,7 +128,8 @@ type NLoopCLightningClient(
         let! resp =
           let req = {
             InvoiceRequest.Preimage = paymentPreimage.ToHex() |> Some
-            Msatoshi = AmountOrAny.Amount (amount.Satoshi |> unbox)
+            Msatoshi =
+              amount.MilliSatoshi |> unbox |> AmountOrAny.Amount
             Description = memo
             Label = memo
             Expiry = expiry.TotalSeconds |> uint64 |> Some
@@ -198,141 +201,8 @@ type NLoopCLightningClient(
       backgroundTask {
         let _ct = defaultArg _ct CancellationToken.None
         use cts = CancellationTokenSource.CreateLinkedTokenSource(_ct)
-        cts.CancelAfter(TimeSpan.FromSeconds (float (req.TimeoutSeconds + 10)))
-        
-        let amountMsat =
-          match req.Invoice.AmountValue with
-          | Some a -> a.MilliSatoshi |> unbox
-          | None -> failwith "Unreachable: amount value not specified"
-        let partId = 0us
+        cts.CancelAfter(TimeSpan.FromSeconds (float 2))
         let now = DateTime.Now.ToString("yyyyMMdd_HHmmss")
-        let getRoute() =
-          task {
-            let req =
-              {
-                GetrouteRequest.Id = req.Invoice.NodeIdValue.Value
-                Msatoshi = amountMsat
-                Riskfactor = 10UL // no big reason for this value
-                Cltv = None // req.Invoice.MinFinalCLTVExpiryDelta.Value |> int64 |> Some
-                Fromid = None
-                Fuzzpercent = None
-                Exclude = None
-                Maxhops = None
-              }
-            
-            let! resp =
-              cli.GetRouteAsync(req, ct = cts.Token)
-            return
-              resp.Route
-              |> Array.map(fun r ->
-                {
-                  SendpayRoute.Channel = r.Channel
-                  Msatoshi = r.AmountMsat
-                  Id = r.Id
-                  Delay = r.Delay |> uint16
-                }
-              )
-          }
-        let sendpay (route: Requests.SendpayRoute[]) =
-          logger.LogInformation $"Offer.Sendpay: route: {route.[0]}"
-          let r =
-            {
-              Route = route
-              PaymentHash = req.Invoice.PaymentHash.Value.ToBytes(false) |> uint256
-              Label =
-                match req.Invoice.Description with
-                | Choice1Of2 i ->
-                  // c-lightning does not allow us to use same label twice.
-                  (i + $"-NLoop_Offer-{now}-{Guid.NewGuid()}") |> Some
-                | _ -> 
-                  None
-              Msatoshi = amountMsat |> Some
-              SendpayRequest.Bolt11 = req.Invoice.ToString() |> Some
-              PaymentSecret =
-                req.Invoice.PaymentSecret
-                |> Option.map(fun h -> new Key(h.ToBytes()))
-              // we are not running mpp, so this seems optional.
-              // but without it, c-lightning does not use mpp-specific packets,
-              // and since lnd does not accept the packet which is not mpp compatible,
-              // this is necessary when paying to lnd
-              Partid = partId |> Some
-              Localofferid = None
-              Groupid = None
-            }
-          logger.LogInformation $"Offer.Sendpay: payment_secret {req.Invoice.PaymentSecret}"
-          cli.SendPayAsync(r, ct = cts.Token)
-          
-        // getroute rpc is too coarse that we may not be able get
-        // the response for a direct payment.
-        let getDirectRoute() =
-          task {
-            let! listPeersResp =
-              let req = {
-                ListpeersRequest.Id = None
-                Level = None
-              }
-              cli.ListPeersAsync(req, ct = cts.Token)
-              
-            let peerId = req.Invoice.NodeIdValue.Value
-            let maybePeer =
-              listPeersResp.Peers
-              |> Array.tryFind(fun resp -> resp.Id = peerId)
-              
-            match maybePeer with
-            | None -> return [||]
-            | Some peer ->
-              let maybePossibleChannels =
-                peer.Channels
-                |> Array.filter(fun c ->
-                  c.State = ListpeersPeersChannelsState.CHANNELD_NORMAL
-                  && c.SpendableMsat.Value > amountMsat
-                )
-              match maybePossibleChannels |> Seq.tryHead with
-              | None ->
-                return [||]
-              | Some c ->
-                match c.ShortChannelId with
-                | None -> return raise <| exn "no short channel id in listpeers response"
-                | Some scid ->
-                  match c.TheirToSelfDelay with
-                  | None -> return raise <| exn "No their_to_self_delay field in listpeers response"
-                  | Some delay ->
-                    let resp = {
-                      Msatoshi = amountMsat
-                      Id = peer.Id
-                      Delay = delay |> uint16
-                      SendpayRoute.Channel = scid
-                    }
-                    logger.LogDebug $"Offer: direct pay route {resp}"
-                    return [| resp |]
-          }
-          
-        let _sendpay_attempt(): Task<SendpayResponse> = task {
-          logger.LogDebug $"Offer: attempting payment for {req.Invoice.ToString()}"
-          let mutable result = None
-          let mutable i = 0
-          let! directRoute = getDirectRoute()
-          if directRoute |> Seq.isEmpty |> not then
-            let! resp = sendpay(directRoute)
-            result <- Some resp
-          while result.IsNone do
-            i <- i + 1
-            cts.Token.ThrowIfCancellationRequested()
-            try
-              let! route = getRoute()
-              if route |> Seq.isEmpty then
-                ()
-              else
-                let! resp =
-                  sendpay(route)
-                result <- Some resp
-            with
-            | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.ROUTE_NOT_FOUND && i < 10 ->
-              // getroute involves a randomness, so it might succeed with a different parameter.
-              logger.LogInformation $"Offer: Failed to find route, trying again..."
-              
-          return result.Value
-        }
         
         let pay () =
           logger.LogDebug $"Offer: attempting payment for {req.Invoice.ToString()}"
@@ -356,30 +226,29 @@ type NLoopCLightningClient(
             Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox<int64<msat>> |> Some
             Description = None
           }
-          cli.PayAsync(r, ct = cts.Token)
-        let _sendPayResponse =
+          task {
+            try
+              let! _ = cli.PayAsync(r, ct = cts.Token)
+              logger.LogDebug $"offer finished successfully"
+            with
+            | :? OperationCanceledException ->
+              logger.LogDebug $"offer finished successfully"
+              // ok
+              return ()
+            | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.IN_PROGRESS ->
+              logger.LogDebug $"offer finished with pending payment code: {e.Code}. msg: {e.Message}"
+              return ()
+            | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.WAIT_TIMEOUT ->
+              logger.LogDebug $"offer finished with pending payment code: {e.Code}. msg: {e.Message}"
+              return ()
+            | x ->
+              logger.LogWarning $"offer finished with error {x}"
+              raise x
+          } :> Task
+        let! _ =
           pay()
-          //sendpay_attempt()
-        (*
-        cts.Token.ThrowIfCancellationRequested()
-        if sendPayResponse.Status = PayStatus.COMPLETE then
-          return Ok ()
-        else
-        *)
-        try
-          let _waitSendpayResp =
-            let req = {
-              PaymentHash = req.Invoice.PaymentHash.Value.ToBytes(false) |> uint256
-              Timeout = req.TimeoutSeconds |> uint32 |> Some
-              Partid = partId |> uint64 |> Some
-              WaitsendpayRequest.Groupid = None
-            }
-            cli.WaitSendPayAsync(req, ct = cts.Token)
-          // logger.LogDebug $"Offer: waitsendpay for {_waitSendpayResp.Bolt11} finished successfully"
-          return Ok()
-        with
-        | :? CLightningRPCException as e when e.Code.AsInt = int CLightningClientErrorCodeEnum.WAIT_TIMEOUT ->
-          return Error($"Failed to pay: {e}")
+          
+        return Ok()
       }
 
     member this.QueryRoutes(nodeId, amount, maybeOutgoingChanId, ct) =
@@ -466,70 +335,150 @@ type NLoopCLightningClient(
             PaymentPreimage = resp.PaymentPreimage.ToString() |> hex.DecodeData |> PaymentPreimage.Create
           }
         else
-          return Error $"Failed SendPay ({resp})"
+          return Error $"Failed to Pay ({resp})"
       }
     member this.SubscribeSingleInvoice({ Label = label }, ct) =
-      backgroundTask {
+      asyncSeq {
         let ct = defaultArg ct CancellationToken.None
-        let! resp =
-          let req = {
-            WaitinvoiceRequest.Label = label
-          }
-          cli.WaitInvoiceAsync(req, ct)
-
-        return
-          {
-            PaymentRequest = resp.Bolt11.ToString() |> PaymentRequest.Parse |> ResultUtils.Result.deref
-            InvoiceState =
-              if resp.Status = Responses.WaitinvoiceStatus.PAID then
-                IncomingInvoiceStateUnion.Settled
-              else if resp.Status = Responses.WaitinvoiceStatus.EXPIRED then
-                IncomingInvoiceStateUnion.Canceled
-              else
-                IncomingInvoiceStateUnion.Unknown
-            AmountPayed =
-              if resp.Status = Responses.WaitinvoiceStatus.PAID then
-                match resp.AmountReceivedMsat with
-                | Some s -> s |> int64 |> LNMoney.MilliSatoshis
-                | None -> failwith "unreachable! invoice is paied but amount is unknown"
-              else
-                LNMoney.Zero
-          }
-      } |> Async.AwaitTask  |> List.singleton |> AsyncSeq.ofSeqAsync
+        try
+          let! resp =
+            let req = {
+              WaitinvoiceRequest.Label = label
+            }
+            cli.WaitInvoiceAsync(req, ct) |> Async.AwaitTask
+            
+          logger.LogDebug $"SubscribeSingleInvoice finished: status {resp.Status}"
+            
+          let resp = 
+            {
+              InvoiceState =
+                if resp.Status = Responses.WaitinvoiceStatus.PAID then
+                  IncomingInvoiceStateUnion.Settled
+                else if resp.Status = Responses.WaitinvoiceStatus.EXPIRED then
+                  IncomingInvoiceStateUnion.Canceled
+                else
+                  IncomingInvoiceStateUnion.Unknown
+              AmountPayed =
+                if resp.Status = Responses.WaitinvoiceStatus.PAID then
+                  match resp.AmountReceivedMsat with
+                  | Some s -> s |> int64 |> LNMoney.MilliSatoshis
+                  | None -> failwith "unreachable! invoice is payed but the amount is unknown"
+                else
+                  LNMoney.Zero
+            }
+          yield resp
+          return resp
+        with
+        | ex -> logger.LogCritical $"SubscribeSingleInvoice: {ex}"
+      }
 
     member this.TrackPayment(invoiceHash, ct) =
       backgroundTask {
         let ct = defaultArg ct CancellationToken.None
-        let! resp =
-          let req = {
-            WaitsendpayRequest.PaymentHash = invoiceHash.Value
-            Timeout = None
-            Partid = None
-            Groupid = None
+        try
+          let! resp =
+            let req = {
+              WaitsendpayRequest.PaymentHash = invoiceHash.Value
+              Timeout = None
+              Partid = None
+              Groupid = None
+            }
+            cli.WaitSendPayAsync(req, ct)
+
+          let translateStatus s =
+            match s with
+            | Responses.WaitsendpayStatus.COMPLETE -> OutgoingInvoiceStateUnion.Succeeded
+            | _ -> OutgoingInvoiceStateUnion.Unknown
+
+          let amountDelivered =
+            match resp.AmountMsat with
+            | Some s -> s
+            | None ->
+              let msg = "amount_msat is not included in waitsendpay response. This might end up showing fee lower than expected"
+              logger.LogWarning msg
+              resp.AmountSentMsat
+          return {
+            OutgoingInvoiceSubscription.InvoiceState = resp.Status |> translateStatus
+            Fee = (resp.AmountSentMsat - amountDelivered) |> int64 |> LNMoney.MilliSatoshis
+            PaymentRequest =
+              match resp.Bolt11 with
+              | Some bolt11 ->
+                bolt11 |> PaymentRequest.Parse |> ResultUtils.Result.deref
+              | None -> failwith "bolt11 not found in waitsendpay response"
+            AmountPayed = amountDelivered |> int64 |> LNMoney.MilliSatoshis
           }
-          cli.WaitSendPayAsync(req, ct)
-
-        let translateStatus s =
-          match s with
-          | Responses.WaitsendpayStatus.COMPLETE -> OutgoingInvoiceStateUnion.Succeeded
-          | _ -> OutgoingInvoiceStateUnion.Unknown
-
-        let amountDelivered =
-          match resp.AmountMsat with
-          | Some s -> s
-          | None ->
-            let msg = "amount_msat is not included in waitsendpay response. This might end up showing fee lower than expected"
-            logger.LogWarning msg
-            resp.AmountSentMsat
-        return {
-          OutgoingInvoiceSubscription.InvoiceState = resp.Status |> translateStatus
-          Fee = (resp.AmountSentMsat - amountDelivered) |> int64 |> LNMoney.MilliSatoshis
-          PaymentRequest =
-            match resp.Bolt11 with
-            | Some bolt11 ->
-              bolt11 |> PaymentRequest.Parse |> ResultUtils.Result.deref
-            | None -> failwith "bolt11 not found in waitsendpay response"
-          AmountPayed = amountDelivered |> int64 |> LNMoney.MilliSatoshis
-        }
+        with
+        | ex ->
+          logger.LogCritical $"TrackPayment: {ex}"
+          return raise ex
       } |> Async.AwaitTask |> List.singleton |> AsyncSeq.ofSeqAsync
 
+  interface IWalletClient with
+    member this.FundToAddress(dest, amount, _confTarget, ct) =
+      backgroundTask {
+        let ct = defaultArg ct CancellationToken.None
+        let! resp =
+          let req = {
+            WithdrawRequest.Destination = dest.ToString()
+            Satoshi = amount.Satoshi |> (*)1000L |> unbox |> AmountOrAll.Amount |> Some
+            Feerate = None
+            Minconf = None
+            Utxos = None
+          }
+          cli.WithdrawAsync(req, ct = ct)
+        return resp.Txid |> uint256.Parse
+      }
+    member this.GetDepositAddress(network, ct) =
+      backgroundTask {
+        let ct = defaultArg ct CancellationToken.None
+        let! resp =
+          let req = {
+            NewaddrRequest.Addresstype = None
+          }
+          cli.NewAddrAsync(req, ct = ct)
+        return
+          match resp.Bech32, resp.P2ShSegwit with
+          | Some x, _
+          | _ , Some x -> BitcoinAddress.Create(x, network)
+          | x -> failwith $"Unreachable {x}"
+      }
+    member this.GetSendingTxFee(destinations, target, ct) =
+      backgroundTask {
+        let ct = defaultArg ct CancellationToken.None
+        // todo: use fundpsbt when psbtv2 is ready.
+        let! utxos =
+          let r = {
+            ListfundsRequest.Spent = None
+          }
+          cli.ListFundsAsync(r, ct = ct)
+          
+        let txb =
+          let coins =
+            utxos.Outputs
+            |> Array.filter(fun o ->
+              o.Status = ListfundsOutputsStatus.CONFIRMED &&
+              o.Reserved |> not
+            )
+            |> Array.map(fun o ->
+              let output = TxOut()
+              output.Value <-
+                let m = o.AmountMsat |> int64 |> LNMoney.MilliSatoshis
+                m.ToMoney()
+              output.ScriptPubKey <- o.Scriptpubkey |> Script.FromHex
+              let outpoint = OutPoint()
+              outpoint.Hash <- o.Txid |> uint256
+              outpoint.N <- o.Output
+              Coin(outpoint, output) :> ICoin
+            )
+          network
+            .CreateTransactionBuilder()
+            .AddCoins(coins)
+            
+        for kv in destinations do
+          txb.Send(kv.Key, kv.Value) |> ignore
+        txb.SetChange((new Key()).PubKey.WitHash) |> ignore
+        let fee = bitcoin.EstimateSmartFee(target.Value |> int)
+        return
+          txb.EstimateFees(fee.FeeRate)
+          |> Ok
+      }

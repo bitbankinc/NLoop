@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
@@ -21,6 +22,7 @@ open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NLoop.Server
 open NLoop.Server.SwapServerClient
+open StreamJsonRpc
 open Xunit
 
 open NLoop.Domain
@@ -323,6 +325,76 @@ type ServerAPITest() =
       expectedStatusCode |> box
       expectedErrorMsg |> box
     |])
+    
+  [<Theory>]
+  [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]
+  member this.TestValidateLoopOut_JsonRpc(_name: string,
+                                          channels: ListChannelResponse list,
+                                          loopOutReq: LoopOutRequest,
+                                          swapServerNodes: Map<string, SwapDTO.NodeInfo>,
+                                          routesToNodes: Map<NodeId, Route>,
+                                          responseFromServer: SwapDTO.LoopOutResponse,
+                                          blockchainInfo: BlockChainInfo,
+                                          quote: SwapDTO.LoopOutQuote,
+                                          expectedStatusCode: HttpStatusCode,
+                                          expectedErrorMsg: string option) =
+    task {
+      use outStream = new MemoryStream(65535)
+      use! host =
+        TestHelpers.GetPluginTestHost(outStream, fun sp ->
+          let lnClientParam = {
+            DummyLnClientParameters.Default
+              with
+              ListChannels = channels
+              QueryRoutes = fun pk _amount maybeChanIdSpecified ->
+                match routesToNodes.TryGetValue (pk |> NodeId), maybeChanIdSpecified with
+                | (true, v), None ->
+                  v
+                | (true, v), Some chanId when not <| v.Value.IsEmpty && v.Value.Head.ShortChannelId = chanId ->
+                  v
+                | _ -> Route([])
+          }
+          sp
+            .AddSingleton<ILoggerFactory, LoggerFactory>()
+            .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+            .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
+            .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
+            .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp _cc ->
+              TestHelpers.GetDummyBlockchainClient( {
+                DummyBlockChainClientParameters.Default with GetBlockchainInfo = fun () -> blockchainInfo
+              })
+            ))
+            .AddSingleton<GetSwapKey>(Func<IServiceProvider, _> (fun _ () -> claimKey |> Task.FromResult))
+            .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, _> (fun _ () -> preimage |> Task.FromResult))
+            .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
+              DummySwapServerClientParameters.Default
+                with
+                  LoopOutQuote =  fun _req -> quote |> Ok |> Task.FromResult
+                  GetNodes = fun () -> { Nodes = swapServerNodes }
+                  LoopOut = fun _req -> responseFromServer |> Task.FromResult
+            }))
+            |> ignore
+        )
+      let opts =
+        let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+        o.AddNLoopJsonConverters()
+        o
+      let client = host.GetTestClient()
+      use e =
+        host.Services.GetRequiredService<IEventAggregator>()
+      use i = new MemoryStream()
+      let ioStream = Nerdbank.Streams.FullDuplexStream.Splice(i, outStream)
+      let s = host.Services.GetRequiredService<NLoopJsonRpcServer>()
+        
+      let _ = e.KeepPublishDummyLoopOutEvent()
+      let! resp =
+        let content = JsonContent.Create(loopOutReq, Unchecked.defaultof<_>, opts)
+        client.PostAsync("/v1/loop/out", content)
+      Assert.Equal(expectedStatusCode, resp.StatusCode)
+      let! msg = resp.Content.ReadAsStringAsync()
+      expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
+      return ()
+    }   
 
   [<Theory>]
   [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]

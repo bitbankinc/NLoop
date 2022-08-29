@@ -171,7 +171,6 @@ type IncomingInvoiceStateUnion =
   | Unknown
 
 type IncomingInvoiceSubscription = {
-  PaymentRequest: PaymentRequest
   InvoiceState: IncomingInvoiceStateUnion
   AmountPayed: LNMoney
 }

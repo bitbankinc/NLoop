@@ -42,6 +42,8 @@ type PluginLogger
     member private this.WriteMsg(logLevel: LogLevel, logName: string, msg: string, ex: exn) =
         let json = JsonSerializer.Create(opts.JsonSettings)
         
+        if not <| outputStream.CanWrite then () else
+        
         let textWriter = new StreamWriter(outputStream)
         let jsonWriter = new JsonTextWriter(textWriter)
         for line in msg.Split(Environment.NewLine) do

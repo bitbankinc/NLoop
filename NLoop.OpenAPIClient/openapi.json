@@ -87,7 +87,7 @@
         "tags": [
           "swap"
         ],
-        "description": "Get the full history of swas. This might take long if you have a lots of entries in a database.",
+        "description": "Get the full history of swaps. This might take long if you have a lots of entries in a database.",
         "operationId": "history",
         "parameters": [
           {
