@@ -10,7 +10,7 @@ open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Internal
@@ -44,7 +44,7 @@ module private Constants =
   let chanId2 = ShortChannelId.FromUInt64(2UL)
   let chanId3 = ShortChannelId.FromUInt64(3UL)
   let channel1 = {
-    LndClient.ListChannelResponse.Id = chanId1
+    NLoopLnClient.ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     RemoteBalance = Money.Zero
@@ -52,7 +52,7 @@ module private Constants =
   }
   let pairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
   let channel2 = {
-    LndClient.ListChannelResponse.Id = chanId2
+    NLoopLnClient.ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     RemoteBalance = Money.Zero

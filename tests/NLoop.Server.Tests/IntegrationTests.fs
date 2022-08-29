@@ -4,7 +4,7 @@ open System.Threading
 open System.Threading.Tasks
 open BoltzClient
 open DotNetLightning.Utils
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.DependencyInjection
 open NBitcoin.Altcoins
 open NBitcoin.RPC

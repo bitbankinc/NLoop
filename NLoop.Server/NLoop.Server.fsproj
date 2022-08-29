@@ -11,7 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BoltzClient\BoltzClient.fsproj" />
     <ProjectReference Include="..\NLoop.Domain\NLoop.Domain.fsproj" />
-    <ProjectReference Include="..\LndClient\LndClient.fsproj" />
+    <ProjectReference Include="..\NLoopLnClient\NLoopLnClient.fsproj" />
     <ProjectReference Include="..\NLoop.OpenAPIClient\NLoop.OpenAPIClient.csproj" />
   </ItemGroup>
   <ItemGroup>

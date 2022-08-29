@@ -8,7 +8,7 @@ open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
-open LndClient
+open NLoopLnClient
 open NBitcoin
 open FSharp.Control.Tasks
 open NBitcoin.RPC

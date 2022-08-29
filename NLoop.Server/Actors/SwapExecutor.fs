@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open DotNetLightning.Utils
 open FSharp.Control.Reactive
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin

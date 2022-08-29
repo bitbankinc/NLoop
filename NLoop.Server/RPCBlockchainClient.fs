@@ -6,12 +6,9 @@ open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
 open System.Linq
-open LndClient
+open NLoopLnClient
 open NBitcoin
 open NBitcoin.RPC
-open NBitcoin.RPC
-open NLoop.Domain.IO
-
 
 type RPCBlockchainClient(rpc: RPCClient) =
   interface IBlockChainClient with

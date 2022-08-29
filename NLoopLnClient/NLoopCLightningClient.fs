@@ -1,4 +1,4 @@
-namespace LndClient
+namespace NLoopLnClient
 
 open System
 open System.IO

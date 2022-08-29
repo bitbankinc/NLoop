@@ -12,7 +12,7 @@ open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging

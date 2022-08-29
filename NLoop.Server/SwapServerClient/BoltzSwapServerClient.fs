@@ -7,7 +7,7 @@ open FSharp.Control.Tasks
 open System.Threading.Tasks
 open System.Runtime.CompilerServices
 open DotNetLightning.Utils.Primitives
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain

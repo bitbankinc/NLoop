@@ -17,7 +17,7 @@ open FSharp.Control
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
@@ -280,6 +280,7 @@ type TestHelpers =
           dummyLnClient |> Some
         member this.GetAllClients() =
           seq [dummyLnClient]
+        member this.Name = "TestClientProvider"
     }
 
 

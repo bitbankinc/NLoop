@@ -5,7 +5,7 @@ open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
 open DotNetLightning.Utils
-open LndClient
+open NLoopLnClient
 open FSharp.Control.Tasks
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Internal

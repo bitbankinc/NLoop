@@ -4,7 +4,7 @@ open System
 open System.Collections.Generic
 open System.IO
 open DotNetLightning.ClnRpc
-open LndClient
+open NLoopLnClient
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs

@@ -8,7 +8,7 @@ open System.Threading.Tasks
 open DotNetLightning.Chain
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open FSharp.Control.Tasks
 open Microsoft.Extensions.Internal

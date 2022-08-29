@@ -1,4 +1,4 @@
-namespace LndClient
+namespace NLoopLnClient
 
 open System
 open System.Collections.Generic
@@ -18,14 +18,11 @@ open Google.Protobuf.Collections
 open Grpc.Core
 open Grpc.Net.Client
 open Invoicesrpc
-open LndClient
 open Lnrpc
 open FSharp.Control.Tasks
 open NBitcoin
 open NBitcoin.DataEncoders
 open FsToolkit.ErrorHandling
-open NBitcoin.RPC
-open NBitcoin.RPC
 open Routerrpc
 
 type LndGrpcSettings = internal {
@@ -181,7 +178,7 @@ module Extensions =
         NodeId = o.RemotePubkey |> PubKey
         RemoteBalance = o.RemoteBalance |> Money.Satoshis
       }
-  type LndClient.HopHint with
+  type NLoopLnClient.HopHint with
     member h.ToGrpcType() =
       let lnHopHint = HopHint()
       lnHopHint.NodeId <- h.NodeId.Value.ToHex()
@@ -191,13 +188,13 @@ module Extensions =
       lnHopHint.FeeProportionalMillionths <- h.FeeProportionalMillionths |> uint
       lnHopHint
 
-  type LndClient.ChannelEventUpdate
+  type NLoopLnClient.ChannelEventUpdate
     with
     static member FromGrpcType(r: ChannelEventUpdate) =
       match r.Type with
       | ChannelEventUpdate.Types.UpdateType.ActiveChannel ->
         r.ActiveChannel.ToOutPoint()
-        |> LndClient.ChannelEventUpdate.ActiveChannel
+        |> NLoopLnClient.ChannelEventUpdate.ActiveChannel
       | ChannelEventUpdate.Types.UpdateType.InactiveChannel ->
         r.InactiveChannel.ToOutPoint()
         |> ChannelEventUpdate.InActiveChannel

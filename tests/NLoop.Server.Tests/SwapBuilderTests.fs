@@ -3,7 +3,7 @@ namespace NLoop.Server.Tests
 open System.Threading.Tasks
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
 open NLoop.Domain

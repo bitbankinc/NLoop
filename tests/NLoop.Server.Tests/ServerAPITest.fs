@@ -13,7 +13,7 @@ open DotNetLightning.Utils
 open FSharp.Control
 open FSharp.Control.Tasks
 
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
@@ -525,7 +525,6 @@ type ServerAPITest() =
               GetInvoice = fun _preimage _amt _ _ _ -> invoice
               SubscribeSingleInvoice = fun _hash -> asyncSeq {
                 yield {
-                  IncomingInvoiceSubscription.PaymentRequest = invoice
                   AmountPayed = swapAmount.ToLNMoney()
                   InvoiceState = IncomingInvoiceStateUnion.Settled
                 }

@@ -12,7 +12,7 @@ open BoltzClient
 open FSharp.Control.Tasks
 
 open DotNetLightning.Utils
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection

@@ -7,7 +7,7 @@ open System.Threading.Tasks
 open DotNetLightning.Payment
 open FSharp.Control
 open FSharp.Control.Tasks
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging
 open NLoop.Server
 

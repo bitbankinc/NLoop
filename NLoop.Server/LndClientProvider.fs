@@ -13,7 +13,7 @@ open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open FsToolkit.ErrorHandling
 open FSharp.Control.Tasks
-open LndClient
+open NLoopLnClient
 open NLoop.Domain
 
 type LndClientProvider(logger: ILogger<LndClientProvider>,

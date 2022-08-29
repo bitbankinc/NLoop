@@ -3,7 +3,7 @@ namespace NLoop.Server
 open System
 open System.Collections.Generic
 open System.Threading.Tasks
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open NLoop.Domain
