@@ -174,4 +174,6 @@ type Extensions() =
     this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
-    this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))
+    this.Converters.Add(
+      JsonFSharpConverter(JsonFSharpOptions(unionEncoding=JsonUnionEncoding.FSharpLuLike))
+    )
