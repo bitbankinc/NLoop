@@ -42,9 +42,12 @@ and run with `--help` to see the possible configuration option.
 Probably the best way to check its behaviour is to run it in the regtest.
 Check the following guide for how-to.
 
-### How to try `nloopd` with local docker-compose environment in regtest.
+### How-to
 
-Check [README.md in test project](./tests/NLoop.Server.Tests/README.md)
+Check tutorial documents under `docs`
+
+* [Running with lnd](./docs/lnd_regtest.md)
+* [Running as a c-lightning plugin](./docs/cln_regtest.md)
 
 ## REST API
 

@@ -154,7 +154,11 @@ type NLoopJsonRpcServer
 
   override this.Options =
     NLoopServerCommandLine.getOptions()
-    |> Seq.filter(fun o -> PluginOptions.unnecessaryCliOptions |> Seq.contains o.Name |> not )
+    |> Seq.filter(fun o ->
+      PluginOptions.unnecessaryCliOptions
+      |> Seq.contains o.Name
+      |> not
+    )
     |> Seq.map(PluginOptions.fromRootCLIOption)
 
   member private this.SetArrayedProperty<'T>(opts: NLoopOptions, p: Reflection.PropertyInfo, values, ?next) =

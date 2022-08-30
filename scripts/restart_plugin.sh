@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
 
-lightning-cli --network=regtest plugin stop nloopd
-
 set -eu
 
-dotnet publish  NLoop.Server   -p:PublishReadyToRun=true \
-    -p:PublishSingleFile=true \
-    -p:PublishTrimmed=false \
-    -p:RuntimeIdentifier=linux-x64 \
-    -p:IncludeNativeLibrariesForSelfExtract=true \
-    --self-contained true
+cln_datadir=`pwd`/tests/NLoop.Server.Tests/data/lightning_user
+nloopd=`command -v nloopd`
 
-lightning-cli --network=regtest -k plugin subcommand=start \
-  plugin=/home/joemphilips/working/sandbox/fsharp/NLoop/NLoop.Server/bin/Debug/net6.0/linux-x64/nloopd \
+lightning-cli \
+  --lightning-dir=$cln_datadir \
+  --network=regtest plugin stop nloopd
+
+dotnet publish  NLoop.Server \
+  -p:PublishReadyToRun=true \
+  -p:PublishSingleFile=true \
+  -p:PublishTrimmed=false \
+  -p:RuntimeIdentifier=linux-x64 \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  --self-contained true
+
+lightning-cli \
+  --lightning-dir=$cln_datadir \
+  --network=regtest \
+  -k plugin subcommand=start \
+  plugin=$nloopd \
   nloop-nohttps=true \
   nloop-btc.rpcuser=johndoe \
   nloop-btc.rpcpassword=unsafepassword \
