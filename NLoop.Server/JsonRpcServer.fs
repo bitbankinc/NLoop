@@ -307,7 +307,9 @@ type NLoopJsonRpcServer
     "Get the liquidity params you have set before by set_liquidityparams",
     ""
     )>]
-  member this.Get_LiquidityParams(offChainAsset: NLoopClient.CryptoCode): Task<NLoopClient.LiquidityParameters> =
+  member this.Get_LiquidityParams(
+    [<O;DefaultParameterValue(NLoopClient.CryptoCode.BTC)>] offChainAsset: NLoopClient.CryptoCode
+  ): Task<NLoopClient.LiquidityParameters> =
     task {
       let! r =
         AutoLoopHandlers.handleGetLiquidityParams
