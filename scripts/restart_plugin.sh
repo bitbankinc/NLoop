@@ -2,11 +2,9 @@
 
 set -eu
 
-cln_datadir=`pwd`/tests/NLoop.Server.Tests/data/lightning_user
 nloopd=`command -v nloopd`
 
 lightning-cli \
-  --lightning-dir=$cln_datadir \
   --network=regtest plugin stop nloopd
 
 dotnet publish  NLoop.Server \
@@ -18,7 +16,6 @@ dotnet publish  NLoop.Server \
   --self-contained true
 
 lightning-cli \
-  --lightning-dir=$cln_datadir \
   --network=regtest \
   -k plugin subcommand=start \
   plugin=$nloopd \

@@ -3,14 +3,12 @@
 set -eu
 
 bitcoin_datadir=`pwd`/tests/NLoop.Server.Tests/data/bitcoin
-cln_datadir=`pwd`/tests/NLoop.Server.Tests/data/lightning_user
 nloopd=`command -v nloopd`
 
 lightningd \
   --network=regtest \
   --nloop-nohttps=true \
   --plugin=$nloopd \
-  --lightning-dir=$cln_datadir \
   --bitcoin-datadir=$bitcoin_datadir \
   --bitcoin-rpcuser=johndoe \
   --bitcoin-rpcpassword=unsafepassword \

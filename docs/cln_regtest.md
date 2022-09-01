@@ -14,13 +14,12 @@ But since c-lightning does not work well with docker as lnd does, we run
   * You can check all plugin startup options by
 `lightningd --plugin=/path/to/nloopd -help`
 * Now you can talk to lightningd as usual
-  * all RPC methods for nloop has a prefix `nloop-`, run `lightning-cli --lightning-dir=./tests/NLoop.Server.Tests/data/lightning_user --network=regtest help` to see those RPCs.
-  * (For convenience, you can instead just run `./scripts/lightning-cli.sh help`)
+  * all RPC methods for nloop has a prefix `nloop-`, run `lightning-cli --network=regtest help` to see those RPCs.
   * It must be the same with those of [the rest api](https://bitbankinc.github.io/NLoop/)
 
 
 Now check `lightningd` is running correctly with nloopd as a plugin with
-`./scripts/lightning-cli.sh --network=regtest nloop_getinfo`
+`lightning-cli --network=regtest nloop_getinfo`
 
 You can use utility scripts under `tests/NLoop.Server.Tests/cliutils` in the same way we did for lnd.
 
@@ -32,9 +31,11 @@ cd tests/NLoop.Server.Tests
 ```
 
 And also to reset the state 
+
 ```sh
 cd tests/NLoop.Server.Tests
 docker-compose down
 rm -rf data
 git checkout -- data
+# Also, don't forget to clean your lightning-dir for lightningd!
 ```
