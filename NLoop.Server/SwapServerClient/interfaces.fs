@@ -167,10 +167,13 @@ module SwapDTO =
       match this with
       | SwapFeeTooExpensive(ourMax, actual) ->
         $"Swap fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified: {actual.Satoshi} sats) "
+        + "Consider specifying max_swap_fee"
       | MinerFeeTooExpensive(ourMax, actual) ->
         $"Miner fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified {actual.Satoshi} sats)"
+        + "Consider specifying max_miner_fee"
       | PrepayTooExpensive(ourMax, actual) ->
         $"prepay fee specified by the server is too high (ourMax: {ourMax.Satoshi} sats, The amount they specified {actual.Satoshi} sats)"
+        + "Consider specifying max_prepay_amount"
       | CLTVDeltaTooShort(ourMax, actual) ->
         "CLTVDelta they say they want to specify for their invoice is too short for our HTLCConfirmation parameter. " +
         $"(our acceptable max is {ourMax}, actual value is {actual})" +
