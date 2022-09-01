@@ -6,12 +6,9 @@ open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open System.Threading
 open System.Linq
-open LndClient
+open NLoopLnClient
 open NBitcoin
 open NBitcoin.RPC
-open NBitcoin.RPC
-open NLoop.Domain.IO
-
 
 type RPCBlockchainClient(rpc: RPCClient) =
   interface IBlockChainClient with
@@ -55,14 +52,15 @@ type BitcoindWalletClient(rpc: RPCClient) =
       req.AddressType <- Nullable(AddressType.P2SHSegwit)
       rpc.GetNewAddressAsync(req)
 
-    member this.FundToAddress(dest, amount, confTarget, _ct) =
+    member this.FundToAddress(dest, amount, confTarget, ct) =
       task {
+        let ct = defaultArg ct CancellationToken.None
         let p = Dictionary<string, obj>()
         p.Add("address", dest.ToString());
         p.Add("amount", amount.ToDecimal(MoneyUnit.BTC))
         p.Add("comment", "nloop:FundToAddress")
         p.Add("conf_target", confTarget.Value |> int)
-        let! resp = rpc.SendCommandWithNamedArgsAsync(RPCOperations.sendtoaddress.ToString(), p).ConfigureAwait false
+        let! resp = rpc.SendCommandWithNamedArgsAsync(RPCOperations.sendtoaddress.ToString(), p, ct).ConfigureAwait false
         return uint256.Parse(resp.Result.ToString())
       }
 

@@ -1,5 +1,6 @@
 namespace NLoop.Server
 
+open System
 open System.Collections.Concurrent
 open System.Threading
 open System.Threading.Tasks
@@ -12,7 +13,7 @@ open NLoop.Server.Options
 open NLoop.Server.Projections
 
 
-type BlockchainListeners(opts: IOptions<NLoopOptions>,
+type BlockchainListeners(opts: GetOptions,
                          loggerFactory: ILoggerFactory,
                          getBlockchainClient,
                          swapActor,
@@ -47,10 +48,13 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
       use cts = CancellationTokenSource.CreateLinkedTokenSource(ct)
       cts.CancelAfter(9000)
       let! _ = Task.WhenAny(swapState.FinishCatchup, Task.Delay(10000, cts.Token))
-      cts.Token.ThrowIfCancellationRequested()
+      if cts.Token.IsCancellationRequested then
+        let msg = $"Timeout: unable to catch up to the current swap state. is db running and connected correctly?"
+        logger.LogError(msg)
+        raise <| OperationCanceledException msg
 
       let roundTrip cc = unitTask {
-        let cOpts = opts.Value.ChainOptions.[cc]
+        let cOpts = opts().ChainOptions.[cc]
         let startRPCListener cc = task {
           let rpcListener =
             RPCLongPollingBlockchainListener(loggerFactory, getBlockchainClient, (fun () -> this.GetRewindLimit(cc)), getNetwork, swapActor, cc)
@@ -81,7 +85,7 @@ type BlockchainListeners(opts: IOptions<NLoopOptions>,
 
 
       do!
-        opts.Value.OnChainCrypto
+        opts().OnChainCrypto
         |> Seq.map roundTrip
         |> Task.WhenAll
 

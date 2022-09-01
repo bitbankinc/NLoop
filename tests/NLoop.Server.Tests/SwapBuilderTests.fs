@@ -1,11 +1,9 @@
 namespace NLoop.Server.Tests
 
-open System
 open System.Threading.Tasks
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
-open DotNetLightning.Utils.Primitives
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
 open NLoop.Domain

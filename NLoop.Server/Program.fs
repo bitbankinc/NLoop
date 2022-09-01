@@ -7,11 +7,15 @@ open System.CommandLine.Hosting
 open System.CommandLine.Parsing
 open System.IO
 open System.Net
+open System.Runtime.CompilerServices
 open System.Security.Cryptography.X509Certificates
+open System.Text
 open System.Text.Json
+open System.Threading
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Routing
 open Microsoft.Extensions.Configuration
+open Microsoft.Extensions.Hosting.Internal
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Options
@@ -31,14 +35,13 @@ open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.DTOs
-open NLoop.Server.LoopHandlers
-open NLoop.Server.ProcessManagers
-open NLoop.Server.Projections
+open NLoop.Server.Pipelines
 open NLoop.Server.RPCDTOs
 open NLoop.Server.Services
 
 open FSharp.Control.Tasks.Affine
 open NReco.Logging.File
+open DotNetLightning.ClnRpc.Plugin
 module App =
   let noCookie: HttpHandler =
     RequestErrors.UNAUTHORIZED
@@ -55,43 +58,43 @@ module App =
     choose [
       subRoute "/v1" (choose [
         GET >=>
-          route "/info" >=> QueryHandlers.handleGetInfo
+          route "/info" >=> QueryPipelines.getInfoPipeline
           route "/version" >=> json Constants.AssemblyVersion
         subRoute "/loop" (choose [
           POST >=>
-            route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> handleLoopOut
-            route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> handleLoopIn
+            route "/out" >=> mustAuthenticate >=> bindJson<LoopOutRequest> LoopPipelines.loopOutPipeline
+            route "/in" >=> mustAuthenticate >=> bindJson<LoopInRequest> LoopPipelines.loopInPipeline
         ])
         subRoute "/swaps" (choose [
           GET >=>
-            route "/history" >=> QueryHandlers.handleGetSwapHistory
-            route "/ongoing" >=> QueryHandlers.handleGetOngoingSwap
-            routef "/%s" (SwapId.SwapId >> QueryHandlers.handleGetSwap)
+            route "/history" >=> QueryPipelines.getSwapHistoryPipeline
+            route "/ongoing" >=> QueryPipelines.getOngoingSwapPipeline
+            routef "/%s" (SwapId.SwapId >> QueryPipelines.getSwapPipeline)
         ])
         subRoute "/cost" (choose [
           GET >=>
-            route "/summary" >=> QueryHandlers.handleGetCostSummary
+            route "/summary" >=> QueryPipelines.getCostSummaryPipeline
         ])
         subRoute "/auto" (choose [
           GET >=>
-            route "/suggest" >=> (AutoLoopHandlers.suggestSwaps None)
-            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopHandlers.suggestSwaps)
+            route "/suggest" >=> (AutoLoopPipelines.suggestSwapsPipeline None)
+            routef "/suggest/%s" (SupportedCryptoCode.TryParse >> AutoLoopPipelines.suggestSwapsPipeline)
         ])
         subRoute "/liquidity" (choose [
           route "/params" >=> choose [
-            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopHandlers.setLiquidityParams None)
-            GET >=> AutoLoopHandlers.getLiquidityParams SupportedCryptoCode.BTC
+            POST >=> bindJson<SetLiquidityParametersRequest> (AutoLoopPipelines.setLiquidityParamsPipeline None)
+            GET >=> AutoLoopPipelines.getLiquidityParamsPipeline SupportedCryptoCode.BTC
           ]
           GET >=> routef "/params/%s" (fun s ->
             s.ToUpperInvariant()
             |> SupportedCryptoCode.Parse
-            |> AutoLoopHandlers.getLiquidityParams
+            |> AutoLoopPipelines.getLiquidityParamsPipeline
           )
           POST >=> routef "/params/%s" (fun offChain ->
             offChain.ToUpperInvariant()
             |> SupportedCryptoCode.Parse
             |> Some
-            |> AutoLoopHandlers.setLiquidityParams
+            |> AutoLoopPipelines.setLiquidityParamsPipeline
             |> bindJson<SetLiquidityParametersRequest>
           )
         ])
@@ -136,7 +139,7 @@ module App =
       .UseAuthentication()
       .UseGiraffe(webApp)
 
-  let configureServices test (env: IHostEnvironment option) (services : IServiceCollection) =
+  let configureServices coldStart (env: IHostEnvironment option) (services : IServiceCollection) =
       // json settings
       let jsonOptions = JsonSerializerOptions()
       jsonOptions.AddNLoopJsonConverters()
@@ -144,7 +147,7 @@ module App =
         .AddSingleton(jsonOptions)
         .AddSingleton<Json.ISerializer>(SystemTextJson.Serializer(jsonOptions)) |> ignore // for giraffe
 
-      services.AddNLoopServices(test)
+      services.AddNLoopServices(coldStart)
 
       if (env.IsSome && env.Value.IsDevelopment()) then
         services.AddTransient<RequestResponseLoggingMiddleware>() |> ignore
@@ -161,7 +164,7 @@ module App =
 
       services.AddGiraffe() |> ignore
 
-  let configureServicesTest services = configureServices true None services
+  let configureServicesWithColdStart services = configureServices true None services
 
 type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.Configure(appBuilder) =
@@ -170,11 +173,10 @@ type Startup(_conf: IConfiguration, env: IHostEnvironment) =
   member this.ConfigureServices(services) =
     App.configureServices false (Some env) services
 
-module Main =
 
-  let configureLogging (ctx: WebHostBuilderContext) (builder : ILoggingBuilder) =
-      builder.AddConsole() |> ignore
-
+[<AutoOpen>]
+module Configurations =
+  let configureFileLogging (ctx: HostBuilderContext) (builder : ILoggingBuilder) =
       let isProduction = ctx.HostingEnvironment.IsProduction()
       if isProduction |> not then
         builder.AddDebug() |> ignore
@@ -196,6 +198,14 @@ module Main =
         .SetMinimumLevel(LogLevel.Debug)
         |> ignore
 
+  let configureLogging(ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+      builder.AddConsole() |> ignore
+      configureFileLogging ctx builder
+
+  let configureJsonRpcLogging (outputStream: Stream) (ctx: HostBuilderContext) (builder: ILoggingBuilder) =
+    builder.AddPluginLogger(outputStream) |> ignore
+    configureFileLogging ctx builder
+
   let configureConfig (ctx: HostBuilderContext)  (builder: IConfigurationBuilder) =
     builder.AddInMemoryCollection(Constants.DefaultLoggingSettings) |> ignore
     builder.SetBasePath(Directory.GetCurrentDirectory()) |> ignore
@@ -210,8 +220,28 @@ module Main =
       .AddEnvironmentVariables(prefix="NLOOP_") |> ignore
     ()
 
-  let configureHostBuilder  (hostBuilder: IHostBuilder) =
-    hostBuilder.ConfigureAppConfiguration(configureConfig)
+[<AbstractClass;Sealed;Extension>]
+type ConfigurationExtension =
+
+  [<Extension>]
+  static member ConfigureAsPlugin(hostBuilder: IHostBuilder, outputStream, ?coldStart) =
+    let coldStart = defaultArg coldStart false
+    hostBuilder
+      .ConfigureLogging(configureJsonRpcLogging outputStream)
+      .ConfigureServices(App.configureServices coldStart None)
+      .ConfigureServices(fun serviceCollection ->
+        serviceCollection
+          .AddSingleton<ILogger, Logger<ConfigurationExtension>>() // for startup logging
+          .AddSingleton<NLoopJsonRpcServer>()
+          .AddSingleton<NLoopOptionsHolder>()
+          .AddSingleton<ILightningClientProvider, ClnLightningClientProvider>()
+          |> ignore
+    )
+
+  [<Extension>]
+  static member ConfigureAsWebServer(hostBuilder: IHostBuilder) =
+    hostBuilder
+      .ConfigureLogging(configureLogging)
       .ConfigureWebHostDefaults(
         fun webHostBuilder ->
           webHostBuilder
@@ -244,9 +274,18 @@ module Main =
                   kestrelOpts.Listen(ip, port = opts.HttpsPort, configure=(fun (s: ListenOptions) ->
                     s.UseConnectionLogging().UseHttps(cert) |> ignore))
               )
-            .ConfigureLogging(configureLogging)
             |> ignore
       )
+
+module Main =
+
+  let configureHostBuilder (outputStream: Stream) (hostBuilder: IHostBuilder) =
+    let hostBuilder = hostBuilder.ConfigureAppConfiguration(configureConfig)
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    if isPluginMode then
+      hostBuilder.ConfigureAsPlugin(outputStream)
+    else
+      hostBuilder.ConfigureAsWebServer()
 
   /// Mostly the same with `CommandLineBuilder.UseHost`, but it will call `IHost.RunAsync` instead of `StartAsync`,
   /// thus it never finishes.
@@ -264,15 +303,38 @@ module Main =
         .AddTransient<_>(fun _ -> ctx.InvocationResult)
         .AddTransient<_>(fun _ -> ctx.ParseResult)
       |> ignore
-    )
-      .UseInvocationLifetime(ctx)
+    ) |> ignore
+    let isPluginMode = Environment.GetEnvironmentVariable("LIGHTNINGD_PLUGIN") = "1"
+    hostBuilder
+      .UseInvocationLifetime(ctx, fun o -> if isPluginMode then o.SuppressStatusMessages <- true)
+      // override `InvocationLifetime` which does not handle SIGTERM/SIGINT.
+      .UseConsoleLifetime(fun o -> if isPluginMode then o.SuppressStatusMessages <- true) 
       |> ignore
-    configureHostBuilder hostBuilder |> ignore
+      
+    let o =
+      Console.OpenStandardOutput()
+      |> Stream.Synchronized
+    configureHostBuilder o hostBuilder |> ignore
 
     use host = hostBuilder.Build();
     ctx.BindingContext.AddService(typeof<IHost>, fun _ -> host |> box);
     do! next.Invoke(ctx)
-    do! host.RunAsync();
+
+    if isPluginMode then
+      use logScope = host.Services.CreateScope()
+      let logger = logScope.ServiceProvider.GetRequiredService<ILogger>()
+        
+      let server = host.Services.GetRequiredService<NLoopJsonRpcServer>()
+      let! _ =
+        let i = Console.OpenStandardInput()
+        server.StartAsync(o, i, CancellationToken.None)
+      if server.InitializationStatus = PluginInitializationStatus.Failed then
+        ()
+      if (server.InitializationStatus = PluginInitializationStatus.InitializedSuccessfully) then
+        logger.LogInformation "Plugin Started"
+        do! host.RunAsync()
+    else
+      do! host.RunAsync()
   })
 
   [<EntryPoint>]

@@ -101,14 +101,14 @@ module ThresholdRuleTests =
   [<MemberData(nameof(testSuggestSwapData))>]
   let testSwapAmount
     (_name: string)
-    (minIncoming)
-    (minOutgoing)
+    minIncoming
+    minOutgoing
     (minSat: int64)
     (maxSat: int64)
     (capSat: int64)
     (inComingSat: int64)
     (outgoingSat: int64)
-    (ratio)
+    ratio
     (expectedAmt: int64)
     =
     let rule = { ThresholdRule.MinimumIncoming = minIncoming; MinimumOutGoing = minOutgoing }

@@ -1,13 +1,10 @@
 namespace NLoop.Server.Tests
 
 open System
-open System.Collections.Generic
 open System.CommandLine.Binding
 open System.CommandLine.Builder
 open System.CommandLine.Parsing
 
-open System.IO
-open System.Linq
 open System.Net.Http
 open System.Threading
 open System.Threading.Tasks
@@ -15,20 +12,16 @@ open BoltzClient
 open FSharp.Control.Tasks
 
 open DotNetLightning.Utils
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin
 open NBitcoin.Altcoins
 open NBitcoin.RPC
 open NLoop.Server
-open NLoop.Server.Services
-open NLoop.Server.SwapServerClient
-open NLoop.Server.Tests
 open NLoop.Server.Tests.TestHelpersMod
 open NLoopClient
 
@@ -66,7 +59,7 @@ type ExternalClients = {
   Server: {| BitcoinLnd: NLoopLndGrpcClient; LitecoinLnd: NLoopLndGrpcClient; Boltz: BoltzClient |}
 }
   with
-  member private this.AssureWalletIsCreated (ct) = task {
+  member private this.AssureWalletIsCreated _ct = task {
     let walletClient = this.Bitcoin.GetWallet(walletName)
     let mutable btcAddress = null
     try
@@ -140,7 +133,7 @@ type ExternalClients = {
   member this.AssureConnected(ct) = task {
     let! nodes = this.Server.Boltz.GetNodesAsync(ct)
     let connString =
-      nodes.Nodes |> Map.toSeq |> Seq.head |> fun (_, info) -> info.Uris.[0]
+      nodes.Nodes |> Map.toSeq |> Seq.head |> fun (_, info) -> info.Uris[0]
     try
       do! this.User.BitcoinLnd.ConnectPeer(connString.NodeId, connString.EndPoint.ToEndpointString(), ct)
     with
@@ -269,7 +262,6 @@ type Clients = {
         .UseContentRoot(dataPath)
         .UseStartup<Startup>()
         .ConfigureAppConfiguration(fun _b ->())
-        .ConfigureLogging(Main.configureLogging)
         .ConfigureTestServices(fun s ->
           let cliOpts: ParseResult =
             let p =
@@ -305,6 +297,7 @@ type Clients = {
             s.AddSingleton<ILoggerFactory, NullLoggerFactory>() |> ignore
         )
         |> fun b -> new TestServer(b)
+
     let userNLoop =
       let httpClient = testHost.CreateClient()
       let nloopClient = httpClient |> NLoopClient

@@ -1,6 +1,7 @@
 namespace NLoop.Server.Tests
 
 open System
+open System.IO
 open System.Net
 open System.Net.Http
 open System.Net.Http.Json
@@ -12,7 +13,7 @@ open DotNetLightning.Utils
 open FSharp.Control
 open FSharp.Control.Tasks
 
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Logging
@@ -21,7 +22,7 @@ open NBitcoin.Altcoins
 open NBitcoin.DataEncoders
 open NLoop.Server
 open NLoop.Server.SwapServerClient
-open NLoop.Server.SwapServerClient
+open StreamJsonRpc
 open Xunit
 
 open NLoop.Domain
@@ -206,17 +207,17 @@ type ServerAPITest() =
 
   static member TestValidateLoopOutData =
     [
-      ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ("We have a channel but that is different from the one specified in request", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
-      ("one of the channel user specified does not exist", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId1; chanId2 |])}, node1Info, Map.ofSeq[routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
+      ("valid request", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified", [channel1], { chan1Rec with ChannelIds = ValueNone } , node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("valid request with no channel specified 2", [channel1], { chan1Rec with ChannelIds = ValueSome([||]) } , node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
+      ("We have a channel but that is different from the one specified in request", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId2 |])}, node1Info, Map.ofSeq [routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
+      ("one of the channel user specified does not exist", [channel1], {chan1Rec with ChannelIds = ValueSome([| chanId1; chanId2 |])}, node1Info, Map.ofSeq [routeToNode2], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "does not exist")
       let inprogressBlockchainInfo = {
         testBlockchainInfo
           with
             Progress = 0.99f
       }
-      ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
+      ("Blockchain is not synced yet", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, inprogressBlockchainInfo,testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("blockchain is not synced"))
       ("no routes to the node", [channel1], chan1Rec, node1Info, Map.empty, loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(""))
 
       let quote = {
@@ -229,7 +230,7 @@ type ServerAPITest() =
           with
           MaxSwapFee = ValueSome <| Money.Satoshis(9999L)
       }
-      ("They required expensive swap fee in loop-out quote", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("Swap fee specified by the server is too high"))
+      ("They required expensive swap fee in loop-out quote", [channel1], req, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("Swap fee specified by the server is too high"))
       let quote = {
         testLoopOutQuote
           with
@@ -240,14 +241,14 @@ type ServerAPITest() =
           with
           MaxPrepayAmount = ValueSome <| Money.Satoshis(99L)
       }
-      ("prepay miner fee too expensive", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
+      ("prepay miner fee too expensive", [channel1], req, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, quote, HttpStatusCode.BadRequest, Some("prepay fee specified by the server is too high"))
 
       let req = {
         chan1Rec
           with
           Address = Some "foo"
       }
-      ("invalid address in the request from an user (bogus)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (bogus)", [channel1], req, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let req = {
         chan1Rec
           with
@@ -255,7 +256,7 @@ type ServerAPITest() =
             new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
             |> fun k -> k.PubKey.WitHash.GetAddress(Network.Main).ToString() |> Some
       }
-      ("invalid address in the request from an user (network mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (network mismatch)", [channel1], req, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let req = {
         chan1Rec
           with
@@ -263,25 +264,25 @@ type ServerAPITest() =
             new Key(hex.DecodeData("9797979797979797979797979797979797979797979797979797979797979797"))
             |> fun k -> k.PubKey.WitHash.GetAddress(Litecoin.Instance.Regtest).ToString() |> Some
       }
-      ("invalid address in the request from an user (cryptocode mismatch)", [channel1], req, node1Info, Map.ofSeq[routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
+      ("invalid address in the request from an user (cryptocode mismatch)", [channel1], req, node1Info, Map.ofSeq [routeToNode1], loopOutResp1, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.BadRequest, Some "Invalid address")
       let resp = {
         loopOutResp1
           with
           LockupAddress = "foo"
       }
-      ("Invalid address from the server (bogus)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (bogus)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.InternalServerError, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Network.Main).ToString()
       }
-      ("Invalid address from the server (network mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (network mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.InternalServerError, Some("Boltz returned invalid bitcoin address for lockup address"))
       let resp = {
         loopOutResp1
           with
           LockupAddress = reverseSwapRedeem.WitHash.GetAddress(Litecoin.Instance.Regtest).ToString()
       }
-      ("Invalid address from the server (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some("Boltz returned invalid bitcoin address for lockup address"))
+      ("Invalid address from the server (cryptocode mismatch)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.InternalServerError, Some("Boltz returned invalid bitcoin address for lockup address"))
 
       let err = "Payment Hash in invoice does not match preimage hash we specified in request"
       let resp = {
@@ -289,20 +290,19 @@ type ServerAPITest() =
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice (swapAmount.Satoshi |> LNMoney.Satoshis |> Some) (PaymentPreimage.Create(Array.zeroCreate 32)) Network.RegTest
       }
-      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, Some(err))
+      ("Invalid payment request (invalid preimage)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.InternalServerError, Some(err))
       let resp = {
         loopOutResp1
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice ((swapAmount.Satoshi - 1L) |> LNMoney.Satoshis |> Some) preimage Network.RegTest
       }
-      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.ServiceUnavailable, None)
+      ("Invalid payment request (invalid amount)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.InternalServerError, None)
       let resp = {
         loopOutResp1
           with
           SwapDTO.LoopOutResponse.Invoice = getDummyTestInvoice None preimage Network.RegTest
       }
-      ("Valid payment request (no amount)", [channel1], chan1Rec, node1Info, Map.ofSeq[routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
-      ()
+      ("Valid payment request (no amount)", [channel1], chan1Rec, node1Info, Map.ofSeq [routeToNode1], resp, testBlockchainInfo, testLoopOutQuote, HttpStatusCode.OK, None)
     ]
     |> Seq.map(fun (name,
                     channels: ListChannelResponse list,
@@ -325,10 +325,80 @@ type ServerAPITest() =
       expectedStatusCode |> box
       expectedErrorMsg |> box
     |])
+    
+  [<Theory(Skip = "foo")>]
+  [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]
+  member this.TestValidateLoopOut_JsonRpc(_name: string,
+                                          channels: ListChannelResponse list,
+                                          loopOutReq: LoopOutRequest,
+                                          swapServerNodes: Map<string, SwapDTO.NodeInfo>,
+                                          routesToNodes: Map<NodeId, Route>,
+                                          responseFromServer: SwapDTO.LoopOutResponse,
+                                          blockchainInfo: BlockChainInfo,
+                                          quote: SwapDTO.LoopOutQuote,
+                                          expectedStatusCode: HttpStatusCode,
+                                          expectedErrorMsg: string option) =
+    task {
+      use outStream = new MemoryStream(65535)
+      use! host =
+        TestHelpers.GetPluginTestHost(outStream, fun sp ->
+          let lnClientParam = {
+            DummyLnClientParameters.Default
+              with
+              ListChannels = channels
+              QueryRoutes = fun pk _amount maybeChanIdSpecified ->
+                match routesToNodes.TryGetValue (pk |> NodeId), maybeChanIdSpecified with
+                | (true, v), None ->
+                  v
+                | (true, v), Some chanId when not <| v.Value.IsEmpty && v.Value.Head.ShortChannelId = chanId ->
+                  v
+                | _ -> Route([])
+          }
+          sp
+            .AddSingleton<ILoggerFactory, LoggerFactory>()
+            .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
+            .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
+            .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
+            .AddSingleton<GetBlockchainClient>(Func<IServiceProvider, _> (fun sp _cc ->
+              TestHelpers.GetDummyBlockchainClient( {
+                DummyBlockChainClientParameters.Default with GetBlockchainInfo = fun () -> blockchainInfo
+              })
+            ))
+            .AddSingleton<GetSwapKey>(Func<IServiceProvider, _> (fun _ () -> claimKey |> Task.FromResult))
+            .AddSingleton<GetSwapPreimage>(Func<IServiceProvider, _> (fun _ () -> preimage |> Task.FromResult))
+            .AddSingleton<ISwapServerClient>(TestHelpers.GetDummySwapServerClient({
+              DummySwapServerClientParameters.Default
+                with
+                  LoopOutQuote =  fun _req -> quote |> Ok |> Task.FromResult
+                  GetNodes = fun () -> { Nodes = swapServerNodes }
+                  LoopOut = fun _req -> responseFromServer |> Task.FromResult
+            }))
+            |> ignore
+        )
+      let opts =
+        let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+        o.AddNLoopJsonConverters()
+        o
+      let client = host.GetTestClient()
+      use e =
+        host.Services.GetRequiredService<IEventAggregator>()
+      use i = new MemoryStream()
+      let ioStream = Nerdbank.Streams.FullDuplexStream.Splice(i, outStream)
+      let s = host.Services.GetRequiredService<NLoopJsonRpcServer>()
+        
+      let _ = e.KeepPublishDummyLoopOutEvent()
+      let! resp =
+        let content = JsonContent.Create(loopOutReq, Unchecked.defaultof<_>, opts)
+        client.PostAsync("/v1/loop/out", content)
+      Assert.Equal(expectedStatusCode, resp.StatusCode)
+      let! msg = resp.Content.ReadAsStringAsync()
+      expectedErrorMsg |> Option.iter(fun expected -> Assert.Contains(expected, msg))
+      return ()
+    }   
 
   [<Theory>]
   [<MemberData(nameof(ServerAPITest.TestValidateLoopOutData))>]
-  member this.TestValidateLoopOut(_name,
+  member this.TestValidateLoopOut(_name: string,
                                   channels: ListChannelResponse list,
                                   loopOutReq: LoopOutRequest,
                                   swapServerNodes: Map<string, SwapDTO.NodeInfo>,
@@ -352,6 +422,7 @@ type ServerAPITest() =
               | _ -> Route([])
         }
         sp
+          .AddSingleton<ILoggerFactory, LoggerFactory>()
           .AddSingleton<ISwapActor>(TestHelpers.GetDummySwapActor())
           .AddSingleton<INLoopLightningClient>(TestHelpers.GetDummyLightningClient(lnClientParam))
           .AddSingleton<ILightningClientProvider>(TestHelpers.GetDummyLightningClientProvider(lnClientParam))
@@ -374,7 +445,7 @@ type ServerAPITest() =
 
     let opts =
       let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-      o.AddNLoopJsonConverters(Network.RegTest)
+      o.AddNLoopJsonConverters()
       o
     let client = server.CreateClient()
     use e =
@@ -402,7 +473,7 @@ type ServerAPITest() =
           with
           MaxMinerFee = Money.Satoshis 999L |> ValueSome
       }
-      ("miner fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Miner fee specified by the server is too high")
+      ("specified miner fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Miner fee specified by the server is too high")
       let q = {
         testLoopInQuote
           with
@@ -414,7 +485,7 @@ type ServerAPITest() =
           MaxSwapFee = Money.Satoshis 999L |> ValueSome
       }
       ("swap fee too high", req, q, loopInResp1, testBlockchainInfo, HttpStatusCode.BadRequest, Some "Swap fee specified by the server is too high")
-      ("miner fee too high", { loopInReq with MaxMinerFee = ValueSome(Money.Satoshis 10L) }, testLoopInQuote, loopInResp1, testBlockchainInfo, HttpStatusCode.ServiceUnavailable, Some $"OnChain FeeRate is too high")
+      ("on-chain miner fee too high", { loopInReq with MaxMinerFee = ValueSome(Money.Satoshis 10L) }, testLoopInQuote, loopInResp1, testBlockchainInfo, HttpStatusCode.InternalServerError, Some $"OnChain FeeRate is too high")
     ]
     |> Seq.map(fun (name,
                     req,
@@ -454,7 +525,6 @@ type ServerAPITest() =
               GetInvoice = fun _preimage _amt _ _ _ -> invoice
               SubscribeSingleInvoice = fun _hash -> asyncSeq {
                 yield {
-                  IncomingInvoiceSubscription.PaymentRequest = invoice
                   AmountPayed = swapAmount.ToLNMoney()
                   InvoiceState = IncomingInvoiceStateUnion.Settled
                 }
@@ -491,7 +561,7 @@ type ServerAPITest() =
 
       let opts =
         let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-        o.AddNLoopJsonConverters(Network.RegTest)
+        o.AddNLoopJsonConverters()
         o
       let client = server.CreateClient()
       use e =
@@ -579,7 +649,7 @@ type ServerAPITest() =
       let! resp =
         let opts =
           let o = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-          o.AddNLoopJsonConverters(Network.RegTest)
+          o.AddNLoopJsonConverters()
           o
         let content = JsonContent.Create(req, Unchecked.defaultof<_>, opts)
         client.PostAsync("/v1/liquidity/params", content)

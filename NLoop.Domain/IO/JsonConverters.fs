@@ -66,14 +66,6 @@ type UnixTimeJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetUInt32() |> NBitcoin.Utils.UnixTimeToDateTime
 
-type HexTxConverter(network: Network) =
-  inherit JsonConverter<Transaction>()
-  override this.Write(writer, value, _options) =
-    value.ToHex()
-    |> writer.WriteStringValue
-  override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString() |> fun h -> Transaction.Parse(h, network)
-
 
 type UInt256JsonConverter() =
   inherit JsonConverter<uint256>()
@@ -115,13 +107,6 @@ type PaymentRequestJsonConverter() =
     r |> ResultUtils.Result.mapError(fun e -> printfn "JsonConverterError: %A" e) |> ignore
     r
     |> ResultUtils.Result.defaultWith (fun () -> raise <| JsonException())
-
-type BitcoinAddressJsonConverter(n: Network) =
-  inherit JsonConverter<BitcoinAddress>()
-  override this.Write(writer, value, _options) =
-    value.ToString() |> writer.WriteStringValue
-  override this.Read(reader, _typeToConvert, _options) =
-    reader.GetString() |> fun s -> BitcoinAddress.Create(s, n)
 
 type PairIdJsonConverter() =
   inherit JsonConverter<PairId>()
@@ -172,11 +157,10 @@ type SwapIdJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     reader.GetString() |> SwapId.SwapId
 
-
 [<AbstractClass;Sealed;Extension>]
 type Extensions() =
   [<Extension>]
-  static member AddNLoopJsonConverters(this: JsonSerializerOptions, ?n: Network) =
+  static member AddNLoopJsonConverters(this: JsonSerializerOptions) =
     this.Converters.Add(HexPubKeyJsonConverter())
     this.Converters.Add(PrivKeyJsonConverter())
     this.Converters.Add(BlockHeightJsonConverter())
@@ -187,12 +171,9 @@ type Extensions() =
     this.Converters.Add(PairIdJsonConverter())
     this.Converters.Add(PaymentPreimageJsonConverter())
 
-    n |> Option.iter(fun n ->
-      this.Converters.Add(BitcoinAddressJsonConverter(n))
-      this.Converters.Add(HexTxConverter(n))
-    )
-
     this.Converters.Add(ScriptJsonConverter())
     this.Converters.Add(PeerConnectionStringJsonConverter())
     this.Converters.Add(ShortChannelIdJsonConverter())
-    this.Converters.Add(JsonFSharpConverter(JsonUnionEncoding.FSharpLuLike))
+    this.Converters.Add(
+      JsonFSharpConverter(JsonFSharpOptions(unionEncoding=JsonUnionEncoding.FSharpLuLike))
+    )

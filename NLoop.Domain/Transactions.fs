@@ -60,9 +60,10 @@ module Transactions =
           // Thus creating manually here.
           let script = Script([| Op.op_Implicit OpcodeType.OP_0; Op.GetPushOp(redeemScript.WitHash.ToBytes())|])
           tx.Inputs.[0].ScriptSig <- Script([|Op.GetPushOp(script.ToBytes())|])
-        let signature = tx.SignInput(key, sc)
+        let signature: byte[] = tx.Inputs.FindIndexedInput(sc.Outpoint).Sign(key, sc).ToBytes()
         let witnessItems =
-          WitScript(Op.GetPushOp(signature.ToBytes())) +
+          let w = WitScript(Op.GetPushOp(signature))
+          w +
             WitScript(Op.GetPushOp(preimage.ToByteArray())) +
             WitScript(Op.GetPushOp(redeemScript.ToBytes()))
         tx.Inputs.[0].WitScript <- witnessItems
@@ -167,9 +168,10 @@ module Transactions =
         // Thus creating manually here.
         let script = Script([| Op.op_Implicit OpcodeType.OP_0; Op.GetPushOp(redeemScript.WitHash.ToBytes())|])
         tx.Inputs.[0].ScriptSig <- Script([|Op.GetPushOp(script.ToBytes())|])
-      let signature = tx.SignInput(refundKey, sc)
+      let signature = tx.Inputs.FindIndexedInput(sc.Outpoint).Sign(refundKey, sc)
       let witnessItems =
-        WitScript(Op.GetPushOp(signature.ToBytes())) +
+        let w = WitScript(Op.GetPushOp(signature.ToBytes()))
+        w +
           WitScript(Op.GetPushOp([||])) +
           WitScript(Op.GetPushOp(redeemScript.ToBytes()))
       tx.Inputs.[0].WitScript <- witnessItems

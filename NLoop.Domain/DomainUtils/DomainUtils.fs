@@ -392,4 +392,4 @@ type SubscriptionParameter = {
   HandleEvent: SubscriptionEventHandler
   OnFinishCatchUp: (obj -> unit) option
 }
-type GetDBSubscription = SubscriptionParameter -> IDatabaseSubscription
+type GetDBSubscription = SubscriptionParameter -> Task<IDatabaseSubscription>

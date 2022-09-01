@@ -8,10 +8,11 @@
   <ItemGroup>
     <Compile Include="types.fs" />
     <Compile Include="LndGrpcClient.fs" />
+    <Compile Include="NLoopCLightningClient.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="12.*" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.*" />
   </ItemGroup>
 
   <ItemGroup>

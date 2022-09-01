@@ -9,7 +9,7 @@ open System.Threading.Tasks
 open DotNetLightning.Utils
 open FSharp.Control.Reactive
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NBitcoin
@@ -21,7 +21,7 @@ open NLoop.Server.DTOs
 open NLoop.Server.SwapServerClient
 type SwapExecutor(
                   invoiceProvider: ILightningInvoiceProvider,
-                  opts: IOptions<NLoopOptions>,
+                  opts: GetOptions,
                   logger: ILogger<SwapExecutor>,
                   eventAggregator: IEventAggregator,
                   swapServerClient: ISwapServerClient,
@@ -88,7 +88,7 @@ type SwapExecutor(
           SwapTxHex = None
           ClaimTransactionId = None
           PairId = pairId
-          ChainName = opts.Value.ChainName.ToString()
+          ChainName = opts().ChainName.ToString()
           Label = req.Label |> Option.defaultValue String.Empty
           PrepayInvoice =
             outResponse.MinerFeeInvoice
@@ -176,7 +176,7 @@ type SwapExecutor(
         let! swapTxFee =
           // we use p2sh-p2wsh to estimate the worst case fee.
           let addr = Scripts.dummySwapScriptV1.WitHash.ScriptPubKey.Hash.GetAddress(onChainNetwork)
-          let d = Dictionary<_,_>()
+          let d = Dictionary<BitcoinAddress, _>()
           d.Add(addr, loopIn.Amount)
           wallet.GetSendingTxFee(d, htlcConfTarget)
           |> TaskResult.mapError(fun walletError -> walletError.ToString())
@@ -225,11 +225,15 @@ type SwapExecutor(
             | None ->
               // This will never happen unless they pay us unconditionally.
               Task.CompletedTask
+          let label =
+            loopIn.Label
+            |> Option.defaultValue String.Empty
+            |> fun s -> s + $"(id: {(Guid.NewGuid().ToString())})"
           invoiceProvider.GetAndListenToInvoice(
             group.OffChainAsset,
             preimage,
             amt,
-            loopIn.Label |> Option.defaultValue String.Empty,
+            label,
             maybeRouteHints,
             onPaymentFinished, onPaymentCanceled, None)
 
@@ -269,7 +273,7 @@ type SwapExecutor(
               SwapTxInfoHex = None
               RefundTransactionId = None
               PairId = pairId
-              ChainName = opts.Value.ChainName.ToString()
+              ChainName = opts().ChainName.ToString()
               Label = loopIn.Label |> Option.defaultValue String.Empty
               HTLCConfTarget =
                 htlcConfTarget

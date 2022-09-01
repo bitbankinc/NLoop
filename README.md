@@ -26,8 +26,7 @@ Read the [anouncement blogpost](https://tech.bitbank.cc/nloop-announcement-en/) 
 
 ### Quick start
 
-We have a two binaries for you to work with.
-* `nloopd` ... standalone daemon to perform/manage the submarine swap.
+nloop is published as single file executable named `nloopd`.
 
 Download the latest binary from [the release page](https://github.com/joemphilips/NLoop/releases)
 and run with `--help` to see the possible configuration option.
@@ -43,9 +42,12 @@ and run with `--help` to see the possible configuration option.
 Probably the best way to check its behaviour is to run it in the regtest.
 Check the following guide for how-to.
 
-### How to try `nloopd` with local docker-compose environment in regtest.
+### How-to
 
-Check [README.md in test project](./tests/NLoop.Server.Tests/README.md)
+Check tutorial documents under `docs`
+
+* [Running with lnd](./docs/lnd_regtest.md)
+* [Running as a c-lightning plugin](./docs/cln_regtest.md)
 
 ## REST API
 
@@ -71,6 +73,6 @@ e.g. for cli options `--eventstoreurl`, `NLOOP_EVENTSTOREURL` is equivalent.
 
 * [x] loop-in autoloop
 * [ ] support interacting with multiple swap-server
-* [ ] support c-lightning
+* [x] support c-lightning
 * ~~[ ] support swap against lightning-loop-server~~ We decided not to support lightning-loop server, see: https://github.com/bitbankinc/NLoop/issues/13#issuecomment-1050795958
 

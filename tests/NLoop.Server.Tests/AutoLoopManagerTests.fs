@@ -5,7 +5,7 @@ open System.Threading
 open System.Threading.Channels
 open System.Threading.Tasks
 open DotNetLightning.Utils
-open LndClient
+open NLoopLnClient
 open FSharp.Control.Tasks
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Internal
@@ -127,7 +127,7 @@ type private AutoLoopManagerTestContext() =
       let mockOnGoingSwapProjection = {
         new IOnGoingSwapStateProjection with
           member _.State =
-            Map.ofSeq[
+            Map.ofSeq [
               yield!
                 this.OngoingOut
                 |> Seq.map(fun t ->
@@ -501,7 +501,7 @@ type AutoLoopManagerTests() =
       ClientRestrictions = ClientRestrictions.NoRestriction
       Rules = {
         ChannelRules = Map.ofSeq [(chanId1, chanRule)]
-        PeerRules = Map.ofSeq[(peer2 |> NodeId, chanRule)]
+        PeerRules = Map.ofSeq [(peer2 |> NodeId, chanRule)]
       }
       HTLCConfTarget = onChainAsset.DefaultParams.OnChain.HTLCConfTarget
       AutoLoop = true
@@ -610,7 +610,7 @@ type AutoLoopManagerTests() =
       FeeLimit = { FeePortion.PartsPerMillion = swapFeePPM }
       ClientRestrictions = ClientRestrictions.NoRestriction
       Rules = {
-        PeerRules = Map.ofSeq[(peer1 |> NodeId, rule); (peer2 |> NodeId, rule)]
+        PeerRules = Map.ofSeq [(peer1 |> NodeId, rule); (peer2 |> NodeId, rule)]
         ChannelRules = Map.empty
       }
       HTLCConfTarget = htlcConfTarget

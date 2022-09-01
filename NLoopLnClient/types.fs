@@ -1,9 +1,10 @@
-﻿namespace LndClient
+﻿namespace NLoopLnClient
 
 open System
 open System.Collections.Generic
 open System.Runtime.CompilerServices
 open System.Security.Cryptography.X509Certificates
+open DotNetLightning.ClnRpc
 open FSharp.Control
 open Macaroons
 open NBitcoin.DataEncoders
@@ -170,21 +171,17 @@ type IncomingInvoiceStateUnion =
   | Unknown
 
 type IncomingInvoiceSubscription = {
-  PaymentRequest: PaymentRequest
   InvoiceState: IncomingInvoiceStateUnion
   AmountPayed: LNMoney
 }
-type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse>
+type GetChannelInfo = ShortChannelId -> Task<GetChannelInfoResponse option>
+
+type SubscribeSingleInvoiceRequest = {
+  Hash: PaymentHash
+  Label: string
+}
 type INLoopLightningClient =
   abstract member GetDepositAddress: ?ct: CancellationToken -> Task<BitcoinAddress>
-  abstract member GetHodlInvoice:
-    paymentHash: Primitives.PaymentHash *
-    value: LNMoney *
-    expiry: TimeSpan *
-    routeHints: RouteHint[] *
-    memo: string *
-    ?ct: CancellationToken
-      -> Task<PaymentRequest>
   abstract member GetInvoice:
     paymentPreimage: PaymentPreimage *
     amount: LNMoney *
@@ -197,24 +194,21 @@ type INLoopLightningClient =
   /// Send payment to the counterparty, expect to finish immediately.
   abstract member SendPayment: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<PaymentResult, string>>
 
-  /// Make an payment offer to the counterparty, do not expect immediately.
+  /// Make an payment offer to the counterparty, do not expect to finish immediately.
   abstract member Offer: req: SendPaymentRequest * ?ct: CancellationToken -> Task<Result<OfferResult, string>>
   abstract member GetInfo: ?ct: CancellationToken -> Task<obj>
   abstract member QueryRoutes: nodeId: PubKey * amount: LNMoney * ?maybeOutgoingChanId: ShortChannelId * ?ct: CancellationToken ->
     Task<Route>
-  abstract member OpenChannel: request: LndOpenChannelRequest * ?ct: CancellationToken ->
-    Task<Result<OutPoint, LndOpenChannelError>>
   abstract member ConnectPeer: nodeId: PubKey * host: string * ?ct: CancellationToken -> Task
   abstract member ListChannels: ?ct: CancellationToken -> Task<ListChannelResponse list>
-  abstract member SubscribeChannelChange: ?ct: CancellationToken -> AsyncSeq<ChannelEventUpdate>
 
   /// Subscription for incoming payment. used for loopin
-  abstract member SubscribeSingleInvoice: invoiceHash: PaymentHash * ?c: CancellationToken ->
+  abstract member SubscribeSingleInvoice: request: SubscribeSingleInvoiceRequest * ?c: CancellationToken ->
     AsyncSeq<IncomingInvoiceSubscription>
   /// Subscription for outgoing payment. used for loopout
   abstract member TrackPayment: invoiceHash: PaymentHash * ?c: CancellationToken ->
     AsyncSeq<OutgoingInvoiceSubscription>
-  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse>
+  abstract member GetChannelInfo: channelId: ShortChannelId * ?ct:CancellationToken -> Task<GetChannelInfoResponse option>
 
 open FSharp.Control.Tasks
 
@@ -266,7 +260,16 @@ type LightningClientExtensions =
   [<Extension>]
   static member GetRouteHints(this: INLoopLightningClient, channelId: ShortChannelId, ?ct: CancellationToken) = task {
     let ct = defaultArg ct CancellationToken.None
-    let! c = this.GetChannelInfo(channelId, ct)
-    return c.ToRouteHints(channelId)
+    match! this.GetChannelInfo(channelId, ct) with
+    | Some c ->
+      return c.ToRouteHints(channelId)
+    | None ->
+      return failwith "todo"
   }
 
+
+type NLoopLightningClientError =
+  | Lnd of Grpc.Core.RpcException
+  | Cln of CLightningRPCException
+
+exception NLoopLightningClientException of NLoopLightningClientError

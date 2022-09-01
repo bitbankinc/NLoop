@@ -13,17 +13,17 @@ open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open FsToolkit.ErrorHandling
 open FSharp.Control.Tasks
-open LndClient
+open NLoopLnClient
 open NLoop.Domain
 
-type LightningClientProvider(logger: ILogger<LightningClientProvider>,
-                             opts: IOptions<NLoopOptions>,
-                             getNetwork: GetNetwork
-                             ) =
+type LndClientProvider(logger: ILogger<LndClientProvider>,
+                       opts: GetOptions,
+                       getNetwork: GetNetwork
+                       ) =
   let clients = Dictionary<SupportedCryptoCode, INLoopLightningClient>()
-  let settings = opts.Value.GetLndGrpcSettings()
+  let settings = opts().GetLndGrpcSettings()
   do
-    for c in opts.Value.OffChainCrypto do
+    for c in opts().OffChainCrypto do
       let cli =
         NLoopLndGrpcClient(settings, getNetwork(c))
         :> INLoopLightningClient
@@ -51,6 +51,7 @@ type LightningClientProvider(logger: ILogger<LightningClientProvider>,
     }
 
   interface ILightningClientProvider with
+    member this.Name = "lnd"
     member this.TryGetClient(crypto: SupportedCryptoCode) =
       match clients.TryGetValue(crypto) with
       | true, v -> v |> Some

@@ -23,7 +23,7 @@ open NLoop.Server.SwapServerClient
 
 type BoltzListener(swapServerClient: ISwapServerClient,
                    logger: ILogger<BoltzListener>,
-                   opts: IOptions<NLoopOptions>,
+                   opts: GetOptions,
                    actor: ISwapActor
                    ) =
   let statuses = ConcurrentDictionary<SwapId, Task>()
@@ -49,7 +49,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
       | :? OperationCanceledException ->
         logger.LogInformation($"Stopping {nameof(BoltzListener)}...")
       | :? HttpRequestException as ex ->
-        logger.LogCritical($"Connection to Boltz server {opts.Value.BoltzUrl} failed!")
+        logger.LogCritical($"Connection to Boltz server {opts().BoltzUrl} failed!")
         logger.LogError($"{ex}")
         raise <| ex
       | ex ->

@@ -8,7 +8,7 @@ open System.Threading.Tasks
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open DotNetLightning.Utils.Primitives
-open LndClient
+open NLoopLnClient
 open NBitcoin
 open FSharp.Control.Tasks
 open NBitcoin.RPC
@@ -22,6 +22,7 @@ type ISwapEventListener =
   abstract member RemoveSwap: swapId: SwapId -> unit
 
 type ILightningClientProvider =
+  abstract member Name: string
   abstract member TryGetClient: crypto: SupportedCryptoCode -> INLoopLightningClient option
   abstract member GetAllClients: unit -> INLoopLightningClient seq
 
@@ -115,3 +116,6 @@ type TryGetExchangeRate = PairId * CancellationToken -> Task<ExchangeRate option
 
 type GetAllEvents<'T> =
   DateTime option -> CancellationToken -> Task<Result<RecordedEvent<'T> list, StoreError>>
+
+type GetStore =
+  unit -> Store

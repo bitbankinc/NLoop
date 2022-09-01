@@ -18,7 +18,7 @@ type IRecentSwapFailureProjection =
 
 /// Cache recently failed swaps on memory
 /// Used in AutoLoop to backoff the failure
-type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
+type RecentSwapFailureProjection(opts: GetOptions,
                                  loggerFactory: ILoggerFactory,
                                  getDBSubscription: GetDBSubscription) as this =
   inherit BackgroundService()
@@ -50,7 +50,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       | Error _ -> ()
       | Ok r ->
         match r.Data with
-        | Swap.Event.NewLoopOutAdded { LoopOut = o } when String.Equals(o.ChainName, opts.Value.Network, StringComparison.OrdinalIgnoreCase) ->
+        | Swap.Event.NewLoopOutAdded { LoopOut = o } when String.Equals(o.ChainName, opts().Network, StringComparison.OrdinalIgnoreCase) ->
           this.FailedLoopOutSwapState <-
             this.FailedLoopOutSwapState
             |> Map.add re.StreamId (o.OutgoingChanIds, ValueNone)
@@ -61,7 +61,7 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
             this.FailedLoopOutSwapState <-
               this.FailedLoopOutSwapState
               |> dropOldest
-        | Swap.Event.NewLoopInAdded { LoopIn = i } when String.Equals(i.ChainName, opts.Value.Network, StringComparison.OrdinalIgnoreCase)  ->
+        | Swap.Event.NewLoopInAdded { LoopIn = i } when String.Equals(i.ChainName, opts().Network, StringComparison.OrdinalIgnoreCase)  ->
           i.LastHop
           |> Option.iter(fun lastHop ->
             this.FailedLoopInSwapState <-
@@ -90,16 +90,6 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       with
       | ex -> log.LogCritical $"{ex}"
   }
-  let subscription =
-    {
-      SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
-      Target =
-        SubscriptionTarget.All
-      HandleEvent = handleEvent
-      OnFinishCatchUp = None
-    }
-    |> getDBSubscription
-
 
   let mutable failedLoopOutSwapState = Map.empty<_, struct(ShortChannelId[] *  UnixDateTime voption)>
   let mutable failedLoopInSwapState = Map.empty<_, struct(NodeId * UnixDateTime voption)>
@@ -144,6 +134,16 @@ type RecentSwapFailureProjection(opts: IOptions<NLoopOptions>,
       |> ValueOption.defaultValue Checkpoint.StreamStart
     log.LogDebug($"Starting {nameof(RecentSwapFailureProjection)} from checkpoint {checkpoint}")
     try
+      let! subscription =
+        {
+          SubscriptionParameter.Owner =  nameof(RecentSwapFailureProjection)
+          Target =
+            SubscriptionTarget.All
+          HandleEvent = handleEvent
+          OnFinishCatchUp = None
+        }
+        |> getDBSubscription
+
       do! subscription.SubscribeAsync(checkpoint, stoppingToken)
     with
     | ex ->

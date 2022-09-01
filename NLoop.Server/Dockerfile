@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/aspnet:6.0-focal AS base
+FROM mcr.microsoft.com/dotnet/aspnet:6.0-bullseye-slim-amd64 AS base
 WORKDIR /app
 EXPOSE 5000
 
@@ -9,7 +9,7 @@ ENV ASPNETCORE_URLS=http://+:5000
 RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
 USER appuser
 
-FROM mcr.microsoft.com/dotnet/sdk:6.0-focal AS build
+FROM mcr.microsoft.com/dotnet/sdk:6.0-bullseye-slim-amd64 AS build
 WORKDIR /src
 
 ENV DOTNET_CLI_TELEMETRY_OPTOUT 1
@@ -35,7 +35,14 @@ WORKDIR "/src/NLoop.Server"
 RUN dotnet build "NLoop.Server.fsproj" --no-restore -c Release -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "NLoop.Server.fsproj" -c Release -o /app/publish
+RUN dotnet publish "NLoop.Server.fsproj" -c Release \
+    -o /app/publish \
+    -p:PublishReadyToRun=true \
+    -p:PublishSingleFile=true \
+    -p:PublishTrimmed=false \
+    -p:RuntimeIdentifier=linux-x64 \
+    -p:IncludeNativeLibrariesForSelfExtract=true \
+    --self-contained true
 
 FROM base AS final
 WORKDIR /app

@@ -7,7 +7,7 @@ open FSharp.Control.Tasks
 open System.Threading.Tasks
 open System.Runtime.CompilerServices
 open DotNetLightning.Utils.Primitives
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Options
 open NBitcoin
 open NLoop.Domain
@@ -99,7 +99,7 @@ type BoltzClientExtensions =
     }
   }
 
-type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOptions<NLoopOptions>, feeEst: IFeeEstimator) =
+type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: GetOptions, feeEst: IFeeEstimator) =
   interface ISwapServerClient with
     member this.LoopOut(request, ct) =
       let ct = defaultArg ct CancellationToken.None
@@ -157,10 +157,10 @@ type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: IOp
           let! fee =
             let onChainAsset = request.Pair.Quote
             let dummyP2SHAddr =
-              let n = opts.Value.GetNetwork(onChainAsset)
+              let n = opts().GetNetwork(onChainAsset)
               Scripts.dummySwapScriptV1.WitHash.GetAddress(n)
             let wallet = getWallet(onChainAsset)
-            let dest = seq [(dummyP2SHAddr, request.Amount)] |> dict
+            let dest = seq [(dummyP2SHAddr :> BitcoinAddress, request.Amount)] |> dict
             wallet.GetSendingTxFee(dest, request.HtlcConfTarget, ct)
           match fee with
           | Error e -> return Error <| e.ToString()

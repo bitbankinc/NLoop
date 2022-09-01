@@ -3,7 +3,8 @@ namespace NLoop.Server
 open System
 open System.Collections.Generic
 open System.IO
-open LndClient
+open DotNetLightning.ClnRpc
+open NLoopLnClient
 open NBitcoin
 open NLoop.Domain
 open NLoop.Server.DTOs
@@ -129,6 +130,8 @@ type NLoopOptions() =
 
   member val TargetIncomingLiquidityRatio = 50s<percent> with get, set
 
+  member val ClnRpcFile: string = null with get, set
+  
   member this.GetLndGrpcSettings() =
     LndGrpcSettings.Create(
       this.LndGrpcServer,
@@ -142,4 +145,6 @@ type NLoopOptions() =
         | Ok x -> x
         | Error e -> failwith $"Invalid Lnd config: {e}"
 
-
+type NLoopOptionsHolder() =
+  member val NLoopOptions: NLoopOptions option = None with get, set
+type GetOptions = unit -> NLoopOptions

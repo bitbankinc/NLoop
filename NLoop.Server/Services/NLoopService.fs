@@ -6,12 +6,13 @@ open System.CommandLine.Binding
 open System.CommandLine.Hosting
 open System.Threading
 open System.Threading.Tasks
+open DotNetLightning.ClnRpc.Plugin
 open ExchangeSharp
 open FSharp.Control.Tasks
 open BoltzClient
 open DotNetLightning.Utils.Primitives
 open EventStore.ClientAPI
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Internal
 open Microsoft.Extensions.Logging
@@ -31,12 +32,42 @@ open NLoop.Server.Actors
 open NLoop.Server.ProcessManagers
 open NLoop.Server.Projections
 
+type GetEventStoreConnection = unit -> Task<IEventStoreConnection>
+
 [<AbstractClass;Sealed;Extension>]
 type NLoopExtensions() =
+  
+  [<Extension>]
+  static member BindChainOptions(opts: NLoopOptions,
+                                 getOptionFromKeyName: SupportedCryptoCode -> string -> obj,
+                                 additionalBinding: SupportedCryptoCode -> IChainOptions -> unit) =
+    for c in Enum.GetValues<SupportedCryptoCode>() do
+      let cOpts =
+        let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
+        c.GetDefaultOptions(network)
+      cOpts.CryptoCode <- c
+      for p in typeof<IChainOptions>.GetProperties() do
+        let op =
+          getOptionFromKeyName c (p.Name.ToLowerInvariant())
+        let tyDefault =
+          if p.PropertyType = typeof<String> then
+            String.Empty |> box
+          else
+            Activator.CreateInstance(p.PropertyType)
+        if op <> null && op <> tyDefault then
+          try
+            let t = Convert.ChangeType(op, p.PropertyType)
+            if t <> tyDefault then
+              p.SetValue(cOpts, t)
+          with
+          | :? InvalidCastException ->
+            ()
+        additionalBinding c cOpts
+        opts.ChainOptions.AddOrReplace(c, cOpts)
 
   [<Extension>]
-  static member AddNLoopServices(this: IServiceCollection, ?test: bool) =
-      let test = defaultArg test false
+  static member AddNLoopServices(this: IServiceCollection, ?coldStart: bool) =
+      let coldStart = defaultArg coldStart false
       this
         .AddOptions<NLoopOptions>()
         .Configure<IServiceProvider>(fun opts serviceProvider ->
@@ -49,73 +80,82 @@ type NLoopExtensions() =
           let config = serviceProvider.GetService<IConfiguration>()
           if config |> isNull then () else
           let bindingContext = serviceProvider.GetService<BindingContext>()
-          for c in Enum.GetValues<SupportedCryptoCode>() do
-            let cOpts =
-              let network = c.ToNetworkSet().GetNetwork(opts.ChainName)
-              c.GetDefaultOptions(network)
-            cOpts.CryptoCode <- c
-            for p in typeof<IChainOptions>.GetProperties() do
-              let op =
-                let optsString = getChainOptionString(c) (p.Name.ToLowerInvariant())
-                bindingContext.ParseResult.ValueForOption(optsString)
-              let tyDefault = if p.PropertyType = typeof<String> then String.Empty |> box else Activator.CreateInstance(p.PropertyType)
-              if op <> null && op <> tyDefault && op.GetType() = p.PropertyType then
-                p.SetValue(cOpts, op)
-            config.GetSection(c.ToString()).Bind(cOpts)
-            opts.ChainOptions.Add(c, cOpts)
+          
+          opts.BindChainOptions(
+            (fun c p -> getChainOptionString c (p.ToLowerInvariant()) |> bindingContext.ParseResult.ValueForOption),
+            fun c -> config.GetSection(c.ToString()).Bind
+            )
           )
         |> ignore
 
       this
-        .AddSingleton<IEventStoreConnection>(fun sp ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
-          let connSettings =
-            ConnectionSettings.Create().DisableTls().Build()
-          let conn = EventStoreConnection.Create(connSettings, opts.Value.EventStoreUrl |> Uri)
-          conn.AuthenticationFailed.Add(fun args ->
-            logger.LogError $"connection to eventstore failed "
-            failwith $"reason: {args.Reason}"
-          )
-          conn.ErrorOccurred.Add(fun args ->
-            logger.LogError $"error in eventstore connection: {args.Exception}"
-          )
-          conn.Disconnected.Add(fun args ->
-            logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
-          )
-          conn.Reconnecting.Add(fun _args ->
-            logger.LogInformation $"Reconnecting to event store... {_args.ToStringInvariant()}"
-          )
-          do conn.ConnectAsync().GetAwaiter().GetResult()
-          conn
-        )
+        .AddSingleton<GetEventStoreConnection>(Func<IServiceProvider, _> (fun sp () ->
+          task {
+            let opts = sp.GetRequiredService<GetOptions>()()
+            let logger = sp.GetRequiredService<ILogger<IEventStoreConnection>>()
+            let connSettings =
+              ConnectionSettings
+                .Create()
+                .DisableTls()
+                .LimitReconnectionsTo(10)
+                .LimitAttemptsForOperationTo(10)
+                .LimitRetriesForOperationTo(10)
+                .Build()
+            let conn = EventStoreConnection.Create(connSettings, opts.EventStoreUrl |> Uri)
+            conn.AuthenticationFailed.Add(fun args ->
+              logger.LogError $"connection to eventstore ({opts.EventStoreUrl}) failed: {args.Reason}"
+            )
+            conn.ErrorOccurred.Add(fun args ->
+              logger.LogError $"error in eventstore connection: {args.Exception}"
+            )
+            conn.Disconnected.Add(fun args ->
+              logger.LogWarning $"EventStore ({args.RemoteEndPoint.ToEndpointString()}): disconnected."
+            )
+            conn.Reconnecting.Add(fun _args ->
+              logger.LogInformation $"Reconnecting to event store ({opts.EventStoreUrl})... "
+            )
+            do! conn.ConnectAsync()
+            return conn
+          }
+        ))
+        .AddSingleton<GetOptions>(Func<IServiceProvider, GetOptions>(fun sp () ->
+          let holder = sp.GetService<NLoopOptionsHolder>()
+          if holder |> box |> isNull |> not && holder.NLoopOptions.IsSome then
+            holder.NLoopOptions.Value
+          else
+            let v = sp.GetRequiredService<IOptions<NLoopOptions>>().Value
+            v
+        ))
         |> ignore
 
 
       this
-        .AddSingleton<NLoop.Domain.Utils.Store>(fun sp ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          EventStore.eventStore(opts.Value.EventStoreUrl |> Uri)
+        .AddSingleton<GetStore>(Func<IServiceProvider, GetStore>(fun sp () ->
+          let opts = sp.GetRequiredService<GetOptions>()()
+          EventStore.eventStore(opts.EventStoreUrl |> Uri)
+          )
         )
         .AddSingleton<GetDBSubscription>(Func<IServiceProvider, _>(fun sp parameters ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
-          let conn = sp.GetRequiredService<IEventStoreConnection>()
-          EventStoreDBSubscription(
-            { EventStoreConfig.Uri = opts.Value.EventStoreUrl |> Uri },
-            parameters.Owner,
-            parameters.Target,
-            loggerFactory.CreateLogger(),
-            parameters.HandleEvent,
-            parameters.OnFinishCatchUp
-            |> Option.map(fun onFinishCatchup -> (fun re -> onFinishCatchup (re |> box))),
-            conn)
-          :> IDatabaseSubscription
+          task {
+            let opts = sp.GetRequiredService<GetOptions>()()
+            let loggerFactory = sp.GetRequiredService<ILoggerFactory>()
+            let! conn = sp.GetRequiredService<GetEventStoreConnection>()()
+            return EventStoreDBSubscription(
+              { EventStoreConfig.Uri = opts.EventStoreUrl |> Uri },
+              parameters.Owner,
+              parameters.Target,
+              loggerFactory.CreateLogger(),
+              parameters.HandleEvent,
+              parameters.OnFinishCatchUp
+              |> Option.map(fun onFinishCatchup -> (fun re -> onFinishCatchup (re |> box))),
+              conn)
+            :> IDatabaseSubscription
+          }
         ))
         .AddSingleton<ISystemClock, SystemClock>()
         .AddSingleton<IRecentSwapFailureProjection, RecentSwapFailureProjection>()
         .AddSingleton<IOnGoingSwapStateProjection, OnGoingSwapStateProjection>()
-        .AddSingleton<ILightningClientProvider, LightningClientProvider>()
+        .AddSingleton<ILightningClientProvider, LndClientProvider>()
         .AddSingleton<BoltzListener>()
         .AddSingleton<ISwapEventListener, BoltzListener>(fun sp -> sp.GetRequiredService<BoltzListener>())
         .AddSingleton<GetSwapKey>(Func<IServiceProvider, GetSwapKey>(fun _ () -> new Key() |> Task.FromResult))
@@ -125,12 +165,15 @@ type NLoopExtensions() =
 
         )
         .AddSingleton<GetAllEvents<Swap.Event>>(Func<IServiceProvider, GetAllEvents<Swap.Event>>(fun sp since ct ->
-            let conn = sp.GetRequiredService<IEventStoreConnection>()
-            match since with
-            | Some date ->
-              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
-            | None ->
-              conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+            task {
+              let! conn = sp.GetRequiredService<GetEventStoreConnection>()()
+              return!
+                match since with
+                | Some date ->
+                  conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, date, ct)
+                | None ->
+                  conn.ReadAllEventsAsync(Swap.entityType, Swap.serializer, ct)
+            }
           )
         )
         |> ignore
@@ -156,16 +199,18 @@ type NLoopExtensions() =
         .AddSingleton<IBlockChainListener>(fun sp -> sp.GetRequiredService<BlockchainListeners>() :> IBlockChainListener)
         |> ignore
       this
-        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp ->
-          sp.GetService<IOptions<NLoopOptions>>().Value.GetBlockChainClient
+        .AddSingleton<GetBlockchainClient>(Func<IServiceProvider,_> (fun sp cc ->
+          (sp.GetService<GetOptions>()()).GetBlockChainClient cc
         ))
         .AddSingleton<GetWalletClient>(Func<IServiceProvider, _> (fun sp cc ->
-          let opts = sp.GetService<IOptions<NLoopOptions>>()
-          if opts.Value.OffChainCrypto |> Array.contains cc then
-            sp.GetRequiredService<ILightningClientProvider>().GetClient(cc)
-            :?> NLoopLndGrpcClient :> IWalletClient
+          let opts = sp.GetService<GetOptions>()()
+          if opts.OffChainCrypto |> Array.contains cc then
+            match sp.GetRequiredService<ILightningClientProvider>().GetClient(cc) with
+            | :? NLoopLndGrpcClient as c -> c :> IWalletClient
+            | :? NLoopCLightningClient as c -> c :> IWalletClient
+            | _ -> failwith "unreachable"
           else
-            opts.Value.GetWalletClient cc
+            opts.GetWalletClient cc
           )
         )
         |> ignore
@@ -173,27 +218,27 @@ type NLoopExtensions() =
         .AddSingleton<ISwapServerClient, BoltzSwapServerClient>()
         .AddHttpClient<BoltzClient>()
         .ConfigureHttpClient(fun sp client ->
-          client.BaseAddress <- sp.GetRequiredService<IOptions<NLoopOptions>>().Value.BoltzUrl
+          client.BaseAddress <- (sp.GetRequiredService<GetOptions>()()).BoltzUrl
         )
         |> ignore
 
       this
         .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp cc ->
-          let opts = sp.GetRequiredService<IOptions<NLoopOptions>>()
-          opts.Value.GetNetwork(cc)
+          let opts = sp.GetRequiredService<GetOptions>()
+          opts().GetNetwork(cc)
           ))
         .AddSingleton<IBroadcaster, BitcoinRPCBroadcaster>()
         .AddSingleton<ILightningInvoiceProvider, LightningInvoiceProvider>()
         .AddSingleton<IFeeEstimator, RPCFeeEstimator>()
         .AddSingleton<GetAddress>(Func<IServiceProvider, GetAddress>(fun sp ->
-          let opts = sp.GetService<IOptions<NLoopOptions>>()
           GetAddress(fun cc ->
-            if opts.Value.OffChainCrypto |> Seq.contains cc then
+            let opts = sp.GetService<GetOptions>()()
+            if opts.OffChainCrypto |> Seq.contains cc then
               let getter = sp.GetRequiredService<ILightningClientProvider>().AsChangeAddressGetter()
               getter.Invoke cc
             else
               let walletClient = sp.GetService<GetWalletClient>()(cc)
-              let network = opts.Value.GetNetwork(cc)
+              let network = opts.GetNetwork(cc)
               task {
                 try
                   let! r = walletClient.GetDepositAddress(network)
@@ -213,7 +258,7 @@ type NLoopExtensions() =
         .AddHealthChecks()
         |> ignore
 
-      if (not <| test) then
+      if (not <| coldStart) then
         // it is important here that Startup order is
         // SwapProcessManager -> OngoingSwapStateProjection -> BlockchainListeners
         // Since otherwise on startup it fails to re-register swaps on blockchain listeners.
@@ -232,7 +277,10 @@ type NLoopExtensions() =
             p.GetRequiredService<ExchangeRateProvider>() :> IHostedService
           )
           .AddSingleton<IHostedService>(fun p ->
-            p.GetRequiredService<ILightningClientProvider>() :?> LightningClientProvider :> IHostedService
+            match p.GetRequiredService<ILightningClientProvider>() with
+            | :? LndClientProvider as p -> p :> IHostedService
+            | :? ClnLightningClientProvider as p -> p :> IHostedService
+            | _ -> failwith "no lightning client registered"
           )
           .AddSingleton<IHostedService>(fun p ->
             p.GetRequiredService<AutoLoopManagers>() :> IHostedService

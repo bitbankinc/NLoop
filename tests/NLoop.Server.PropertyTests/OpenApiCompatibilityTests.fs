@@ -20,13 +20,20 @@ let propConfig = {
     maxTest = 100
 }
 
-let checkCompatibilityWith<'T, 'TIn> (input: 'TIn) =
-  let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-  let json =
-    opts.AddNLoopJsonConverters(Network.RegTest)
-    JsonSerializer.Serialize<'TIn>(input, opts)
-  let deserializeSettings = JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
-  JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
+let stjOptions = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+stjOptions.AddNLoopJsonConverters()
+
+let newtonsoftOpts =
+  JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
+let check_server_to_nswag<'TGenerated, 'TNative> (input: 'TNative) =
+  // 1. serialize with newtonsoft, deserialize with stj
+  let jsonStr =
+    JsonSerializer.Serialize<'TNative>(input, stjOptions)
+  let value = JsonConvert.DeserializeObject<'TGenerated>(jsonStr, newtonsoftOpts)
+  
+  // 2. serialize with stj, deserialize with newtonsoft
+  let jsonStr = JsonConvert.SerializeObject(value, typeof<'TGenerated>, newtonsoftOpts)
+  JsonSerializer.Deserialize<'TNative>(jsonStr, stjOptions)
   |> ignore
 
 let inline testProp testName = testPropertyWithConfig propConfig testName
@@ -35,38 +42,38 @@ let inline ptestProp testName = ptestPropertyWithConfig propConfig testName
 
 [<Tests>]
 let tests =
-  testList "Compatibility (Server defined <----> NSwag generated)" [
+  testList "Compatibility (Server defined <---> NSwag generated)" [
     testProp "LoopOutRequest" <| fun (serverDto: LoopOutRequest) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LoopOutRequest, LoopOutRequest>
+      serverDto |> check_server_to_nswag<NLoopClient.LoopOutRequest, LoopOutRequest>
 
     testProp "LoopOutResponse" <| fun (serverDto: LoopOutResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LoopOutResponse, LoopOutResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.LoopOutResponse, LoopOutResponse>
 
     testProp "LoopInRequest" <| fun (serverDto: LoopInRequest) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LoopInRequest, LoopInRequest>
+      serverDto |> check_server_to_nswag<NLoopClient.LoopInRequest, LoopInRequest>
 
     testProp "LoopInResponse" <| fun (serverDto: LoopInResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LoopInResponse, LoopInResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.LoopInResponse, LoopInResponse>
 
     testProp "GetInfoResponse" <| fun (serverDto: GetInfoResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.GetInfoResponse, GetInfoResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.GetInfoResponse, GetInfoResponse>
 
     testProp "OngoingSwap" <| fun (serverDto: GetOngoingSwapResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.GetOngoingSwapResponse, GetOngoingSwapResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.GetOngoingSwapResponse, GetOngoingSwapResponse>
 
     testProp "SwapHistory" <| fun (serverDto: GetSwapHistoryResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.GetSwapHistoryResponse, GetSwapHistoryResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.GetSwapHistoryResponse, GetSwapHistoryResponse>
 
     testProp "SuggestSwapsResponse" <| fun (serverDto: SuggestSwapsResponse) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.SuggestSwapsResponse, SuggestSwapsResponse>
+      serverDto |> check_server_to_nswag<NLoopClient.SuggestSwapsResponse, SuggestSwapsResponse>
 
     testProp "LiquidityParameters" <| fun (serverDto: LiquidityParameters) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.LiquidityParameters, LiquidityParameters>
+      serverDto |> check_server_to_nswag<NLoopClient.LiquidityParameters, LiquidityParameters>
 
     testProp "SetLiquidityParametersRequest" <| fun (serverDto: SetLiquidityParametersRequest) ->
-      serverDto |> checkCompatibilityWith<NLoopClient.SetLiquidityParametersRequest, SetLiquidityParametersRequest>
+      serverDto |> check_server_to_nswag<NLoopClient.SetLiquidityParametersRequest, SetLiquidityParametersRequest>
 
     testProp "GetCostSummaryResponse" <| fun (serverDTO: GetCostSummaryResponse[]) ->
-      serverDTO |> checkCompatibilityWith<NLoopClient.GetCostSummaryResponse, GetCostSummaryResponse[]>
+      serverDTO |> check_server_to_nswag<NLoopClient.GetCostSummaryResponse, GetCostSummaryResponse[]>
   ]
 

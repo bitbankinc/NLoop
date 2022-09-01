@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# 
+#
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Server", "NLoop.Server\NLoop.Server.fsproj", "{F99A8283-95F8-463A-B8A1-8E2BB68EE7A3}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{4CF4C444-22AD-4BBD-A6F1-38051BC11435}"
@@ -17,7 +17,7 @@ Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Domain.Tests", "tests
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoop.Tests.Common", "tests\NLoop.Tests.Common\NLoop.Tests.Common.fsproj", "{4246F492-D413-4C0D-A812-DEAD2E4827DF}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "LndClient", "LndClient\LndClient.fsproj", "{C7DF72D8-050F-40A9-873F-562954D166FA}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLoopLnClient", "NLoopLnClient\NLoopLnClient.fsproj", "{C7DF72D8-050F-40A9-873F-562954D166FA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LndGrpcClient", "LndGrpcClient\LndGrpcClient.csproj", "{176A8F7D-10A6-4D26-A4B2-30D41AE66F19}"
 EndProject

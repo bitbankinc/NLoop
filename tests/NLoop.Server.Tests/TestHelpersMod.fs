@@ -3,17 +3,13 @@ namespace NLoop.Server.Tests
 open System
 open System.Collections.Generic
 open System.CommandLine.Parsing
-open System.Net
 open System.Net.Http
-open System.Net.Sockets
 open System.Threading
 open System.Threading.Tasks
 open System.IO
 open System.Security.Cryptography
 open System.Security.Cryptography.X509Certificates
 open System.CommandLine.Binding
-open System.CommandLine.Builder
-open System.CommandLine.Parsing
 
 open BoltzClient
 open EventStore.ClientAPI
@@ -21,7 +17,8 @@ open FSharp.Control
 open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
+open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Logging.Abstractions
 open NBitcoin.DataEncoders
@@ -32,14 +29,11 @@ open Microsoft.Extensions.DependencyInjection
 open Microsoft.AspNetCore.Hosting
 open Microsoft.AspNetCore.TestHost
 
-open NBitcoin.RPC
 open NLoop.Domain
 open NLoop.Domain.IO
 open NLoop.Server
 open NLoop.Server.Actors
 open NLoop.Server.SwapServerClient
-open NLoop.Server.Projections
-
 
 module TestHelpersMod =
   let getLocalBoltzClient() =
@@ -117,8 +111,7 @@ type DummyLnClientParameters = {
   ListChannels: ListChannelResponse list
   QueryRoutes: PubKey -> LNMoney -> ShortChannelId option -> Route
   GetInvoice: PaymentPreimage -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  GetHodlInvoice: PaymentHash -> LNMoney -> TimeSpan -> string -> RouteHint[] -> PaymentRequest
-  SubscribeSingleInvoice: PaymentHash -> AsyncSeq<IncomingInvoiceSubscription>
+  SubscribeSingleInvoice: SubscribeSingleInvoiceRequest -> AsyncSeq<IncomingInvoiceSubscription>
   GetChannelInfo: ShortChannelId -> GetChannelInfoResponse
 }
   with
@@ -134,7 +127,6 @@ type DummyLnClientParameters = {
       |> ResultUtils.Result.deref
     SubscribeSingleInvoice = fun _hash -> failwith "todo"
     GetChannelInfo = fun _cId -> failwith "todo"
-    GetHodlInvoice = fun _ _ _ _ _ -> failwith "todo"
   }
 
 type DummySwapServerClientParameters = {
@@ -210,7 +202,7 @@ type DummyWalletClientParameters = {
   static member Default =
     {
       FundToAddress = fun (_,_,_) -> failwith "todo"
-      GetDepositAddress = fun () -> TestHelpersMod.walletAddress
+      GetDepositAddress = fun () -> TestHelpersMod.walletAddress |> unbox
       GetSendingTxFee = fun _ _ -> failwith "todo"
     }
 
@@ -221,16 +213,8 @@ type TestHelpers =
     {
       new INLoopLightningClient with
       member this.GetDepositAddress(?ct) =
-        TestHelpersMod.lndAddress
+        TestHelpersMod.lndAddress |> unbox
         |> Task.FromResult
-      member this.GetHodlInvoice(paymentHash: Primitives.PaymentHash,
-                                 value: LNMoney,
-                                 expiry: TimeSpan,
-                                 routeHints: RouteHint[],
-                                 memo: string,
-                                 ?ct: CancellationToken) =
-          parameters.GetHodlInvoice paymentHash value expiry memo routeHints
-          |> Task.FromResult
       member this.GetInvoice(paymentPreimage: PaymentPreimage,
                              amount: LNMoney,
                              expiry: TimeSpan,
@@ -255,21 +239,15 @@ type TestHelpers =
       member this.QueryRoutes(nodeId: PubKey, amount: LNMoney, ?chanId: ShortChannelId, ?ct: CancellationToken): Task<Route> =
         parameters.QueryRoutes nodeId amount chanId
         |> Task.FromResult
-
-      member this.OpenChannel(request: LndOpenChannelRequest, ?ct: CancellationToken): Task<Result<OutPoint, LndOpenChannelError>> =
-        failwith "todo"
       member this.ConnectPeer(nodeId: PubKey, host: string, ?ct: CancellationToken): Task =
         Task.FromResult() :> Task
       member this.ListChannels(?ct: CancellationToken): Task<ListChannelResponse list> =
         Task.FromResult parameters.ListChannels
-      member this.SubscribeChannelChange(?ct: CancellationToken): AsyncSeq<ChannelEventUpdate> =
-        failwith "todo"
-
       member this.TrackPayment(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<OutgoingInvoiceSubscription> =
         failwith "todo"
-      member this.SubscribeSingleInvoice(invoiceHash: PaymentHash, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
-        parameters.SubscribeSingleInvoice invoiceHash
-      member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse> =
+      member this.SubscribeSingleInvoice(req, ?ct: CancellationToken): AsyncSeq<IncomingInvoiceSubscription> =
+        parameters.SubscribeSingleInvoice req
+      member this.GetChannelInfo(channelId: ShortChannelId, ?ct:CancellationToken): Task<GetChannelInfoResponse option> =
         {
           Capacity = Money.Satoshis(10000m)
           Node1Policy = {
@@ -289,6 +267,7 @@ type TestHelpers =
             Disabled = false
           }
         }
+        |> Some
         |> Task.FromResult
     }
 
@@ -301,6 +280,7 @@ type TestHelpers =
           dummyLnClient |> Some
         member this.GetAllClients() =
           seq [dummyLnClient]
+        member this.Name = "TestClientProvider"
     }
 
 
@@ -425,6 +405,9 @@ type TestHelpers =
       .AddSingleton<GetNetwork>(Func<IServiceProvider, _>(fun sp (cc: SupportedCryptoCode) ->
         cc.ToNetworkSet().GetNetwork(Network.RegTest.ChainName)
       ))
+      .AddSingleton<GetStore>(Func<IServiceProvider, _>(fun sp () ->
+        NLoop.Domain.Utils.InMemoryStore.getEventStore()
+      ))
       .AddSingleton<GetWalletClient>(Func<IServiceProvider,_>(fun sp _cc ->
         sp.GetRequiredService<IWalletClient>()
       ))
@@ -434,7 +417,7 @@ type TestHelpers =
   static member GetTestServiceProvider(?configureServices) =
     let configureServices = defaultArg configureServices (fun _ -> ())
     let services = ServiceCollection()
-    App.configureServicesTest services
+    App.configureServicesWithColdStart services
     TestHelpers.ConfigureTestServices(services, configureServices)
     services.BuildServiceProvider()
 
@@ -446,8 +429,26 @@ type TestHelpers =
         configBuilder.AddJsonFile("appsettings.test.json") |> ignore
         )
       .UseStartup<TestHelpersMod.TestStartup>()
-      .ConfigureLogging(Main.configureLogging)
       .ConfigureTestServices(fun (services: IServiceCollection) ->
         TestHelpers.ConfigureTestServices(services, configureServices)
       )
       .UseTestServer()
+
+  static member GetPluginTestHost(outStream, ?configureServices: IServiceCollection -> unit) =
+    let configureServices = defaultArg configureServices (fun _ -> ())
+    let hb =
+      HostBuilder()
+        .UseContentRoot(Directory.GetCurrentDirectory())
+        .ConfigureAppConfiguration(fun configBuilder ->
+          configBuilder.AddJsonFile("appsettings.test.json") |> ignore
+          )
+        .ConfigureWebHost(fun wb ->
+          wb
+            .ConfigureTestServices(fun (services: IServiceCollection) ->
+              TestHelpers.ConfigureTestServices(services, configureServices)
+            )
+            .Configure(fun applicationBuilder -> ())
+            .UseTestServer()
+            |> ignore
+        )
+    hb.ConfigureAsPlugin(outStream, coldStart = true).StartAsync()

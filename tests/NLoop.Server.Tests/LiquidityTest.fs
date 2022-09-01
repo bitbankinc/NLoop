@@ -10,7 +10,7 @@ open DotNetLightning.Utils.Primitives
 open FSharp.Control.Tasks
 open System.Threading.Tasks
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.AspNetCore.TestHost
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Internal
@@ -44,7 +44,7 @@ module private Constants =
   let chanId2 = ShortChannelId.FromUInt64(2UL)
   let chanId3 = ShortChannelId.FromUInt64(3UL)
   let channel1 = {
-    LndClient.ListChannelResponse.Id = chanId1
+    NLoopLnClient.ListChannelResponse.Id = chanId1
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     RemoteBalance = Money.Zero
@@ -52,7 +52,7 @@ module private Constants =
   }
   let pairId = PairId(SupportedCryptoCode.BTC, SupportedCryptoCode.BTC)
   let channel2 = {
-    LndClient.ListChannelResponse.Id = chanId2
+    NLoopLnClient.ListChannelResponse.Id = chanId2
     Cap = Money.Satoshis(10000L)
     LocalBalance = Money.Satoshis(10000L)
     RemoteBalance = Money.Zero
@@ -157,7 +157,7 @@ module private Constants =
       Label = String.Empty
       PrepayInvoice =
         let paymentPreimage = PaymentPreimage.Create(RandomUtils.GetBytes 32)
-        getDummyTestInvoice paymentPreimage (quoteN)
+        getDummyTestInvoice paymentPreimage quoteN
       SweepConfTarget = pairId.DefaultLoopOutParameters.SweepConfTarget
       MaxMinerFee = pairId.DefaultLoopOutParameters.MaxMinerFee
       ChainName = chainName.ToString()
@@ -399,7 +399,7 @@ type LiquidityTest() =
             DisqualifiedChannels =
               [(chanId1, SwapDisqualifiedReason.FailureBackoff)] |> Map.ofSeq
       }
-      ("Swap failed recently", seq[ channel1 ], Seq.empty, rules, recentFailure, Map.empty, 2,  expected)
+      ("Swap failed recently", seq [ channel1 ], Seq.empty, rules, recentFailure, Map.empty, 2,  expected)
       let notRecentFailure =
         Map.empty |> failureBeforeBackoff chanId1
       let expected = {
@@ -554,11 +554,11 @@ type LiquidityTest() =
     this.TestSuggestSwapsCore(name, setup, parameters, [channel1], Ok expected)
 
   static member TestSuggestSwapsTestData =
-    seq[
+    seq [
       ("no rules", [channel1], Rules.Zero, defaultFeePPM, Error(AutoLoopError.NoRules))
       let ruleWithChan1Rule = {
         Rules.Zero with
-          ChannelRules = Map.ofSeq[(chanId1, chanRule)]
+          ChannelRules = Map.ofSeq [(chanId1, chanRule)]
       }
       let expected = {
         SwapSuggestions.Zero
@@ -568,9 +568,9 @@ type LiquidityTest() =
       ("loop out", [channel1], ruleWithChan1Rule, defaultFeePPM, Ok expected)
       let ruleWithChan2Rule = {
         Rules.Zero with
-          ChannelRules = Map.ofSeq[(chanId2, { ThresholdRule.MinimumIncoming = 10s<percent>; MinimumOutGoing = 10s<percent> })]
+          ChannelRules = Map.ofSeq [(chanId2, { ThresholdRule.MinimumIncoming = 10s<percent>; MinimumOutGoing = 10s<percent> })]
       }
-      ("no rule for the channel", [channel1], ruleWithChan2Rule, defaultFeePPM, Ok (SwapSuggestions.Zero))
+      ("no rule for the channel", [channel1], ruleWithChan2Rule, defaultFeePPM, Ok SwapSuggestions.Zero)
       let channels = [
         { ListChannelResponse.NodeId = peer1
           Cap = 20000L |> Money.Satoshis
@@ -591,7 +591,7 @@ type LiquidityTest() =
       let multiplePeerRules = {
         Rules.Zero
           with
-          PeerRules = Map.ofSeq[
+          PeerRules = Map.ofSeq [
             (peer1 |> NodeId, { MinimumIncoming = 80s<percent>; MinimumOutGoing = 0s<percent> })
             (peer2 |> NodeId, { MinimumIncoming = 30s<percent>; MinimumOutGoing = 40s<percent> })
           ]
@@ -617,14 +617,14 @@ type LiquidityTest() =
               SweepConfTarget =
                 pairId.DefaultLoopOutParameters.SweepConfTarget.Value |> int |> ValueSome }
           ]
-          DisqualifiedPeers = Map.ofSeq[(peer2 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
+          DisqualifiedPeers = Map.ofSeq [(peer2 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
       }
       ("multiple peer rules", channels, multiplePeerRules, defaultFeePPM, Ok expected)
 
       let multiplePeerRules = {
         multiplePeerRules
           with
-          PeerRules = Map.ofSeq[
+          PeerRules = Map.ofSeq [
             (peer1 |> NodeId, { MinimumIncoming = 10s<percent>; MinimumOutGoing = 0s<percent> })
             (peer2 |> NodeId, { MinimumIncoming = 40s<percent>; MinimumOutGoing = 50s<percent> })
           ]
@@ -656,7 +656,7 @@ type LiquidityTest() =
               HtlcConfTarget = pairId.Reverse.DefaultLoopInParameters.HTLCConfTarget.Value |> int |> ValueSome
             }
           ]
-          DisqualifiedPeers = Map.ofSeq[(peer1 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
+          DisqualifiedPeers = Map.ofSeq [(peer1 |> NodeId, SwapDisqualifiedReason.LiquidityOk)]
       }
       ("multiple peer rules (loop in)", channels, multiplePeerRules, 60000L<ppm>, Ok loopInExpected)
     ]
@@ -719,7 +719,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           DisqualifiedChannels =
-            Map.ofSeq[(chanId1, SwapDisqualifiedReason.PrepayTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourMaxPrepay |}))]
+            Map.ofSeq [(chanId1, SwapDisqualifiedReason.PrepayTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourMaxPrepay |}))]
       }
       ("insufficient prepay", quote, expected)
       let ourLimit = pairId.DefaultLoopOutParameters.MaxMinerFee
@@ -746,7 +746,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           DisqualifiedChannels =
-            Map.ofSeq[(chanId1, SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourLimit |}))]
+            Map.ofSeq [(chanId1, SwapDisqualifiedReason.SwapFeeTooHigh({| ServerRequirement = serverRequirement; OurLimit = ourLimit |}))]
       }
       ("insufficient swap fee", quote, expected)
     ]
@@ -820,7 +820,7 @@ type LiquidityTest() =
           with
           // create two peer-level rules, both in need of a swap,
           // but peer 1 needs a larger swap so will be prioritized.
-          PeerRules = Map.ofSeq[
+          PeerRules = Map.ofSeq [
             (peer1 |> NodeId, { ThresholdRule.MinimumIncoming = 50s<percent>; MinimumOutGoing = 0s<percent> })
             (peer2 |> NodeId, { ThresholdRule.MinimumIncoming = 40s<percent>; MinimumOutGoing = 0s<percent> })
           ]
@@ -829,7 +829,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           OutSwaps = [chan1Rec]
-          DisqualifiedPeers = Map.ofSeq[
+          DisqualifiedPeers = Map.ofSeq [
             (peer2 |> NodeId, SwapDisqualifiedReason.InFlightLimitReached)
           ]
       }
@@ -866,7 +866,7 @@ type LiquidityTest() =
             {
               rules
                 with
-                ChannelRules = Map.ofSeq[(chanId1, chanRule); (chanId2, chanRule)]
+                ChannelRules = Map.ofSeq [(chanId1, chanRule); (chanId2, chanRule)]
             }
           else
             rules
@@ -944,7 +944,7 @@ type LiquidityTest() =
               with
                 LoopOutQuote = fun _ -> testQuote |> Ok |> Task.FromResult
                 LoopOutTerms = fun _ ->
-                  let r = outTerms.[callCount]
+                  let r = outTerms[callCount]
                   callCount <- callCount + 1
                   r |> Task.FromResult
           }
@@ -955,7 +955,7 @@ type LiquidityTest() =
       Parameters.Default SupportedCryptoCode.BTC
         with
         ClientRestrictions = clientR
-        Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
+        Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
     }
     task {
       do! this.TestSuggestSwapsCore(name, setup, parameters, [channel1], expected)
@@ -1002,7 +1002,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           DisqualifiedChannels =
-            Map.ofSeq[
+            Map.ofSeq [
               (chanId1, SwapDisqualifiedReason.SwapFeeTooHigh({|ServerRequirement = quote.SwapFee
                                                                 OurLimit = ppmToSat(swapAmount, feePPM) |}))
             ]
@@ -1019,7 +1019,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           DisqualifiedChannels =
-            Map.ofSeq[
+            Map.ofSeq [
               (chanId1, SwapDisqualifiedReason.MinerFeeTooHigh({|ServerRequirement = scaleMinerFee quote.SweepMinerFee
                                                                  OurLimit = ppmToSat(swapAmount, feePPM) |}))
             ]
@@ -1037,7 +1037,7 @@ type LiquidityTest() =
         SwapSuggestions.Zero
           with
           DisqualifiedChannels =
-            Map.ofSeq[
+            Map.ofSeq [
               (chanId1, SwapDisqualifiedReason.PrepayTooHigh({|ServerRequirement = quote.PrepayAmount
                                                                OurLimit = ppmToSat(swapAmount, feePPM) |}))
             ]
@@ -1072,7 +1072,7 @@ type LiquidityTest() =
     let parameters = {
       Parameters.Default SupportedCryptoCode.BTC
         with
-        Rules = { Rules.Zero with ChannelRules = Map.ofSeq[(chanId1, chanRule)] }
+        Rules = { Rules.Zero with ChannelRules = Map.ofSeq [(chanId1, chanRule)] }
         FeeLimit = { FeePortion.PartsPerMillion = feePPM }
     }
     this.TestSuggestSwapsCore(name, setup, parameters, [channel1], Ok expected)

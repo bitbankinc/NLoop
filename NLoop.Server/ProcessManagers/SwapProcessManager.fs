@@ -8,7 +8,7 @@ open DotNetLightning.Payment
 open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Hosting
 open Microsoft.Extensions.Logging
 open NLoop.Domain.Utils

@@ -10,7 +10,7 @@ open DotNetLightning.Utils
 open FSharp.Control.Tasks
 open FSharp.Control.Reactive
 open FsToolkit.ErrorHandling
-open LndClient
+open NLoopLnClient
 open Microsoft.Extensions.Logging
 open Microsoft.Extensions.Options
 open NLoop.Domain
@@ -55,7 +55,7 @@ module Observable =
       |> Observable.first
       |> fun t -> t.GetAwaiter() |> Async.AwaitCSharpAwaitable
 
-type SwapActor(opts: IOptions<NLoopOptions>,
+type SwapActor(opts: GetOptions,
                lightningClientProvider: ILightningClientProvider,
                broadcaster: IBroadcaster,
                feeEstimator: IFeeEstimator,
@@ -63,7 +63,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
                getAllSwapEvents: GetAllEvents<Swap.Event>,
                getRefundAddress: GetAddress,
                getWalletClient: GetWalletClient,
-               store: Store,
+               getStore: GetStore,
                logger: ILogger<SwapActor>) =
   let aggr =
     let payInvoiceImmediate =
@@ -87,7 +87,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       fun (req: WalletFundingRequest) -> task {
         let cli = getWalletClient(req.CryptoCode)
         let! txid = cli.FundToAddress(req.DestAddress, req.Amount, req.TargetConf)
-        let blockchainCli = opts.Value.GetBlockChainClient(req.CryptoCode)
+        let blockchainCli = opts().GetBlockChainClient(req.CryptoCode)
         return! blockchainCli.GetRawTransaction(TxId txid)
       }
     let offer =
@@ -102,7 +102,15 @@ type SwapActor(opts: IOptions<NLoopOptions>,
     getSwapDeps broadcaster feeEstimator getRefundAddress payInvoiceImmediate fundFromWallet offer
     |> Swap.getAggregate
   let mutable handler =
-    Swap.getHandler aggr store
+    None
+    
+  let getHandler() =
+    match handler with
+    | None ->
+      let h = Swap.getHandler aggr (getStore())
+      handler <- Some h
+      h
+    | Some handler -> handler
 
   /// We use queue to assure the change to the command execution is sequential.
   /// This is OK (since performance rarely be a consideration in swap) but it is
@@ -118,7 +126,7 @@ type SwapActor(opts: IOptions<NLoopOptions>,
       finished <- not <| channelOpened
       if not finished then
         let! swapId, cmd, commitError = workQueue.Reader.ReadAsync()
-        match! handler.Execute swapId cmd with
+        match! getHandler().Execute swapId cmd with
         | Ok events ->
           logger.LogDebug $"executed command: {cmd.Data.CommandTag} successfully"
           events
@@ -146,8 +154,9 @@ type SwapActor(opts: IOptions<NLoopOptions>,
             | _ex ->
               ()
   }
-
-  member val Handler = handler with get
+  member val Handler =
+    getHandler()
+    with get
   member val Aggregate = aggr with get
   member this.Execute(swapId, msg: Swap.Command, source, commitErrorOnFailure: bool option) = unitTask {
     let commitErrorOnFailure = defaultArg commitErrorOnFailure false
