@@ -1,5 +1,9 @@
 module NLoop.Server.Handlers.AutoLoopHandlers
 
+// "state machine is not statically compilable" error.
+// The performance does not really matters on the top level of the rpc. So ignore.
+#nowarn "3511"
+
 open System
 open DotNetLightning.Utils.Primitives
 open FsToolkit.ErrorHandling
@@ -229,3 +233,4 @@ let handleSuggestSwaps
         }
         |> Ok
   }
+#endnowarn "3511"
