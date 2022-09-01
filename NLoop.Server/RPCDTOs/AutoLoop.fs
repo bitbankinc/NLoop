@@ -42,9 +42,11 @@ type SwapDisqualifiedReason =
       $"Total required fees for the swap: ({v.Required.Satoshi} sats) greater than our fee limit ({v.OurLimit.Satoshi} sats)"
     | x -> $"{x}"
 
+[<JsonConverter(typeof<JsonStringEnumConverter>)>]
 type LiquidityRuleType =
-  | THRESHOLD
-  | UNKNOWN
+  | THRESHOLD = 0
+  | UNKNOWN = 1
+  
 open FsToolkit.ErrorHandling
 type LiquidityRule = {
   /// The channel id to apply this rule.

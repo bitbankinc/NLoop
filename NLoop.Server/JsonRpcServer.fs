@@ -35,21 +35,23 @@ open StreamJsonRpc.Protocol
 
 [<AutoOpen>]
 module private JsonRpcServerHelpers =
+  let stjOpts =
+    JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
+  stjOpts.AddNLoopJsonConverters()
+  let newtonsoftOpts =
+    JsonSerializerSettings(
+      NullValueHandling = NullValueHandling.Include,
+      MissingMemberHandling = MissingMemberHandling.Error
+    )
   let inline convertDTOToNLoopCompatibleStyle(input: 'TIn) =
     let json =
-      let deserializeSettings = JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
-      JsonConvert.SerializeObject(input, deserializeSettings)
-    let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-    opts.AddNLoopJsonConverters()
-    JsonSerializer.Deserialize<'T>(json, opts)
+      JsonConvert.SerializeObject(input, newtonsoftOpts)
+    JsonSerializer.Deserialize<'T>(json, stjOpts)
 
   let inline convertDTOToJsonRPCStyle (input: 'TIn) : 'T =
     let json =
-      let opts = JsonSerializerOptions(IgnoreNullValues = false, PropertyNamingPolicy = JsonNamingPolicy.CamelCase)
-      opts.AddNLoopJsonConverters()
-      JsonSerializer.Serialize<'TIn>(input, opts)
-    let deserializeSettings = JsonSerializerSettings(NullValueHandling = NullValueHandling.Include, MissingMemberHandling = MissingMemberHandling.Error)
-    JsonConvert.DeserializeObject<'T>(json, deserializeSettings)
+      JsonSerializer.Serialize<'TIn>(input, stjOpts)
+    JsonConvert.DeserializeObject<'T>(json, newtonsoftOpts)
 
   type HandlerError with
     member this.AsJsonRpcErrorCode =
@@ -302,7 +304,7 @@ type NLoopJsonRpcServer
 
   [<PluginJsonRpcMethod(
     "nloop_get_liquidityparams",
-    "",
+    "Get the liquidity params you have set before by set_liquidityparams",
     ""
     )>]
   member this.Get_LiquidityParams(offChainAsset: NLoopClient.CryptoCode): Task<NLoopClient.LiquidityParameters> =
