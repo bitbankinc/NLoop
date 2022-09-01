@@ -30,15 +30,27 @@ jobs:
       - name: dotnet tool restore
         run: dotnet tool restore
 
-      - name: Build with dotnet
+      - name: Build with dotnet (debug)
         run: |
           dotnet build --configuration Debug NLoop.Server
 
-      - name: Run Domain test in ${{ matrix.os }}
+      - name: Run Domain test in ${{ matrix.os }} (Debug)
         run: dotnet test tests/NLoop.Domain.Tests
 
-      - name: Run property test in ${{ matrix.os }}
+      - name: Run property test in ${{ matrix.os }} (Debug)
         run: dotnet run --project tests/NLoop.Server.PropertyTests
 
-      - name: Run unit tests for the server
+      - name: Run unit tests for the server (Debug)
         run: dotnet test tests/NLoop.Server.Tests --filter="Docker!=On"
+      - name: Build with dotnet (Release)
+        run: |
+          dotnet build --configuration Release NLoop.Server
+
+      - name: Run Domain test in ${{ matrix.os }} (Release)
+        run: dotnet test --configuration Release tests/NLoop.Domain.Tests
+
+      - name: Run property test in ${{ matrix.os }} (Release)
+        run: dotnet run --project tests/NLoop.Server.PropertyTests --configuration Release
+
+      - name: Run unit tests for the server (Release)
+        run: dotnet test --configuration Release tests/NLoop.Server.Tests --filter="Docker!=On"
