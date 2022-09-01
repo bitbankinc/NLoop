@@ -49,15 +49,14 @@ module Helpers =
     gen {
       let! n = networkGen
       let! sc = pushScriptGen
-      let addr = sc.WitHash.GetAddress(n)
-      return addr :?> BitcoinWitScriptAddress
+      return sc.WitHash.GetAddress(n)
     }
 
   let bitcoinWitPubKeyAddressGen =
     gen {
       let! pk = pubKeyGen
       let! n = networkGen
-      return pk.WitHash.GetAddress(n) :?> BitcoinWitPubKeyAddress
+      return pk.WitHash.GetAddress(n)
     }
 
   let bitcoinAddressGen =
@@ -92,7 +91,7 @@ module Helpers =
   }
 
   let scriptDestGen(s: Script) =
-    Gen.oneof[
+    Gen.oneof [
       Gen.constant(s.Hash :> IDestination)
       Gen.constant(s.WitHash :> IDestination)
       Gen.constant(s.WitHash.ScriptPubKey.Hash :> IDestination)
