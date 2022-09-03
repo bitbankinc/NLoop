@@ -7,7 +7,7 @@ But since c-lightning does not work well with docker as lnd does, we run
 `lightningd` on the host machine.
 
 * First, download [c-lightning binary](https://github.com/ElementsProject/lightning/releases), or [compile by yourself](https://github.com/ElementsProject/lightning/blob/master/doc/INSTALL.md).
-* Next, download [`nloopd` binary](https://github.com/bitbankinc/NLoop/releases/tag/v1.2.0.0-beta) or [compile by yourself](./compile.md)
+* Next, download [`nloopd` binary](https://github.com/bitbankinc/NLoop/releases) or [compile by yourself](./compile.md)
 * run all other dependencies as we did in lnd ... `cd tests/NLoop.Server.Tests/ && docker-compose up -d`
 * Run `./scripts/start_cln_with_local_docker.sh` in project root, this will launch `lightningd` in regtest mode with using nloopd binary in your PATH as a plugin.
   * It uses appropriate startup option for talking to dependent services.
