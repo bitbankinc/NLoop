@@ -191,7 +191,10 @@ type NLoopJsonRpcServer
           this.SetArrayedProperty<int>(opts, p, values,
             fun () -> this.SetArrayedProperty<int64>(opts, p, values,
               fun () -> this.SetArrayedProperty<string>(opts, p, values,
-                fun () -> this.SetArrayedProperty<int16>(opts, p, values)
+                fun () -> this.SetArrayedProperty<int16>(opts, p, values,
+                   fun () -> this.SetArrayedProperty<SupportedCryptoCode>(opts, p, values,
+                     fun () -> p.SetValue(opts, values |> Seq.cast<string>|> Seq.map(SupportedCryptoCode.Parse) |> Seq.toArray))
+                 )
               )
             )
           )
