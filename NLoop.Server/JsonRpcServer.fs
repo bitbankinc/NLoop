@@ -77,8 +77,8 @@ module PluginOptions =
   let opPrefix = "nloop-"
   let addPrefix n = $"{opPrefix}{n}"
   let removePrefix (n: string) =
-    let n = if n.StartsWith "--" then n.TrimStart("--".ToCharArray()) else n
-    n.TrimStart(opPrefix.ToCharArray())
+    let n = if n.StartsWith "--" then n.Substring(2) else n
+    n.Substring(opPrefix.Length)
 
   let unnecessaryCliOptions =
     seq [
