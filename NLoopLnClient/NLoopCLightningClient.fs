@@ -82,21 +82,18 @@ type NLoopCLightningClient(
             |> Option.defaultWith(fun _ -> failwith "bogus listpeers. channel has no our_to_self_delay")
             |> uint16 |> BlockHeightOffset16
           MinHTLC =
-            channel.MinimumHtlcInMsat |> Option.defaultValue 0L<msat> |> int64 |> LNMoney.MilliSatoshis
+            channel.MinimumHtlcInMsat |> Option.defaultValue LNMoney.Zero
           FeeBase =
             channel.FeeBaseMsat
-            |> Option.defaultValue 0L<msat>
-            |> int64
-            |> LNMoney.MilliSatoshis
+            |> Option.defaultValue LNMoney.Zero
           FeeProportionalMillionths =  channel.FeeProportionalMillionths |> Option.defaultValue 0u
         }
         return
           Some <| {
             GetChannelInfoResponse.Capacity =
               c.TotalMsat
-              |> Option.defaultValue(0L<msat>)
-              |> int64
-              |> fun c -> LNMoney.MilliSatoshis(c).ToMoney()
+              |> Option.defaultValue(LNMoney.Zero)
+              |> fun c -> c.ToMoney()
             Node1Policy =
               convertNodePolicy c true
             Node2Policy =
@@ -129,7 +126,7 @@ type NLoopCLightningClient(
           let req = {
             InvoiceRequest.Preimage = paymentPreimage.ToHex() |> Some
             Msatoshi =
-              amount.MilliSatoshi |> unbox |> AmountOrAny.Amount
+              amount |> AmountOrAny.Amount
             Description = memo
             Label = memo
             Expiry = expiry.TotalSeconds |> uint64 |> Some
@@ -158,7 +155,7 @@ type NLoopCLightningClient(
                 else
                   let toUs =
                     match c.ToUsMsat with
-                    | Some ms -> int64 ms |> LNMoney.MilliSatoshis
+                    | Some ms -> ms
                     | None -> failwith "no to_us_msat in response"
                   yield
                     {
@@ -168,12 +165,12 @@ type NLoopCLightningClient(
                         | None -> failwith "no channel id in response."
                       Cap =
                         match c.TotalMsat with
-                        | Some ms -> LNMoney.MilliSatoshis(int64 ms).ToMoney()
+                        | Some ms -> ms.ToMoney()
                         | None -> failwith "no total_msat in response."
                       LocalBalance =
                         let ourReserve =
                           match c.OurReserveMsat with
-                          | Some ms -> LNMoney.MilliSatoshis(int64 ms)
+                          | Some ms -> ms
                           | None -> failwith "no our_reserve_msat in response"
                         if ourReserve < toUs then
                           (toUs - ourReserve).ToMoney()
@@ -183,11 +180,11 @@ type NLoopCLightningClient(
                         let inbound =
                           match c.TotalMsat with
                           | Some ms ->
-                            LNMoney.Satoshis(int64 ms) - toUs
+                            ms - toUs
                           | None -> failwith "no total_msat in response"
                         let theirReserve =
                           match c.TheirReserveMsat with
-                          | Some ms -> LNMoney.Satoshis(int64 ms)
+                          | Some ms -> ms
                           | None -> failwith "no their_reserve_msat"
                         if  theirReserve < inbound then
                           (inbound - theirReserve).ToMoney()
@@ -223,7 +220,7 @@ type NLoopCLightningClient(
             Exemptfee = None
             Localofferid = None
             Exclude = None
-            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox<int64<msat>> |> Some
+            Maxfee = req.MaxFee.ToLNMoney() |> Some
             Description = None
           }
           task {
@@ -286,7 +283,7 @@ type NLoopCLightningClient(
           let! resp =
             let req = {
               GetrouteRequest.Id = nodeId
-              Msatoshi = amount.MilliSatoshi |> unbox
+              Msatoshi = amount
               Riskfactor = 1UL
               Cltv = None
               Fromid = None
@@ -298,7 +295,7 @@ type NLoopCLightningClient(
           let hop =
             resp.Route
             |> Seq.map(fun r -> {
-              RouteHop.Fee = r.AmountMsat |> int64 |> LNMoney.MilliSatoshis
+              RouteHop.Fee = r.AmountMsat
               PubKey = r.Id
               ShortChannelId = r.Channel
               CLTVExpiryDelta = r.Delay
@@ -311,7 +308,7 @@ type NLoopCLightningClient(
         let ct = defaultArg ct CancellationToken.None
         if req.Invoice.AmountValue.IsNone then return raise <| InvalidDataException $"Invoice has no amount specified" else
         let amountMsat = 
-          req.Invoice.AmountValue.Value.MilliSatoshi |> unbox
+          req.Invoice.AmountValue
         let maxFeePercent = req.Invoice.AmountValue.Value.Satoshi / req.MaxFee.Satoshi
         let! resp =
           let r  = {
@@ -325,13 +322,13 @@ type NLoopCLightningClient(
             Exemptfee = None
             Localofferid = None
             Exclude = None
-            Maxfee = (req.MaxFee.Satoshi * 1000L) |> unbox |> Some
+            Maxfee = req.MaxFee.ToLNMoney() |> Some
             Description = None
           }
           cli.PayAsync(r, ct)
         if resp.Status = Responses.PayStatus.COMPLETE then
           return Ok {
-            PaymentResult.Fee = (resp.AmountSentMsat - resp.AmountMsat) |> int64 |> LNMoney.MilliSatoshis
+            PaymentResult.Fee = (resp.AmountSentMsat - resp.AmountMsat)
             PaymentPreimage = resp.PaymentPreimage.ToString() |> hex.DecodeData |> PaymentPreimage.Create
           }
         else
@@ -361,7 +358,7 @@ type NLoopCLightningClient(
               AmountPayed =
                 if resp.Status = Responses.WaitinvoiceStatus.PAID then
                   match resp.AmountReceivedMsat with
-                  | Some s -> s |> int64 |> LNMoney.MilliSatoshis
+                  | Some s -> s
                   | None -> failwith "unreachable! invoice is payed but the amount is unknown"
                 else
                   LNMoney.Zero
@@ -399,13 +396,13 @@ type NLoopCLightningClient(
               resp.AmountSentMsat
           return {
             OutgoingInvoiceSubscription.InvoiceState = resp.Status |> translateStatus
-            Fee = (resp.AmountSentMsat - amountDelivered) |> int64 |> LNMoney.MilliSatoshis
+            Fee = (resp.AmountSentMsat - amountDelivered)
             PaymentRequest =
               match resp.Bolt11 with
               | Some bolt11 ->
                 bolt11 |> PaymentRequest.Parse |> ResultUtils.Result.deref
               | None -> failwith "bolt11 not found in waitsendpay response"
-            AmountPayed = amountDelivered |> int64 |> LNMoney.MilliSatoshis
+            AmountPayed = amountDelivered
           }
         with
         | ex ->
@@ -420,7 +417,7 @@ type NLoopCLightningClient(
         let! resp =
           let req = {
             WithdrawRequest.Destination = dest.ToString()
-            Satoshi = amount.Satoshi |> (*)1000L |> unbox |> AmountOrAll.Amount |> Some
+            Satoshi = amount.ToLNMoney() |> AmountOrAll.Amount |> Some
             Feerate = None
             Minconf = None
             Utxos = None
@@ -462,8 +459,7 @@ type NLoopCLightningClient(
             |> Array.map(fun o ->
               let output = TxOut()
               output.Value <-
-                let m = o.AmountMsat |> int64 |> LNMoney.MilliSatoshis
-                m.ToMoney()
+                o.AmountMsat.ToMoney()
               output.ScriptPubKey <- o.Scriptpubkey |> Script.FromHex
               let outpoint = OutPoint()
               outpoint.Hash <- o.Txid |> uint256
