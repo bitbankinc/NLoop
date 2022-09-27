@@ -65,7 +65,7 @@ type BoltzListener(swapServerClient: ISwapServerClient,
         ()
       with
       | ex ->
-        logger.LogError $"Failed to connect to boltz-server {ex}"
+        logger.LogError $"Failed to connect to boltz-server (host: {opts().BoltzHost}, port: {opts().BoltzPort}) {ex}"
         raise <| ex
       _stoppingCts <- new CancellationTokenSource()
       _executingTask <- this.ExecuteAsync(_stoppingCts.Token)
