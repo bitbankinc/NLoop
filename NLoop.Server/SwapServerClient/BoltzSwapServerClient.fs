@@ -239,6 +239,6 @@ type BoltzSwapServerClient(b: BoltzClient, getWallet: GetWalletClient, opts: Get
             ()
       }
       |> AsyncSeq.tryFirst
-      |> Async.map(function | None -> printfn "Unreachable!"; failwith "Unreachable!" | Some a -> a)
+      |> Async.map(function | None -> failwith "Unreachable!" | Some a -> a)
       |> fun a -> Async.StartAsTask(a, TaskCreationOptions.None, ct) :> Task
 

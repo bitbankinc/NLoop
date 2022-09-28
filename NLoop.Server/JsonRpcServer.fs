@@ -226,7 +226,6 @@ type NLoopJsonRpcServer
   [<PluginJsonRpcMethod("nloop_loopout", "initiate loopout swap", "initiate loop out swap")>]
   member this.LoopOut(req: NLoopClient.LoopOutRequest): Task<NLoopClient.LoopOutResponse> =
     backgroundTask {
-      logger.LogInformation $""
       let req: LoopOutRequest = convertDTOToNLoopCompatibleStyle req
       let! r =
         LoopHandlers.handleLoopOut

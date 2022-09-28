@@ -22,7 +22,7 @@ Now check `lightningd` is running correctly with nloopd as a plugin with
 `lightning-cli --network=regtest nloop_getinfo`
 
 For example executing a loopout can be done by
-`lightning-cli --network=regtest nloop_loopout '{ "amount": "50000sat", "max_swap_fee": 2050 }'`
+`lightning-cli --network=regtest nloop_loopout '{"amount":50000,"max_swap_fee":2050}'`
 
 You can use utility scripts under `tests/NLoop.Server.Tests/cliutils` in the same way we did for lnd.
 

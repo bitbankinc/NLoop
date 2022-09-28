@@ -104,7 +104,9 @@ type PaymentRequestJsonConverter() =
   override this.Read(reader, _typeToConvert, _options) =
     let s = reader.GetString()
     let r = PaymentRequest.Parse s
-    r |> ResultUtils.Result.mapError(fun e -> printfn "JsonConverterError: %A" e) |> ignore
+    r |> ResultUtils.Result.mapError(fun e ->
+      raise <| JsonException(sprintf "JsonConverterError: %A" e)
+    ) |> ignore
     r
     |> ResultUtils.Result.defaultWith (fun () -> raise <| JsonException())
 
