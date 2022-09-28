@@ -267,12 +267,13 @@ type NLoopJsonRpcServer
     "Get the full history of swaps.",
     "Get the full history of swaps. This might take long if you have a lots of entries in a database."
   )>]
-  member this.SwapHistory(since): Task<NLoopClient.GetSwapHistoryResponse>  =
+  member this.SwapHistory([<O;DefaultParameterValue(Nullable(): Nullable<DateTime>)>]since)
+    : Task<NLoopClient.GetSwapHistoryResponse>  =
     task {
       let! r =
         QueryHandlers.handleGetSwapHistory
           (sp.GetRequiredService<_>())
-          since
+          (Option.ofNullable since)
       return r |> Result.unwrap |> convertDTOToJsonRPCStyle
     }
 
@@ -294,11 +295,11 @@ type NLoopJsonRpcServer
     "Get the summary of the cost we paid for swaps.",
     "Get the summary of the cost we paid for swaps."
   )>]
-  member this.SwapCostSummary(since): Task<NLoopClient.GetCostSummaryResponse> =
+  member this.SwapCostSummary([<O;DefaultParameterValue(Nullable(): Nullable<DateTime>)>]since): Task<NLoopClient.GetCostSummaryResponse> =
     task {
       let! r =
         QueryHandlers.handleGetCostSummary
-          since
+          (Option.ofNullable since)
           (sp.GetRequiredService<_>())
           (sp.GetRequiredService<_>())
       return r |> Result.unwrap |> convertDTOToJsonRPCStyle

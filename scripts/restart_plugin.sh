@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-set -eu
-
 nloopd=`command -v nloopd`
 
 lightning-cli \
   --network=regtest plugin stop nloopd
+
+set -eu
 
 dotnet publish  NLoop.Server \
   -p:PublishReadyToRun=true \
