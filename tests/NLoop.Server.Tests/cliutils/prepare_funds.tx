@@ -12,7 +12,7 @@ bitcoin() {
   ./docker-lncli-user.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
   ./docker-lncli-server_btc.sh newaddress p2wkh | jq -r ".address" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
 
-  if [[ pgrep -x lightningd ]]; then
+  if pgrep -x lightningd; then
     lightning-cli --network=regtest newaddr | jq -r ".bech32" | xargs -IXX ./docker-bitcoin-cli.sh sendtoaddress XX 10
   fi;
 
@@ -20,7 +20,7 @@ bitcoin() {
 
   # Connect peers
   ./docker-lncli-user.sh getinfo | jq ".uris[0]" | xargs -IXX ./docker-lncli-server_btc.sh connect XX
-  if [[ pgrep -x lightningd ]]; then
+  if pgrep -x lightningd; then
     ./docker-lncli-server_btc.sh getinfo | jq ".uris[0]" | xargs lightning-cli --network=regtest connect
   fi;
 }
