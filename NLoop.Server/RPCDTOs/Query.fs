@@ -20,19 +20,27 @@ type ShortSwapSummary = {
   [<JsonPropertyName "refund_txid">]
   // [<JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)>]
   RefundTxId: NBitcoin.uint256 option
+  
+  [<JsonPropertyName "swap_txid">]
+  SwapTxId: NBitcoin.uint256 option
+  
+  [<JsonPropertyName "swap_address">]
+  SwapAddress: string option
 
   [<JsonPropertyName "cost">]
   Cost: SwapCost
 }
   with
-  static member OnGoing cost = {
+  static member OnGoing cost (swapTxInfo: UniversalSwapTxInfo)= {
     Type = OnGoing
     ErrorMsg = None
     RefundTxId = None
+    SwapTxId = swapTxInfo.SwapTxId
+    SwapAddress = Some(swapTxInfo.SwapAddress)
     Cost = cost
   }
-  static member FromDomainState cost (s: Swap.FinishedState) =
-    let z = ShortSwapSummary.OnGoing cost
+  static member FromFinishedState cost (swapTxInfo: UniversalSwapTxInfo) (s: Swap.FinishedState) =
+    let z = ShortSwapSummary.OnGoing cost swapTxInfo
     match s with
     | Swap.FinishedState.Success ->
       { z with Type = SuccessfullyFinished }

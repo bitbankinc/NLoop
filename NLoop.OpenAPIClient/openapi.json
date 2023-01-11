@@ -647,6 +647,14 @@
             "type": "string",
             "nullable": true
           },
+          "swap_txid": {
+            "type": "string",
+            "nullable": true
+          },
+          "swap_address": {
+            "type": "string",
+            "nullable": true
+          },
           "cost": {
             "$ref": "#/components/schemas/Cost"
           }
