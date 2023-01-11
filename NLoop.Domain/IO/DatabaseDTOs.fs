@@ -9,6 +9,13 @@ open Newtonsoft.Json
 open NLoop.Domain
 open NLoop.Domain.Utils
 
+/// Information which an user will be interested no matter which state the swap is in.
+/// In practice, it is what must be shown to the user when he/she queried through `history`
+/// endpoint.
+type UniversalSwapTxInfo = {
+  SwapAddress: string
+  SwapTxId: uint256 option
+}
 
 /// SwapCost is a breakdown of the final swap costs.
 type SwapCost = {
@@ -132,6 +139,11 @@ type LoopOut = {
     this.SwapTxHex
     |> Option.map(fun txHex -> Transaction.Parse(txHex, this.BaseAssetNetwork))
 
+  member this.UniversalSwapTxInfo =
+    {
+      UniversalSwapTxInfo.SwapAddress = this.ClaimAddress;
+      SwapTxId = this.SwapTx |> Option.map(fun tx -> tx.GetHash())
+    }
   member this.Validate() =
     if this.OnChainAmount <= Money.Zero then Error "LoopOut has non-positive on chain amount" else
     Ok()
@@ -207,6 +219,13 @@ type LoopIn = {
     this.SwapTxInfoHex
     |> Option.map(fun info -> let tx = Transaction.Parse(info.TxHex, this.QuoteAssetNetwork) in (tx, info.N))
 
+  member this.UniversalSwapTxInfo =
+    {
+      UniversalSwapTxInfo.SwapAddress = this.SwapAddress.ToString();
+      SwapTxId =
+        this.SwapTxInfo
+        |> Option.map(fun i -> let tx, _n = i in tx.GetHash())
+    }
   member this.Validate() =
     if this.ExpectedAmount <= Money.Zero then Error $"LoopIn has non-positive expected amount {this.ExpectedAmount}" else
     Ok()

@@ -17,7 +17,6 @@ open NLoop.Domain.Utils
 open FsToolkit.ErrorHandling
 open NLoop.Domain.Utils.EventStore
 
-[<RequireQualifiedAccess>]
 /// Swap domain.
 ///
 /// Below is the list of ubiquitous languages
@@ -28,6 +27,7 @@ open NLoop.Domain.Utils.EventStore
 /// * SpendTx ... RefundTx & SuccessTx
 /// * Offer ... the off-chain payment from us to counterparty. The preimage must be sufficient for us to claim the SwapTx.
 /// * Payment ... off-chain payment from counterparty to us.
+[<RequireQualifiedAccess>]
 module Swap =
   [<RequireQualifiedAccess>]
   type FinishedState =
@@ -66,12 +66,12 @@ module Swap =
       | In ->
         let struct (_b, q) = this.PairId.Value
         q
-
+  
   type State =
     | HasNotStarted
     | Out of blockHeight: BlockHeight * LoopOut
     | In of blockHeight: BlockHeight * LoopIn
-    | Finished of finalCost: SwapCost * FinishedState * group: Group
+    | Finished of finalCost: SwapCost * info: UniversalSwapTxInfo * FinishedState * group: Group
     with
     static member Zero = HasNotStarted
 
@@ -80,7 +80,7 @@ module Swap =
       | HasNotStarted _ -> SwapCost.Zero
       | Out(_, { Cost = cost })
       | In(_, { Cost = cost })
-      | Finished(cost, _, _) -> cost
+      | Finished(cost, _, _, _) -> cost
 
   // ------ command -----
 
@@ -507,11 +507,11 @@ module Swap =
       fun b ->
         try
           let e =
-            match Utils.ToUInt16(b.[0..1], false) with
+            match Utils.ToUInt16(b[0..1], false) with
             | v when Event.KnownTags |> Array.contains v ->
-              JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b.[2..], jsonConverterOpts)
+              JsonSerializer.Deserialize(ReadOnlySpan<byte>.op_Implicit b[2..], jsonConverterOpts)
             | v ->
-              UnknownTagEvent { Tag = v; Data = b.[2..]}
+              UnknownTagEvent { Tag = v; Data = b[2..]}
           e |> Ok
         with
         | ex ->
@@ -865,7 +865,7 @@ module Swap =
                     if spendTxIn.WitScript |> Scripts.isSuccessWitness then
                       // the spend tx is their claim tx.
                       [
-                        let htlcOutValue = swapTx.Outputs.[vOut].Value
+                        let htlcOutValue = swapTx.Outputs[vOut].Value
                         SuccessTxConfirmed {
                           BlockHash =block.Header.GetHash()
                           Txid = spendTx.GetHash()
@@ -966,7 +966,7 @@ module Swap =
       let swapTx, htlcOutIndex = x.SwapTxInfo.Value
       { cost with
           OnchainFee = - fee
-          OnchainPayment = - swapTx.Outputs.[htlcOutIndex].Value  }
+          OnchainPayment = - swapTx.Outputs[htlcOutIndex].Value  }
     | RefundTxConfirmed { Fee =  fee }, In(_, x) ->
       let refundValue = - x.Cost.OnchainPayment - fee
       { cost with
@@ -1016,27 +1016,27 @@ module Swap =
     | OffChainPaymentReceived _, In(h, x) ->
       In(h, { x with Cost = updateCost state event x.Cost; IsOffChainPaymentReceived = true })
 
-    | FinishedByError { Error = err }, In(_, { Cost = cost; PairId = pairId }) ->
+    | FinishedByError { Error = err }, In(_, ({ Cost = cost; PairId = pairId } as inState)) ->
       let group = { Category = Category.In; PairId = pairId }
-      Finished(cost, FinishedState.Errored(err), group)
-    | FinishedByError { Error = err }, Out(_, { Cost = cost; PairId = pairId }) ->
+      Finished(cost, inState.UniversalSwapTxInfo, FinishedState.Errored(err), group)
+    | FinishedByError { Error = err }, Out(_, ({ Cost = cost; PairId = pairId } as outState)) ->
       let group = { Category = Category.Out; PairId = pairId }
-      Finished(cost, FinishedState.Errored(err), group)
-    | FinishedSuccessfully _, Out (_ , { Cost = cost; PairId = pairId }) ->
+      Finished(cost, outState.UniversalSwapTxInfo, FinishedState.Errored(err), group)
+    | FinishedSuccessfully _, Out (_ , ({ Cost = cost; PairId = pairId } as outState)) ->
       let group = { Category = Category.Out; PairId = pairId }
-      Finished(cost, FinishedState.Success, group)
-    | FinishedSuccessfully _, In(_, { Cost = cost; PairId = pairId }) ->
+      Finished(cost, outState.UniversalSwapTxInfo, FinishedState.Success, group)
+    | FinishedSuccessfully _, In(_, ({ Cost = cost; PairId = pairId } as inState)) ->
       let group = { Category = Category.In; PairId = pairId }
-      Finished(cost, FinishedState.Success, group)
-    | FinishedByRefund _, In (_h, { Cost = cost; RefundTransactionId = Some txid; PairId = pairId }) ->
+      Finished(cost, inState.UniversalSwapTxInfo, FinishedState.Success, group)
+    | FinishedByRefund _, In (_h, ({ Cost = cost; RefundTransactionId = Some txid; PairId = pairId } as inState)) ->
       let group = { Category = Category.In; PairId = pairId }
-      Finished(cost, FinishedState.Refunded(txid), group)
-    | FinishedByTimeout { Reason = reason }, Out(_, { Cost = cost; PairId = pairId }) ->
+      Finished(cost, inState.UniversalSwapTxInfo, FinishedState.Refunded(txid), group)
+    | FinishedByTimeout { Reason = reason }, Out(_, ({ Cost = cost; PairId = pairId } as outState)) ->
       let group = { Category = Category.Out; PairId = pairId }
-      Finished(cost, FinishedState.Timeout(reason), group)
-    | FinishedByTimeout { Reason = reason }, In(_, { Cost = cost; PairId = pairId }) ->
+      Finished(cost, outState.UniversalSwapTxInfo, FinishedState.Timeout(reason), group)
+    | FinishedByTimeout { Reason = reason }, In(_, ({ Cost = cost; PairId = pairId } as inState)) ->
       let group = { Category = Category.In; PairId = pairId }
-      Finished(cost, FinishedState.Timeout(reason), group)
+      Finished(cost, inState.UniversalSwapTxInfo, FinishedState.Timeout(reason), group)
     | NewTipReceived { Height = h }, Out(_, x) ->
       Out(h, x)
     | NewTipReceived { Height = h }, In(_, x) ->
@@ -1126,7 +1126,7 @@ module SwapCost =
           cost
           |> split group
           |> Some
-        | Swap.State.Finished(cost, _x, group) ->
+        | Swap.State.Finished(cost, _, _x, group) ->
           cost
           |> split group
           |> Some

@@ -1330,6 +1330,12 @@ namespace NLoopClient
         [Newtonsoft.Json.JsonProperty("refund_txid", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public string Refund_txid { get; set; }
 
+        [Newtonsoft.Json.JsonProperty("swap_txid", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Swap_txid { get; set; }
+
+        [Newtonsoft.Json.JsonProperty("swap_address", Required = Newtonsoft.Json.Required.Default, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+        public string Swap_address { get; set; }
+
         [Newtonsoft.Json.JsonProperty("cost", Required = Newtonsoft.Json.Required.DisallowNull, NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
         public Cost Cost { get; set; }
 

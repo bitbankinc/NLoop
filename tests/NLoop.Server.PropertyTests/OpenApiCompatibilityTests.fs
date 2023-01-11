@@ -75,5 +75,6 @@ let tests =
 
     testProp "GetCostSummaryResponse" <| fun (serverDTO: GetCostSummaryResponse[]) ->
       serverDTO |> check_server_to_nswag<NLoopClient.GetCostSummaryResponse, GetCostSummaryResponse[]>
+      
   ]
 

@@ -42,11 +42,14 @@ module QueryHandlers =
           |> Seq.choose(fun (streamId, v) ->
             (match v with
             | Swap.State.HasNotStarted -> None
-            | Swap.State.Out(_height, { Cost = cost })
-            | Swap.State.In(_height, { Cost = cost }) ->
-              (streamId.Value, ShortSwapSummary.OnGoing cost) |> Some
-            | Swap.State.Finished(cost, x, _) ->
-              (streamId.Value, ShortSwapSummary.FromDomainState cost x) |> Some
+            | Swap.State.Out(_height, state) ->
+              let cost = state.Cost
+              (streamId.Value, ShortSwapSummary.OnGoing cost state.UniversalSwapTxInfo) |> Some
+            | Swap.State.In(_height, state) ->
+              let cost = state.Cost
+              (streamId.Value, ShortSwapSummary.OnGoing cost state.UniversalSwapTxInfo) |> Some
+            | Swap.State.Finished(cost, swapTxInfo, x, _) ->
+              (streamId.Value, ShortSwapSummary.FromFinishedState cost swapTxInfo x) |> Some
             )
             |> Option.map(fun (streamId, s) ->
               if (streamId.StartsWith("swap-", StringComparison.OrdinalIgnoreCase)) then
