@@ -1,7 +1,7 @@
 openapi: '3.0.2'
 info:
   title: NLoop Server OpenAPI definition
-  version: '2.1.0'
+  version: '2.1.1'
   description:
     Lightning Channel Manager. It will maintain the channel balance by performing
     submarine swap against Boltz server.
